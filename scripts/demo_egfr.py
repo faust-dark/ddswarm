@@ -6,7 +6,7 @@ Run from the repo root after `pip install -e .`:
 
 from pathlib import Path
 
-from ddswarm.agents import DesignerMinion, ResearcherMinion
+from ddswarm.agents import DesignerMinion, ResearcherMinion, ScreenerMinion
 from ddswarm.contracts import ProjectSpec, export_schemas
 from ddswarm.orchestrator import Runner, Store, TaskDefinition
 
@@ -59,10 +59,15 @@ def main() -> None:
             }]},
         ),
         TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
+        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"]),
     ]
 
     store = Store(STORE_ROOT)
-    agents = {"researcher_minion": ResearcherMinion(store), "designer_minion": DesignerMinion(store)}
+    agents = {
+        "researcher_minion": ResearcherMinion(store),
+        "designer_minion": DesignerMinion(store),
+        "screener_minion": ScreenerMinion(store),
+    }
     runner = Runner(store, agents)
 
     manifest = runner.create_run(spec, tasks)
@@ -74,14 +79,18 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design"]:
+    for tid in ["research", "design", "screen"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")
         for a in res.artifacts:
             print(f"    artifact : {a.kind}  v{a.version}  {a.uri}")
+        for f in res.findings:
+            print(f"    finding  : {f}")
         for w in res.warnings:
             print(f"    warning  : {w}")
+    print("NOTE: Brenk (default on) flags gefitinib's OCCCN chain as 'Aliphatic_long_chain'.")
+    print("      That is a liability flag, not a kill criterion; disable via filters.enable_brenk=false.")
     print("=" * 70)
 
 

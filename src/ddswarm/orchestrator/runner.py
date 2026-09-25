@@ -16,6 +16,7 @@ from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskS
 from ..contracts.event_log import EventLog
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.project_spec import ProjectSpec
+from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.provenance import InputRef, utcnow
 from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
@@ -26,6 +27,7 @@ from .store import Store
 ARTIFACT_MODELS: dict[str, type] = {
     "knowledge_pack": KnowledgePack,
     "design_batch": DesignBatch,
+    "screened_batch": ScreenedBatch,
 }
 
 

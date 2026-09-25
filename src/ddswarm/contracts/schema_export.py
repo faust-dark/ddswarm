@@ -11,6 +11,7 @@ from .event_log import EventLog
 from .knowledge_pack import KnowledgePack
 from .project_spec import ProjectSpec
 from .run_manifest import RunManifest
+from .screened_batch import ScreenedBatch
 from .task_spec import TaskSpec
 
 MODELS: dict[str, type] = {
@@ -21,6 +22,7 @@ MODELS: dict[str, type] = {
     "EventLog": EventLog,
     "KnowledgePack": KnowledgePack,
     "DesignBatch": DesignBatch,
+    "ScreenedBatch": ScreenedBatch,
 }
 
 

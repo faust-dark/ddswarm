@@ -7,7 +7,7 @@ name = "ddswarm"
 version = "0.1.0"
 description = "Drug discovery multi-agent swarm - Increment 0 PoC (contracts + orchestrator + minimal researcher/designer)"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.7"]
+dependencies = ["pydantic>=2.7", "rdkit>=2025.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

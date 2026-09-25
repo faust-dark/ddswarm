@@ -2,6 +2,7 @@
 
 from .agent_result import AgentResult
 from .design_batch import DesignBatch, MoleculeDesign
+from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
 from .enums import (
     AgentResultStatus,
     EvidenceLevel,
@@ -38,6 +39,10 @@ __all__ = [
     "KnowledgePack",
     "KnowledgePackEntry",
     "MoleculeDesign",
+    "MoleculeProperties",
+    "MoleculeScreenResult",
+    "ScreenSummary",
+    "ScreenedBatch",
     "MODELS",
     "ProjectSpec",
     "ProjectStatus",

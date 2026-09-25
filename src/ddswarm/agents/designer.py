@@ -88,6 +88,7 @@ class DesignerMinion(Agent):
             task_id=ctx.task_id,
             status=AgentResultStatus.success,
             artifacts=[art],
+            input_refs=ctx.input_refs,
             findings=[f"DesignBatch with {len(molecules)} candidate designs (labels only)"],
             warnings=warnings,
             provenance=[ProvenanceEntry(source="KnowledgePack + ProjectSpec", output_hash=art.hash, tool_versions=[TOOL])],

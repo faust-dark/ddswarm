@@ -1,0 +1,364 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "MoleculeProperties": {
+      "properties": {
+        "molecular_weight": {
+          "title": "Molecular Weight",
+          "type": "number"
+        },
+        "logp": {
+          "title": "Logp",
+          "type": "number"
+        },
+        "hbd": {
+          "title": "Hbd",
+          "type": "integer"
+        },
+        "hba": {
+          "title": "Hba",
+          "type": "integer"
+        },
+        "tpsa": {
+          "title": "Tpsa",
+          "type": "number"
+        },
+        "rotatable_bonds": {
+          "title": "Rotatable Bonds",
+          "type": "integer"
+        },
+        "formal_charge": {
+          "title": "Formal Charge",
+          "type": "integer"
+        },
+        "ring_count": {
+          "title": "Ring Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "molecular_weight",
+        "logp",
+        "hbd",
+        "hba",
+        "tpsa",
+        "rotatable_bonds",
+        "formal_charge",
+        "ring_count"
+      ],
+      "title": "MoleculeProperties",
+      "type": "object"
+    },
+    "MoleculeScreenResult": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "input_smiles": {
+          "title": "Input Smiles",
+          "type": "string"
+        },
+        "canonical_smiles": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Smiles"
+        },
+        "valid": {
+          "title": "Valid",
+          "type": "boolean"
+        },
+        "sanitization_error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sanitization Error"
+        },
+        "properties": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MoleculeProperties"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rule_of_five_violations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Of Five Violations",
+          "type": "array"
+        },
+        "structural_alerts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Structural Alerts",
+          "type": "array"
+        },
+        "advisories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Advisories",
+          "type": "array"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "elimination_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Elimination Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "input_smiles",
+        "valid",
+        "passed"
+      ],
+      "title": "MoleculeScreenResult",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ScreenSummary": {
+      "properties": {
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "integer"
+        },
+        "rejected": {
+          "title": "Rejected",
+          "type": "integer"
+        },
+        "invalid": {
+          "title": "Invalid",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "passed",
+        "rejected",
+        "invalid"
+      ],
+      "title": "ScreenSummary",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "screener_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "molecules": {
+      "items": {
+        "$ref": "#/$defs/MoleculeScreenResult"
+      },
+      "title": "Molecules",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/ScreenSummary"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status",
+    "summary"
+  ],
+  "title": "ScreenedBatch",
+  "type": "object"
+}
