@@ -14,6 +14,7 @@ from ..contracts.design_batch import DesignBatch, MoleculeDesign
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
+from ..orchestrator.memory import MemoryStore
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
 
@@ -32,16 +33,34 @@ class DesignerMinion(Agent):
 
     def run(self, ctx: AgentContext) -> AgentResult:
         scaffolds: list[tuple[str, str]] = self._collect_scaffolds(ctx)
+        warnings: list[str] = []
+
+        # ---- feedback loop: prior-cycle survivors become extra scaffolds ----
+        feedback_entries = MemoryStore(self.store).by_kind(ctx.project_id, "feedback")
+        consumed = 0
+        saw_survivors = False
+        for fe in feedback_entries:
+            survivors = (fe.data or {}).get("survivors", [])
+            if survivors:
+                saw_survivors = True
+            for i, smi in enumerate(survivors):
+                if smi and not any(s == smi for _, s in scaffolds):
+                    scaffolds.append((f"prior_{fe.run_id}_{i}", smi))
+                    consumed += 1
+        if feedback_entries and not saw_survivors:
+            warnings.append("prior cycle recorded no survivors; reconsider filters/scaffold")
+        if consumed:
+            warnings.append(f"consumed {consumed} prior-cycle survivor(s) as design scaffolds (feedback loop)")
+
         if not scaffolds:
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=["no ligand scaffolds available from KnowledgePack or starting_materials; refusing to invent molecules"],
+                warnings=warnings + ["no ligand scaffolds available from KnowledgePack, starting_materials, or prior-cycle memory; refusing to invent molecules"],
                 tool_versions=[TOOL], reproducibility={"reason": "no_scaffolds"},
             )
 
         molecules: list[MoleculeDesign] = []
-        warnings: list[str] = []
         backend_name = ctx.params.get("reasoning_backend", "none")
         used_reasoning = False
 

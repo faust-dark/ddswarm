@@ -1,12 +1,12 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 4: retrosynthesis + toxicology)
+# ddswarm — drug discovery multi-agent swarm (Increment 5: memory, report, feedback loop)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 4** adds `retrosynthesis_minion` (deterministic RDKit synthetic-
-accessibility scoring, with optional LLM-proposed synthesis routes) and
-`tox_minion` (deterministic, sourced structural toxicophore alerts), on top of
-Increments 0-3 (contracts + orchestrator + logging + researcher/designer/
-screener/predictor/docking + CLI + Hermes reasoning). Dynamics and beyond land
-later.
+**Increment 5** adds a persistent, cross-run **project memory**, a structured
+**report_minion** that aggregates every run into an evidence-aware Report, and
+a **feedback loop** — the report's conclusions and survivors are written to
+memory and read by researcher/designer in later runs. On top of Increments 0-4
+(contracts + orchestrator + logging + research/design/screen/predict/docking/
+retrosynthesis/tox + CLI + Hermes reasoning). Dynamics and beyond land later.
 
 ## Architecture
 
@@ -27,6 +27,15 @@ later.
     synthesis routes (hypothetical) via the reasoning backend.
   - `tox_minion` — deterministic, sourced structural toxicophore alerts (SMARTS),
     reported as *predicted* potential liabilities, never experimental evidence.
+  - `report_minion` — aggregates a finished run into a structured Report
+    (executive summary, per-stage findings, evidence-level breakdown, gaps,
+    next steps, caveats) and writes `finding` + `feedback` to project memory.
+- **Project memory** (`orchestrator/memory.py`): an append-only, cross-run log
+  under `store/<project_id>/memory.json`. Conclusions are `inferred` (the
+  swarm's reasoning), never observed data.
+- **Feedback loop**: report_minion records survivors + gaps to memory; in the
+  next run, `designer_minion` adds prior survivors as design scaffolds and
+  `researcher_minion` re-seeds prior findings (evidence_level=inferred).
 - **Reasoning layer** (`reasoning/`): a pluggable backend that the reasoning
   agents use. `NullReasoningBackend` (offline, deterministic baseline) and
   `HermesSubprocessBackend` (shells out to `hermes chat -q`). LLM output is
@@ -54,6 +63,8 @@ later.
 | `DockingResult` | docking output (receptor QC, protocol, ranked poses, redocking RMSD) |
 | `RetrosynthesisPlan` | SA score + accessibility per molecule, optional synthesis routes |
 | `ToxProfile` | per-molecule structural toxicophore alerts (predicted liabilities) |
+| `Report` | structured run summary (exec summary, evidence breakdown, gaps, next steps) |
+| `ProjectMemory` | cross-run conclusions (finding/decision/lesson/constraint/feedback) |
 | `RunRequest` | project.json: ProjectSpec + task DAG + optional reasoning config |
 
 Every artifact carries `evidence_level` (`observed|calculated|predicted|inferred|hypothetical`)
@@ -148,11 +159,14 @@ ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
 ddswarm run project.json [--reasoning none|hermes] [--store ./store]
 ddswarm runs [project_id]                       # list runs
 ddswarm report project_id [run_id]              # per-task report
+ddswarm memory project_id                       # cross-run conclusions
 ```
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
 If `tasks` is omitted a default pipeline runs (research -> design -> screen ->
-predict -> retrosynth -> tox); docking is opt-in (needs the Vina binary + network).
+predict -> retrosynth -> tox -> report); docking is opt-in (needs the Vina
+binary + network). `report` writes `finding` + `feedback` to project memory,
+closing the loop: the next run's designer/researcher read it.
 
 `"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`
 and `retrosynthesis_minion` (routes only) delegate to one-shot Hermes subagents
@@ -201,9 +215,9 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 80 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 88 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent; receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
-backends (with a fake `hermes` script), the CLI, SA-score classification, and
-the toxicophore matcher are all tested offline. Real Hermes-subagent delegation
-was verified once manually (researcher returned 24 sourced entries, designer 8
-analog SMILES).
+backends (with a fake `hermes` script), the CLI, SA-score classification, the
+toxicophore matcher, project memory, report aggregation, and the feedback loop
+are all tested offline. Real Hermes-subagent delegation was verified once
+manually (researcher returned 24 sourced entries, designer 8 analog SMILES).

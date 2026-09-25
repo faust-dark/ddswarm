@@ -20,6 +20,7 @@ from .agents import (
     DesignerMinion,
     DockingMinion,
     PredictorMinion,
+    ReportMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
     ScreenerMinion,
@@ -27,6 +28,7 @@ from .agents import (
 )
 from .contracts import ProjectSpec, RunRequest, ReasoningConfig, RunTask, export_schemas
 from .orchestrator import Runner, Store, TaskDefinition
+from .orchestrator.memory import MemoryStore
 
 DEFAULT_PIPELINE = [
     RunTask(task_id="research", agent="researcher_minion", params={"seed_entries": []}),
@@ -36,6 +38,7 @@ DEFAULT_PIPELINE = [
             params={"providers": ["null_admet"]}),
     RunTask(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
     RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
+    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox"]),
 ]
 
 
@@ -52,6 +55,7 @@ def build_agents(store: Store) -> dict:
         "docking_minion": DockingMinion(store),
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
+        "report_minion": ReportMinion(store),
     }
 
 
@@ -145,6 +149,20 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_memory(args) -> int:
+    store = Store(args.store)
+    entries = MemoryStore(store).load(args.project_id).entries
+    if not entries:
+        print(f"no memory for project {args.project_id}")
+        return 0
+    for e in entries:
+        print(f"[{e.kind}] {e.id}  (run {e.run_id}, {e.created_at})")
+        print(f"    {e.content}")
+        for k, v in (e.data or {}).items():
+            print(f"    data.{k} = {v}")
+    return 0
+
+
 def cmd_init(args) -> int:
     spec = ProjectSpec(
         project_id=args.project_id,
@@ -187,6 +205,11 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("run_id", nargs="?")
     pt.add_argument("--store", type=Path, default=_default_store())
     pt.set_defaults(func=cmd_report)
+
+    pm = sub.add_parser("memory", help="show project memory (cross-run conclusions)")
+    pm.add_argument("project_id")
+    pm.add_argument("--store", type=Path, default=_default_store())
+    pm.set_defaults(func=cmd_memory)
 
     pi = sub.add_parser("init", help="scaffold a project.json file")
     pi.add_argument("project_file")

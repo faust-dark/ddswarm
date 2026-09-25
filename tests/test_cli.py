@@ -26,7 +26,8 @@ def test_run_default_pipeline(tmp_path):
     assert len(runs) == 1
     artifacts = list((runs[0] / "artifacts").glob("*.json"))
     kinds = {a.name.split(".")[1] for a in artifacts}
-    assert {"knowledge_pack", "design_batch", "screened_batch", "admet_prediction"} <= kinds
+    assert {"knowledge_pack", "design_batch", "screened_batch", "admet_prediction",
+            "retrosynthesis_plan", "tox_profile", "report"} <= kinds
 
 
 def test_init_writes_project(tmp_path):
@@ -36,7 +37,7 @@ def test_init_writes_project(tmp_path):
     assert rc == 0
     req = RunRequest.model_validate_json(out.read_text())
     assert req.project.project_id == "x1"
-    assert len(req.tasks) == 6  # research, design, screen, predict, retrosynth, tox
+    assert len(req.tasks) == 7  # research, design, screen, predict, retrosynth, tox, report
     assert req.reasoning is None
 
 
@@ -46,6 +47,7 @@ def test_runs_and_report(tmp_path):
     assert cli.main(["run", str(f), "--store", str(store)]) == 0
     assert cli.main(["runs", "p2", "--store", str(store)]) == 0
     assert cli.main(["report", "p2", "--store", str(store)]) == 0
+    assert cli.main(["memory", "p2", "--store", str(store)]) == 0
 
 
 def test_inject_reasoning():

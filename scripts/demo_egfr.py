@@ -12,6 +12,7 @@ from ddswarm.agents import (
     DesignerMinion,
     DockingMinion,
     PredictorMinion,
+    ReportMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
     ScreenerMinion,
@@ -83,6 +84,7 @@ def main() -> None:
         ),
         TaskDefinition(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
         TaskDefinition(task_id="tox", agent="tox_minion", depends_on=["screen"]),
+        TaskDefinition(task_id="report", agent="report_minion", depends_on=["predict", "dock", "retrosynth", "tox"]),
     ]
 
     store = Store(STORE_ROOT)
@@ -94,6 +96,7 @@ def main() -> None:
         "docking_minion": DockingMinion(store),
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
+        "report_minion": ReportMinion(store),
     }
     runner = Runner(store, agents)
 
@@ -106,7 +109,7 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox"]:
+    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox", "report"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")

@@ -15,6 +15,7 @@ from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.knowledge_pack import KnowledgePack, KnowledgePackEntry
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
+from ..orchestrator.memory import MemoryStore
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
 
@@ -33,10 +34,14 @@ class ResearcherMinion(Agent):
             warnings.append("seed_entries must be a list; ignored")
             seed = []
 
+        # ---- feedback loop: remember prior-run conclusions ----
+        memory_findings = MemoryStore(self.store).by_kind(ctx.project_id, "finding")
+
         input_digest = {
             "targets": ctx.spec.targets,
             "starting_materials": ctx.spec.starting_materials,
             "seed_entries": seed,
+            "memory_findings": [e.content for e in memory_findings],
         }
         input_hash = hash_jsonable(input_digest)
 
@@ -58,6 +63,13 @@ class ResearcherMinion(Agent):
                 entries.append(KnowledgePackEntry.model_validate(se))
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"seed entry {i} invalid, skipped: {exc}")
+
+        for mf in memory_findings:
+            entries.append(KnowledgePackEntry(
+                id=f"memory_{mf.id}", type="reference", source="project memory",
+                observed_value=mf.content, evidence_level=EvidenceLevel.inferred,
+                notes=f"prior-run conclusion (run {mf.run_id}); swarm inference, verify against primary sources",
+            ))
 
         # ---- reasoning backend (adds research) ----
         backend_name = ctx.params.get("reasoning_backend", "none")

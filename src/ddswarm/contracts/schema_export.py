@@ -11,7 +11,9 @@ from .design_batch import DesignBatch
 from .docking_result import DockingResult
 from .event_log import EventLog
 from .knowledge_pack import KnowledgePack
+from .memory import ProjectMemory
 from .project_spec import ProjectSpec
+from .report import Report
 from .run_manifest import RunManifest
 from .run_request import RunRequest
 from .retrosynthesis_plan import RetrosynthesisPlan
@@ -33,6 +35,8 @@ MODELS: dict[str, type] = {
     "RunRequest": RunRequest,
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "ToxProfile": ToxProfile,
+    "Report": Report,
+    "ProjectMemory": ProjectMemory,
 }
 
 

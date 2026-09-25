@@ -19,6 +19,7 @@ from ..contracts.event_log import EventLog
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
+from ..contracts.report import Report
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.provenance import InputRef, utcnow
 from ..contracts.run_manifest import RunManifest
@@ -36,6 +37,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "screened_batch": ScreenedBatch,
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
+    "report": Report,
 }
 
 

@@ -31,6 +31,7 @@ from .enums import (
 )
 from .event_log import EventLog
 from .knowledge_pack import KnowledgePack, KnowledgePackEntry
+from .memory import MemoryEntry, ProjectMemory
 from .project_spec import ProjectSpec
 from .provenance import (
     ArtifactRef,
@@ -40,6 +41,7 @@ from .provenance import (
     ToolVersion,
     utcnow,
 )
+from .report import EvidenceBreakdown, Report, StageFinding
 from .run_manifest import RunManifest
 from .run_request import ReasoningConfig, RunRequest, RunTask
 from .retrosynthesis_plan import (
@@ -69,24 +71,29 @@ __all__ = [
     "DockingResult",
     "DockingSummary",
     "EventLog",
+    "EvidenceBreakdown",
     "EvidenceLevel",
     "InputRef",
     "InputType",
     "KnowledgePack",
     "KnowledgePackEntry",
+    "MemoryEntry",
     "MoleculeDesign",
     "MoleculeProperties",
     "MoleculeScreenResult",
     "MoleculeToxAssessment",
+    "ProjectMemory",
     "ReceptorInfo",
     "ReceptorQCCheck",
     "RedockingValidation",
+    "Report",
     "RetrosynthesisEntry",
     "RetrosynthesisPlan",
     "RetrosynthesisSummary",
     "ScreenSummary",
     "ScreenedBatch",
     "SearchBox",
+    "StageFinding",
     "SynthesisRoute",
     "ToxAlert",
     "ToxProfile",
