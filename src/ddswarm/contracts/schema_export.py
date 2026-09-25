@@ -13,6 +13,7 @@ from .event_log import EventLog
 from .knowledge_pack import KnowledgePack
 from .project_spec import ProjectSpec
 from .run_manifest import RunManifest
+from .run_request import RunRequest
 from .screened_batch import ScreenedBatch
 from .task_spec import TaskSpec
 
@@ -27,6 +28,7 @@ MODELS: dict[str, type] = {
     "DesignBatch": DesignBatch,
     "ScreenedBatch": ScreenedBatch,
     "DockingResult": DockingResult,
+    "RunRequest": RunRequest,
 }
 
 

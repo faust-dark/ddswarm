@@ -1,10 +1,11 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 3: docking + redocking validation)
+# ddswarm — drug discovery multi-agent swarm (Increment 3: docking + redocking, CLI + Hermes reasoning)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 3** adds `docking_minion` + a real AutoDock Vina engine with
 receptor structural QC and redocking validation (RMSD vs the co-crystal
-ligand) on top of Increments 0-2 (contracts + orchestrator + logging +
-researcher/designer/screener/predictor). Dynamics and beyond land later.
+ligand), plus a **`ddswarm` CLI** and a **reasoning backend** that lets
+`researcher_minion`/`designer_minion` delegate real literature research and
+analog design to Hermes subagents. Dynamics and beyond land later.
 
 ## Architecture
 
@@ -13,11 +14,19 @@ researcher/designer/screener/predictor). Dynamics and beyond land later.
 - **Orchestrator** (`orchestrator_minion`): task graph, gating, retry,
   idempotent versioning, resume. Produces no chemistry.
 - **Agents**:
-  - `researcher_minion` — KnowledgePack from ProjectSpec + seed (refuses to fabricate).
-  - `designer_minion` — DesignBatch from upstream scaffolds (labels only; no de novo yet).
+  - `researcher_minion` — KnowledgePack from ProjectSpec + seed, plus optional
+    delegation to a reasoning backend (Hermes subagent) for literature research.
+  - `designer_minion` — DesignBatch; deterministic labels, or real analog SMILES
+    from a reasoning backend when configured.
   - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
   - `predictor_minion` — ADMET/PK predictions through pluggable providers.
   - `docking_minion` — receptor prep + QC, docking (AutoDock Vina), redocking RMSD.
+- **Reasoning layer** (`reasoning/`): a pluggable backend that the reasoning
+  agents use. `NullReasoningBackend` (offline, deterministic baseline) and
+  `HermesSubprocessBackend` (shells out to `hermes chat -q`). LLM output is
+  never trusted as observed data — the agents force `evidence_level` to
+  `inferred`/`hypothetical` and tag provenance accordingly.
+- **CLI** (`ddswarm`): `run`/`runs`/`report`/`init` — see below.
 - **Chemistry layer** (`chemistry/rdkit_ops.py`, `chemistry/pdb_utils.py`):
   sanitization, canonicalization, descriptors, PAINS/Brenk alerts, and pure-Python
   PDB structural analysis (missing residues/atoms, waters, heterogens, hydrogens).
@@ -37,6 +46,7 @@ researcher/designer/screener/predictor). Dynamics and beyond land later.
 | `ScreenedBatch` | screener output (per-molecule validity, properties, alerts, verdicts) |
 | `AdmetPrediction` | predictor output (per-molecule, per-endpoint: model/version/AD/uncertainty) |
 | `DockingResult` | docking output (receptor QC, protocol, ranked poses, redocking RMSD) |
+| `RunRequest` | project.json: ProjectSpec + task DAG + optional reasoning config |
 
 Every artifact carries `evidence_level` (`observed|calculated|predicted|inferred|hypothetical`)
 and provenance (source, URL/identifier, timestamps, tool versions, hashes).
@@ -120,15 +130,42 @@ chmod +x tools/vina
 
 Or point the agent at it with `params.vina_binary` / the `VINA_BINARY` env var.
 
+## CLI & reasoning backend
+
+The `ddswarm` console script runs a whole pipeline from one versioned file:
+
+```bash
+ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
+    --targets "EGFR" --smiles "COC1=..."       # scaffold (default pipeline)
+ddswarm run project.json [--reasoning none|hermes] [--store ./store]
+ddswarm runs [project_id]                       # list runs
+ddswarm report project_id [run_id]              # per-task report
+```
+
+`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
+If `tasks` is omitted a default pipeline runs (research -> design -> screen ->
+predict); docking is opt-in (needs the Vina binary + network).
+
+`"reasoning": {"backend": "hermes"}` makes `researcher_minion` and
+`designer_minion` delegate to one-shot Hermes subagents (`hermes chat -q`),
+merging the LLM output with the deterministic baseline. Without it (or when the
+backend is unavailable) they fall back to the deterministic baseline — seed
+assembly and transformation labels — never fabricating. LLM-contributed entries
+are forced to `evidence_level=inferred` (research) / `hypothetical` (design) and
+tagged "verify against primary source", because a recalled PubChem ID is not
+experimental evidence.
+
 ## Run
 
 ```bash
 cd ddswarm
 python3 -m venv .venv
-.venv/bin/pip install -e .            # ddswarm + pydantic + rdkit
+.venv/bin/pip install -e .            # ddswarm + pydantic + rdkit + the ddswarm CLI
 .venv/bin/pip install pytest          # for tests
 .venv/bin/python -m pytest -q         # run the test suite
-.venv/bin/python scripts/demo_egfr.py # full pipeline: research -> design -> screen -> predict -> dock
+.venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" --smiles "COC1=..."
+.venv/bin/ddswarm run p.json          # default pipeline (null reasoning)
+.venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking: research -> ... -> dock
 .venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
 .venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
 ```
@@ -156,6 +193,8 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 54 tests pass. The real-Vina smoke test auto-skips when the
-binary is absent; the receptor QC, PDBQT parsing, RMSD, and docking_minion
-gating tests are offline and always run.
+Run `pytest -q` — 68 tests pass. The real-Vina smoke test auto-skips when the
+binary is absent; receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
+backends (with a fake `hermes` script), and the CLI are all tested offline.
+Real Hermes-subagent delegation was verified once manually (researcher returned
+24 sourced entries, designer 8 analog SMILES).

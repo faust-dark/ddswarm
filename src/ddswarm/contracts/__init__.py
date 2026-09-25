@@ -41,6 +41,7 @@ from .provenance import (
     utcnow,
 )
 from .run_manifest import RunManifest
+from .run_request import ReasoningConfig, RunRequest, RunTask
 from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
 
@@ -79,7 +80,10 @@ __all__ = [
     "ProjectSpec",
     "ProjectStatus",
     "ProvenanceEntry",
+    "ReasoningConfig",
     "RunManifest",
+    "RunRequest",
+    "RunTask",
     "RunStatus",
     "SourceRef",
     "TaskSpec",
