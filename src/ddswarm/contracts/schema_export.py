@@ -9,7 +9,9 @@ from .admet_prediction import AdmetPrediction
 from .agent_result import AgentResult
 from .design_batch import DesignBatch
 from .docking_result import DockingResult
+from .dynamics_result import DynamicsResult
 from .event_log import EventLog
+from .formulation_assessment import FormulationAssessment
 from .knowledge_pack import KnowledgePack
 from .memory import ProjectMemory
 from .project_spec import ProjectSpec
@@ -32,6 +34,8 @@ MODELS: dict[str, type] = {
     "DesignBatch": DesignBatch,
     "ScreenedBatch": ScreenedBatch,
     "DockingResult": DockingResult,
+    "DynamicsResult": DynamicsResult,
+    "FormulationAssessment": FormulationAssessment,
     "RunRequest": RunRequest,
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "ToxProfile": ToxProfile,

@@ -1,0 +1,397 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "DynamicsSummary": {
+      "properties": {
+        "total_runs": {
+          "default": 0,
+          "title": "Total Runs",
+          "type": "integer"
+        },
+        "succeeded": {
+          "default": 0,
+          "title": "Succeeded",
+          "type": "integer"
+        },
+        "failed": {
+          "default": 0,
+          "title": "Failed",
+          "type": "integer"
+        }
+      },
+      "title": "DynamicsSummary",
+      "type": "object"
+    },
+    "EvidenceLevel": {
+      "enum": [
+        "observed",
+        "calculated",
+        "predicted",
+        "inferred",
+        "hypothetical"
+      ],
+      "title": "EvidenceLevel",
+      "type": "string"
+    },
+    "MdMetrics": {
+      "properties": {
+        "backbone_rmsd_mean_angstrom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backbone Rmsd Mean Angstrom"
+        },
+        "backbone_rmsd_max_angstrom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backbone Rmsd Max Angstrom"
+        },
+        "potential_energy_mean_kj_per_mol": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Potential Energy Mean Kj Per Mol"
+        },
+        "potential_energy_std_kj_per_mol": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Potential Energy Std Kj Per Mol"
+        }
+      },
+      "title": "MdMetrics",
+      "type": "object"
+    },
+    "MdProtocol": {
+      "properties": {
+        "engine": {
+          "default": "openmm",
+          "title": "Engine",
+          "type": "string"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "forcefield": {
+          "default": "amber14 + OBC2 GBSA implicit solvent",
+          "title": "Forcefield",
+          "type": "string"
+        },
+        "integrator": {
+          "default": "Langevin NVT",
+          "title": "Integrator",
+          "type": "string"
+        },
+        "temperature_kelvin": {
+          "default": 300.0,
+          "title": "Temperature Kelvin",
+          "type": "number"
+        },
+        "timestep_femtoseconds": {
+          "default": 2.0,
+          "title": "Timestep Femtoseconds",
+          "type": "number"
+        },
+        "steps": {
+          "default": 1000,
+          "title": "Steps",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "note": {
+          "default": "short relaxation trajectory; NOT production MD",
+          "title": "Note",
+          "type": "string"
+        }
+      },
+      "title": "MdProtocol",
+      "type": "object"
+    },
+    "MdRun": {
+      "properties": {
+        "receptor_id": {
+          "title": "Receptor Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "not_run",
+          "enum": [
+            "success",
+            "failed",
+            "not_run"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "metrics": {
+          "$ref": "#/$defs/MdMetrics"
+        },
+        "stability_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stability Note"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "calculated"
+        }
+      },
+      "required": [
+        "receptor_id"
+      ],
+      "title": "MdRun",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "dynamics_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "protocol": {
+      "$ref": "#/$defs/MdProtocol"
+    },
+    "runs": {
+      "items": {
+        "$ref": "#/$defs/MdRun"
+      },
+      "title": "Runs",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/DynamicsSummary"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "DynamicsResult",
+  "type": "object"
+}

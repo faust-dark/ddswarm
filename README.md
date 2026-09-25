@@ -1,12 +1,13 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 5: memory, report, feedback loop)
+# ddswarm — drug discovery multi-agent swarm (Increment 6: dynamics + formulation)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 5** adds a persistent, cross-run **project memory**, a structured
-**report_minion** that aggregates every run into an evidence-aware Report, and
-a **feedback loop** — the report's conclusions and survivors are written to
-memory and read by researcher/designer in later runs. On top of Increments 0-4
-(contracts + orchestrator + logging + research/design/screen/predict/docking/
-retrosynthesis/tox + CLI + Hermes reasoning). Dynamics and beyond land later.
+**Increment 6** adds **receptor molecular dynamics** (real OpenMM + amber14 +
+GBSA; backbone-RMSD stability + energy fluctuation, an honest short
+relaxation, not production MD) and **deterministic formulation assessment**
+(solubility/permeability/BCS class + salt/prodrug suggestions from logP/TPSA
+rules). On top of Increments 0-5 (contracts + orchestrator + logging +
+research/design/screen/predict/docking/retrosynthesis/tox + memory + report +
+feedback loop + CLI + Hermes reasoning). IP, clinical and regulatory land later.
 
 ## Architecture
 
@@ -27,6 +28,15 @@ retrosynthesis/tox + CLI + Hermes reasoning). Dynamics and beyond land later.
     synthesis routes (hypothetical) via the reasoning backend.
   - `tox_minion` — deterministic, sourced structural toxicophore alerts (SMARTS),
     reported as *predicted* potential liabilities, never experimental evidence.
+  - `dynamics_minion` — receptor molecular dynamics (OpenMM, amber14 + OBC2 GBSA
+    implicit solvent, Langevin NVT): backbone-RMSD stability + potential-energy
+    fluctuation, reported as *calculated*. A short ps-scale relaxation snapshot,
+    NOT production MD and never a binding free energy. Ligand MD is deferred
+    (openff-toolkit is unavailable on Python 3.14).
+  - `formulation_minion` — deterministic developability estimate per molecule:
+    aqueous-solubility class, permeability class, BCS classification, ionizable
+    groups, and salt/prodrug suggestions. All *predicted* rule-based estimates
+    from RDKit logP/TPSA — never measured properties.
   - `report_minion` — aggregates a finished run into a structured Report
     (executive summary, per-stage findings, evidence-level breakdown, gaps,
     next steps, caveats) and writes `finding` + `feedback` to project memory.
@@ -63,6 +73,8 @@ retrosynthesis/tox + CLI + Hermes reasoning). Dynamics and beyond land later.
 | `DockingResult` | docking output (receptor QC, protocol, ranked poses, redocking RMSD) |
 | `RetrosynthesisPlan` | SA score + accessibility per molecule, optional synthesis routes |
 | `ToxProfile` | per-molecule structural toxicophore alerts (predicted liabilities) |
+| `DynamicsResult` | receptor MD run: protocol, backbone-RMSD + energy metrics (calculated) |
+| `FormulationAssessment` | per-molecule solubility/permeability/BCS + salt/prodrug suggestions |
 | `Report` | structured run summary (exec summary, evidence breakdown, gaps, next steps) |
 | `ProjectMemory` | cross-run conclusions (finding/decision/lesson/constraint/feedback) |
 | `RunRequest` | project.json: ProjectSpec + task DAG + optional reasoning config |
@@ -149,6 +161,46 @@ chmod +x tools/vina
 
 Or point the agent at it with `params.vina_binary` / the `VINA_BINARY` env var.
 
+## Dynamics (Increment 6)
+
+`dynamics_minion` runs real receptor MD through a pluggable `MdEngine`
+(`dynamics/`), mirroring the docking engine pattern:
+
+- **`NullMdEngine`** — deterministic no-op: reports `not_run` with an honest
+  note (no MD engine configured). The offline default.
+- **`OpenMMMdEngine`** — real: `PDBFixer` prep (the same receptor QC as
+  docking) -> `amber14-all.xml` + OBC2 GBSA implicit solvent -> Langevin NVT
+  (fixed seed) -> bounded minimization + a short trajectory. Reports, per
+  receptor run: backbone heavy-atom (N/CA/C) RMSD (mean/max, Kabsch-aligned)
+  and potential-energy mean/std. All `evidence_level = calculated`.
+
+Honesty rules: this is a **short ps-scale relaxation snapshot**, not production
+MD; backbone RMSD is never presented as a converged stability verdict, and no
+MM/PBSA-style binding free energy is computed or implied. **Ligand MD is
+explicitly deferred** — it needs a small-molecule force field (openff-toolkit),
+which is not installable on Python 3.14; the `MdEngine` abstraction makes it a
+drop-in when available.
+
+The engine needs OpenMM + PDBFixer (already pulled in by the `[docking]` extra).
+A receptor is configured via `params.receptor` (`{kind: pdb_id, identifier: 2ITY}`
+downloads from RCSB; `{kind: file, path: ...}` uses a local PDB). Note: GBSA on
+a ~330-residue receptor is genuinely expensive (~5 min for a bounded run) —
+see `scripts/demo_egfr.py`, which uses `steps=200, minimize_max_iterations=100`.
+
+## Formulation (Increment 6)
+
+`formulation_minion` is deterministic and offline (RDKit only). Per molecule it
+reports, from `logP`/`TPSA` heuristics (documented in `chemistry/formulation.py`):
+
+- **aqueous-solubility class** (`high|moderate|low`, crude logP heuristic)
+- **permeability class** (`high|moderate|low`, TPSA/logP; Veber TPSA<=140 A^2)
+- **BCS class** (`I|II|III|IV`, the 2x2 solubility x permeability grid)
+- **ionizable groups** (acidic: COOH/SO3H/tetrazole; basic: non-amide amine +
+  pyridine-like aromatic N), plus **salt** and **prodrug** suggestions
+
+Every field is `evidence_level = predicted` — a rule-based estimate, explicitly
+not a measured solubility/permeability.
+
 ## CLI & reasoning backend
 
 The `ddswarm` console script runs a whole pipeline from one versioned file:
@@ -164,9 +216,10 @@ ddswarm memory project_id                       # cross-run conclusions
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
 If `tasks` is omitted a default pipeline runs (research -> design -> screen ->
-predict -> retrosynth -> tox -> report); docking is opt-in (needs the Vina
-binary + network). `report` writes `finding` + `feedback` to project memory,
-closing the loop: the next run's designer/researcher read it.
+predict -> retrosynth -> tox -> formulation -> report); docking and dynamics
+are opt-in (need the Vina binary / OpenMM + network). `report` writes `finding`
++ `feedback` to project memory, closing the loop: the next run's
+designer/researcher read it.
 
 `"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`
 and `retrosynthesis_minion` (routes only) delegate to one-shot Hermes subagents
@@ -187,7 +240,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q         # run the test suite
 .venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" --smiles "COC1=..."
 .venv/bin/ddswarm run p.json          # default pipeline (null reasoning)
-.venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking: research -> ... -> dock
+.venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking + dynamics: research -> ... -> report
 .venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
 .venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
 ```
@@ -215,9 +268,13 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 88 tests pass. The real-Vina smoke test auto-skips when the
-binary is absent; receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
+Run `pytest -q` — 102 tests pass. The real-Vina smoke test auto-skips when the
+binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
+are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the
-toxicophore matcher, project memory, report aggregation, and the feedback loop
-are all tested offline. Real Hermes-subagent delegation was verified once
-manually (researcher returned 24 sourced entries, designer 8 analog SMILES).
+toxicophore matcher, project memory, report aggregation, the feedback loop,
+MD-engine metrics (real MD on a small peptide fixture), and the formulation
+rules are all tested offline. Real Hermes-subagent delegation was verified once
+manually (researcher returned 24 sourced entries, designer 8 analog SMILES);
+real receptor MD was verified on the 2ITY kinase domain (backbone RMSD ~0.19 A
+over a 0.4 ps bounded relaxation).

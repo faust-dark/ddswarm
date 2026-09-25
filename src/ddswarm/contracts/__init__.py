@@ -20,6 +20,8 @@ from .docking_result import (
     RedockingValidation,
     SearchBox,
 )
+from .dynamics_result import DynamicsResult, DynamicsSummary, MdMetrics, MdProtocol, MdRun
+from .formulation_assessment import FormulationAssessment, FormulationSummary, MoleculeFormulation
 from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
 from .enums import (
     AgentResultStatus,
@@ -70,15 +72,20 @@ __all__ = [
     "DockingProtocol",
     "DockingResult",
     "DockingSummary",
+    "DynamicsResult",
+    "DynamicsSummary",
     "EventLog",
     "EvidenceBreakdown",
     "EvidenceLevel",
+    "FormulationAssessment",
+    "FormulationSummary",
     "InputRef",
     "InputType",
     "KnowledgePack",
     "KnowledgePackEntry",
     "MemoryEntry",
     "MoleculeDesign",
+    "MoleculeFormulation",
     "MoleculeProperties",
     "MoleculeScreenResult",
     "MoleculeToxAssessment",
@@ -87,6 +94,9 @@ __all__ = [
     "ReceptorQCCheck",
     "RedockingValidation",
     "Report",
+    "MdMetrics",
+    "MdProtocol",
+    "MdRun",
     "RetrosynthesisEntry",
     "RetrosynthesisPlan",
     "RetrosynthesisSummary",

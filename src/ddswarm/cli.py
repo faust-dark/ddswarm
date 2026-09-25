@@ -19,6 +19,8 @@ from pathlib import Path
 from .agents import (
     DesignerMinion,
     DockingMinion,
+    DynamicsMinion,
+    FormulationMinion,
     PredictorMinion,
     ReportMinion,
     ResearcherMinion,
@@ -38,7 +40,8 @@ DEFAULT_PIPELINE = [
             params={"providers": ["null_admet"]}),
     RunTask(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
     RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
-    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox"]),
+    RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
+    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "formulation"]),
 ]
 
 
@@ -53,8 +56,10 @@ def build_agents(store: Store) -> dict:
         "screener_minion": ScreenerMinion(store),
         "predictor_minion": PredictorMinion(store),
         "docking_minion": DockingMinion(store),
+        "dynamics_minion": DynamicsMinion(store),
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
+        "formulation_minion": FormulationMinion(store),
         "report_minion": ReportMinion(store),
     }
 

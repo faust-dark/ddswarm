@@ -14,8 +14,10 @@ from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
+from ..contracts.dynamics_result import DynamicsResult
 from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskStatus
 from ..contracts.event_log import EventLog
+from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
@@ -32,6 +34,8 @@ from .store import Store
 ARTIFACT_MODELS: dict[str, type] = {
     "admet_prediction": AdmetPrediction,
     "docking_result": DockingResult,
+    "dynamics_result": DynamicsResult,
+    "formulation_assessment": FormulationAssessment,
     "knowledge_pack": KnowledgePack,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,

@@ -15,7 +15,9 @@ from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
+from ..contracts.dynamics_result import DynamicsResult
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
+from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.memory import MemoryEntry
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -35,6 +37,8 @@ _KIND_MODELS: dict[str, type] = {
     "screened_batch": ScreenedBatch,
     "admet_prediction": AdmetPrediction,
     "docking_result": DockingResult,
+    "dynamics_result": DynamicsResult,
+    "formulation_assessment": FormulationAssessment,
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
 }
@@ -155,6 +159,11 @@ class ReportMinion(Agent):
                 c["predicted"] += sum(1 for ep in m.endpoints if ep.prediction_status == "predicted")
         for dr in by_kind.get("docking_result", []):
             c["calculated"] += len(dr.poses)
+        for md in by_kind.get("dynamics_result", []):
+            for r in md.runs:
+                c[r.evidence_level.value] += 1
+        for fa in by_kind.get("formulation_assessment", []):
+            c["predicted"] += len(fa.molecules)
         for rp in by_kind.get("retrosynthesis_plan", []):
             for m in rp.molecules:
                 c[m.evidence_level.value] += 1
@@ -197,6 +206,17 @@ class ReportMinion(Agent):
         tps = by_kind.get("tox_profile", [])
         if tps:
             parts.append(f"{sum(t.summary.total_alerts for t in tps)} tox alerts")
+        fas = by_kind.get("formulation_assessment", [])
+        if fas:
+            bcs: dict[str, int] = {}
+            for fa in fas:
+                for m in fa.molecules:
+                    bcs[m.bcs_class] = bcs.get(m.bcs_class, 0) + 1
+            parts.append("formulation BCS " + ", ".join(f"{k}:{v}" for k, v in sorted(bcs.items())))
+        for md in by_kind.get("dynamics_result", []):
+            for r in md.runs:
+                if r.status == "success" and r.metrics.backbone_rmsd_mean_angstrom is not None:
+                    parts.append(f"receptor MD backbone RMSD {r.metrics.backbone_rmsd_mean_angstrom:.2f} A")
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."
@@ -212,6 +232,10 @@ class ReportMinion(Agent):
             gaps.append("no ADMET endpoints predicted (null provider configured)")
         if "docking_result" not in by_kind:
             gaps.append("no docking performed this run")
+        if "dynamics_result" not in by_kind:
+            gaps.append("no receptor MD performed this run")
+        if "formulation_assessment" not in by_kind:
+            gaps.append("no formulation assessment performed this run")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")
@@ -229,6 +253,8 @@ class ReportMinion(Agent):
             steps.append("configure a real ADMET provider (params.providers) for actual predictions")
         if any("docking" in g for g in gaps):
             steps.append("add a docking task with a receptor (pdb_id) to score poses")
+        if any("receptor MD" in g for g in gaps):
+            steps.append("add a dynamics task with params.receptor + engine=openmm to assess receptor stability")
         if any("0 molecules passed" in g for g in gaps):
             steps.append("reconsider screening filters or the starting scaffold")
         if any("routes" in g for g in gaps):
@@ -247,6 +273,8 @@ class ReportMinion(Agent):
             "Structural tox alerts are predicted liabilities from literature rules, not observed toxicity.",
             "LLM-contributed entries are inferred/hypothetical; verify against primary sources.",
             "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",
+            "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",
+            "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
         ]
 
     @staticmethod

@@ -1,6 +1,7 @@
 """End-to-end demo: EGFR / gefitinib scaffold.
 
 research -> design -> screen -> predict -> dock -> retrosynth -> tox
+         -> formulation -> dynamics -> report
 
 Run from the repo root after `pip install -e .`:
     .venv/bin/python scripts/demo_egfr.py
@@ -11,6 +12,8 @@ from pathlib import Path
 from ddswarm.agents import (
     DesignerMinion,
     DockingMinion,
+    DynamicsMinion,
+    FormulationMinion,
     PredictorMinion,
     ReportMinion,
     ResearcherMinion,
@@ -84,7 +87,16 @@ def main() -> None:
         ),
         TaskDefinition(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
         TaskDefinition(task_id="tox", agent="tox_minion", depends_on=["screen"]),
-        TaskDefinition(task_id="report", agent="report_minion", depends_on=["predict", "dock", "retrosynth", "tox"]),
+        TaskDefinition(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
+        TaskDefinition(
+            task_id="dynamics", agent="dynamics_minion", depends_on=["dock"],
+            params={"receptor": {"kind": "pdb_id", "identifier": "2ITY"}, "engine": "openmm",
+                    "steps": 200, "minimize_max_iterations": 100},
+        ),
+        TaskDefinition(
+            task_id="report", agent="report_minion",
+            depends_on=["predict", "dock", "retrosynth", "tox", "formulation", "dynamics"],
+        ),
     ]
 
     store = Store(STORE_ROOT)
@@ -94,8 +106,10 @@ def main() -> None:
         "screener_minion": ScreenerMinion(store),
         "predictor_minion": PredictorMinion(store),
         "docking_minion": DockingMinion(store),
+        "dynamics_minion": DynamicsMinion(store),
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
+        "formulation_minion": FormulationMinion(store),
         "report_minion": ReportMinion(store),
     }
     runner = Runner(store, agents)
@@ -109,7 +123,7 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox", "report"]:
+    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox", "formulation", "dynamics", "report"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")
@@ -124,6 +138,8 @@ def main() -> None:
     print("      With Brenk on (default), gefitinib is flagged 'Aliphatic_long_chain' - see demo_screen.py.")
     print("NOTE: the dock task requires tools/vina + network (RCSB) + pdbfixer/meeko/openbabel.")
     print("      Docking scores and tox alerts are in-silico (calculated/predicted), never experimental evidence.")
+    print("NOTE: the dynamics task runs a SHORT (ps-scale) receptor MD relaxation (amber14 + GBSA),")
+    print("      reporting backbone RMSD + energy fluctuation only - NOT production MD, NOT a binding free energy.")
     print("=" * 70)
 
 
