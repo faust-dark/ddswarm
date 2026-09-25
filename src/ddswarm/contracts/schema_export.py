@@ -8,6 +8,7 @@ from pathlib import Path
 from .admet_prediction import AdmetPrediction
 from .agent_result import AgentResult
 from .design_batch import DesignBatch
+from .docking_result import DockingResult
 from .event_log import EventLog
 from .knowledge_pack import KnowledgePack
 from .project_spec import ProjectSpec
@@ -25,6 +26,7 @@ MODELS: dict[str, type] = {
     "KnowledgePack": KnowledgePack,
     "DesignBatch": DesignBatch,
     "ScreenedBatch": ScreenedBatch,
+    "DockingResult": DockingResult,
 }
 
 

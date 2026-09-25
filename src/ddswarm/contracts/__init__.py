@@ -10,6 +10,16 @@ from .admet_prediction import (
 )
 from .agent_result import AgentResult
 from .design_batch import DesignBatch, MoleculeDesign
+from .docking_result import (
+    DockedPose,
+    DockingProtocol,
+    DockingResult,
+    DockingSummary,
+    ReceptorInfo,
+    ReceptorQCCheck,
+    RedockingValidation,
+    SearchBox,
+)
 from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
 from .enums import (
     AgentResultStatus,
@@ -46,6 +56,10 @@ __all__ = [
     "ArtifactRef",
     "AttemptRecord",
     "DesignBatch",
+    "DockedPose",
+    "DockingProtocol",
+    "DockingResult",
+    "DockingSummary",
     "EventLog",
     "EvidenceLevel",
     "InputRef",
@@ -55,8 +69,12 @@ __all__ = [
     "MoleculeDesign",
     "MoleculeProperties",
     "MoleculeScreenResult",
+    "ReceptorInfo",
+    "ReceptorQCCheck",
+    "RedockingValidation",
     "ScreenSummary",
     "ScreenedBatch",
+    "SearchBox",
     "MODELS",
     "ProjectSpec",
     "ProjectStatus",

@@ -1,0 +1,638 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "DockedPose": {
+      "properties": {
+        "molecule_id": {
+          "title": "Molecule Id",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "affinity_kcal_per_mol": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affinity Kcal Per Mol"
+        },
+        "rmsd_lower_bound": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rmsd Lower Bound"
+        },
+        "rmsd_upper_bound": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rmsd Upper Bound"
+        },
+        "pose_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pose File"
+        },
+        "interactions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Interactions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "molecule_id",
+        "rank"
+      ],
+      "title": "DockedPose",
+      "type": "object"
+    },
+    "DockingProtocol": {
+      "properties": {
+        "engine": {
+          "default": "vina",
+          "title": "Engine",
+          "type": "string"
+        },
+        "engine_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Engine Version"
+        },
+        "search_box": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SearchBox"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "exhaustiveness": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exhaustiveness"
+        },
+        "num_modes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Num Modes"
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seed"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "DockingProtocol",
+      "type": "object"
+    },
+    "DockingSummary": {
+      "properties": {
+        "total_molecules": {
+          "default": 0,
+          "title": "Total Molecules",
+          "type": "integer"
+        },
+        "docked": {
+          "default": 0,
+          "title": "Docked",
+          "type": "integer"
+        },
+        "failed": {
+          "default": 0,
+          "title": "Failed",
+          "type": "integer"
+        }
+      },
+      "title": "DockingSummary",
+      "type": "object"
+    },
+    "EvidenceLevel": {
+      "enum": [
+        "observed",
+        "calculated",
+        "predicted",
+        "inferred",
+        "hypothetical"
+      ],
+      "title": "EvidenceLevel",
+      "type": "string"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ReceptorInfo": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "identifier": {
+          "title": "Identifier",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "preparation_tool": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preparation Tool"
+        },
+        "preparation_status": {
+          "default": "not_prepared",
+          "title": "Preparation Status",
+          "type": "string"
+        },
+        "qc_status": {
+          "default": "not_run",
+          "title": "Qc Status",
+          "type": "string"
+        },
+        "qc_checks": {
+          "items": {
+            "$ref": "#/$defs/ReceptorQCCheck"
+          },
+          "title": "Qc Checks",
+          "type": "array"
+        },
+        "atom_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Atom Count"
+        },
+        "residue_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Residue Count"
+        },
+        "chain_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chain Count"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "source",
+        "identifier"
+      ],
+      "title": "ReceptorInfo",
+      "type": "object"
+    },
+    "ReceptorQCCheck": {
+      "properties": {
+        "check": {
+          "title": "Check",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "detail": {
+          "default": "",
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "status"
+      ],
+      "title": "ReceptorQCCheck",
+      "type": "object"
+    },
+    "RedockingValidation": {
+      "properties": {
+        "status": {
+          "default": "not_run",
+          "title": "Status",
+          "type": "string"
+        },
+        "reference_ligand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Ligand"
+        },
+        "reference_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference Source"
+        },
+        "rmsd_angstrom": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rmsd Angstrom"
+        },
+        "threshold_angstrom": {
+          "default": 2.0,
+          "title": "Threshold Angstrom",
+          "type": "number"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "RedockingValidation",
+      "type": "object"
+    },
+    "SearchBox": {
+      "properties": {
+        "center": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Center",
+          "type": "array"
+        },
+        "size": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Size",
+          "type": "array"
+        }
+      },
+      "required": [
+        "center",
+        "size"
+      ],
+      "title": "SearchBox",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "docking_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "evidence_level": {
+      "$ref": "#/$defs/EvidenceLevel",
+      "default": "calculated"
+    },
+    "receptor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReceptorInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "protocol": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DockingProtocol"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "poses": {
+      "items": {
+        "$ref": "#/$defs/DockedPose"
+      },
+      "title": "Poses",
+      "type": "array"
+    },
+    "redocking_validation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RedockingValidation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "summary": {
+      "$ref": "#/$defs/DockingSummary"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "DockingResult",
+  "type": "object"
+}

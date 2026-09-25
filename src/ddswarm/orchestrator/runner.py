@@ -13,6 +13,7 @@ from ..agents.base import Agent, AgentContext
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch
+from ..contracts.docking_result import DockingResult
 from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskStatus
 from ..contracts.event_log import EventLog
 from ..contracts.knowledge_pack import KnowledgePack
@@ -27,6 +28,7 @@ from .store import Store
 
 ARTIFACT_MODELS: dict[str, type] = {
     "admet_prediction": AdmetPrediction,
+    "docking_result": DockingResult,
     "knowledge_pack": KnowledgePack,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,

@@ -5,12 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ddswarm"
 version = "0.1.0"
-description = "Drug discovery multi-agent swarm - Increment 0 PoC (contracts + orchestrator + minimal researcher/designer)"
+description = "Drug discovery multi-agent swarm - Increment 3 (docking + redocking validation)"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7", "rdkit>=2025.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+docking = ["meeko>=0.8", "scipy", "gemmi", "pdbfixer", "openbabel-wheel"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

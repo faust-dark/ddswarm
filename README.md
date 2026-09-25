@@ -1,10 +1,10 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 2: ADMET/PK prediction abstraction)
+# ddswarm — drug discovery multi-agent swarm (Increment 3: docking + redocking validation)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 2** adds `predictor_minion` + a pluggable ADMET/PK prediction
-abstraction (applicability domain + uncertainty) on top of Increment 0-1
-(contracts + orchestrator + logging + researcher/designer/screener).
-Docking, dynamics, etc. land in later increments.
+**Increment 3** adds `docking_minion` + a real AutoDock Vina engine with
+receptor structural QC and redocking validation (RMSD vs the co-crystal
+ligand) on top of Increments 0-2 (contracts + orchestrator + logging +
+researcher/designer/screener/predictor). Dynamics and beyond land later.
 
 ## Architecture
 
@@ -17,8 +17,11 @@ Docking, dynamics, etc. land in later increments.
   - `designer_minion` — DesignBatch from upstream scaffolds (labels only; no de novo yet).
   - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
   - `predictor_minion` — ADMET/PK predictions through pluggable providers.
-- **Chemistry layer** (`chemistry/rdkit_ops.py`): sanitization, canonicalization,
-  descriptors, PAINS/Brenk alerts. The agent reasons; this module computes.
+  - `docking_minion` — receptor prep + QC, docking (AutoDock Vina), redocking RMSD.
+- **Chemistry layer** (`chemistry/rdkit_ops.py`, `chemistry/pdb_utils.py`):
+  sanitization, canonicalization, descriptors, PAINS/Brenk alerts, and pure-Python
+  PDB structural analysis (missing residues/atoms, waters, heterogens, hydrogens).
+  The agent reasons; these modules compute.
 
 ## Contracts (JSON, versioned, validated)
 
@@ -33,6 +36,7 @@ Docking, dynamics, etc. land in later increments.
 | `DesignBatch` | designer output (candidates with transformation + rationale) |
 | `ScreenedBatch` | screener output (per-molecule validity, properties, alerts, verdicts) |
 | `AdmetPrediction` | predictor output (per-molecule, per-endpoint: model/version/AD/uncertainty) |
+| `DockingResult` | docking output (receptor QC, protocol, ranked poses, redocking RMSD) |
 
 Every artifact carries `evidence_level` (`observed|calculated|predicted|inferred|hypothetical`)
 and provenance (source, URL/identifier, timestamps, tool versions, hashes).
@@ -80,6 +84,42 @@ contract or orchestrator.
 
 No provider configured, or no molecules => `insufficient_evidence`.
 
+## Docking (Increment 3)
+
+`docking_minion` runs a real AutoDock Vina engine (`docking/vina_engine.py`):
+
+1. **Receptor**: raw PDB -> `PDBFixer` (clean, add hydrogens) -> Open Babel `-xr`
+   (rigid PDBQT). Structural QC runs on the *raw* structure and reports, as
+   observed facts: missing residues (SEQRES vs observed), missing backbone
+   atoms, waters, heterogens, hydrogens.
+2. **Ligand**: SMILES -> `Meeko` -> PDBQT with a `REMARK SMILES IDX` table
+   (maps SMILES atom order to PDBQT serials).
+3. **Docking**: the Vina binary via subprocess; poses/affinities are parsed
+   straight from Vina's output — nothing is invented.
+4. **Redocking validation**: when the source PDB carries a co-crystal ligand
+   (e.g. gefitinib `IRE` in 2ITY), the rank-1 docked pose is compared to it
+   with a symmetry-aware heavy-atom RMSD (`rdMolAlign.CalcRMS`, no
+   pre-alignment). Threshold is 2.0 A by default.
+
+Every pose carries rank/affinity/rmsd-lb/rmsd-ub; the result carries receptor
+QC, the search box, engine version, and redocking RMSD. Docking scores are
+`evidence_level = calculated` — in-silico, never experimental evidence.
+
+Honest result (this increment's demo): gefitinib redocks into 2ITY with RMSD
+~3.5 A (above the 2 A success threshold). The protocol reproduces the pocket
+(centroid ~1 A) but not the exact pose; that is reported as-is, not polished.
+
+The engine needs the AutoDock Vina binary (not on PyPI). Download it to
+`tools/vina` (gitignored):
+
+```bash
+curl -sL https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.7/vina_1.2.7_linux_x86_64 -o tools/vina
+chmod +x tools/vina
+# plus: .venv/bin/pip install -e '.[docking]'   # meeko, pdbfixer, openbabel-wheel, scipy, gemmi
+```
+
+Or point the agent at it with `params.vina_binary` / the `VINA_BINARY` env var.
+
 ## Run
 
 ```bash
@@ -88,8 +128,9 @@ python3 -m venv .venv
 .venv/bin/pip install -e .            # ddswarm + pydantic + rdkit
 .venv/bin/pip install pytest          # for tests
 .venv/bin/python -m pytest -q         # run the test suite
-.venv/bin/python scripts/demo_egfr.py # full pipeline: research -> design -> screen
+.venv/bin/python scripts/demo_egfr.py # full pipeline: research -> design -> screen -> predict -> dock
 .venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
+.venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
 ```
 
 ## Layout
@@ -115,4 +156,6 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — all tests must pass before this increment is considered done.
+Run `pytest -q` — 54 tests pass. The real-Vina smoke test auto-skips when the
+binary is absent; the receptor QC, PDBQT parsing, RMSD, and docking_minion
+gating tests are offline and always run.
