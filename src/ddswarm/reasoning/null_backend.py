@@ -18,3 +18,6 @@ class NullReasoningBackend(ReasoningBackend):
 
     def design(self, spec: ProjectSpec, scaffolds: list[tuple[str, str]], params: dict) -> ReasoningResult:
         return ReasoningResult(ok=True, note="no reasoning backend configured")
+
+    def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        return ReasoningResult(ok=True, note="no reasoning backend configured")

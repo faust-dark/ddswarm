@@ -14,8 +14,10 @@ from .knowledge_pack import KnowledgePack
 from .project_spec import ProjectSpec
 from .run_manifest import RunManifest
 from .run_request import RunRequest
+from .retrosynthesis_plan import RetrosynthesisPlan
 from .screened_batch import ScreenedBatch
 from .task_spec import TaskSpec
+from .tox_profile import ToxProfile
 
 MODELS: dict[str, type] = {
     "AdmetPrediction": AdmetPrediction,
@@ -29,6 +31,8 @@ MODELS: dict[str, type] = {
     "ScreenedBatch": ScreenedBatch,
     "DockingResult": DockingResult,
     "RunRequest": RunRequest,
+    "RetrosynthesisPlan": RetrosynthesisPlan,
+    "ToxProfile": ToxProfile,
 }
 
 

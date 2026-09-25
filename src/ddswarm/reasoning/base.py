@@ -35,3 +35,8 @@ class ReasoningBackend(ABC):
     @abstractmethod
     def design(self, spec: ProjectSpec, scaffolds: list[tuple[str, str]], params: dict) -> ReasoningResult:
         """Return raw dicts for MoleculeDesign (validated by the agent)."""
+
+    @abstractmethod
+    def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts ({molecule_id, steps, key_reagents, feasibility_note})
+        for proposed synthesis routes (validated by the agent)."""

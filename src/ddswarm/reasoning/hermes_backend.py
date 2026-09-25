@@ -56,6 +56,24 @@ code fences. Each object must have exactly these keys:
   "rationale": one-sentence medicinal-chemistry rationale.
 """
 
+_SYNTHESIS_PROMPT = """You are a synthetic chemist proposing synthesis routes.
+
+Project objective: {objective}
+Molecule(s) to plan (id: SMILES):
+{molecules}
+
+For each molecule propose 1-2 viable synthesis routes. Each route is an ordered
+list of synthetic steps plus the key reagents. Be honest about feasibility; if
+a step is speculative, say so in the feasibility note.
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "molecule_id": the id from the list above,
+  "steps": [ordered synthetic/retrosynthetic steps as strings],
+  "key_reagents": [reagent names],
+  "feasibility_note": one-sentence feasibility assessment.
+"""
+
 
 def extract_json_list(text: str) -> list | None:
     """Parse a JSON array from a subagent's text output, tolerating surrounding
@@ -117,6 +135,12 @@ class HermesSubprocessBackend(ReasoningBackend):
             targets="; ".join(spec.targets) or "(none)",
             scaffolds=scaffold_lines,
         )
+        return self._run(prompt)
+
+    # ---- synthesis routes ----
+    def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _SYNTHESIS_PROMPT.format(objective=spec.objective, molecules=mol_lines)
         return self._run(prompt)
 
     # ---- shared ----

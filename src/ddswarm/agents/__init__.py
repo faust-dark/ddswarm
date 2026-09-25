@@ -5,9 +5,12 @@ from .designer import DesignerMinion
 from .docking import DockingMinion
 from .predictor import PredictorMinion
 from .researcher import ResearcherMinion
+from .retrosynthesis import RetrosynthesisMinion
 from .screener import ScreenerMinion
+from .tox import ToxMinion
 
 __all__ = [
     "Agent", "AgentContext", "DesignerMinion", "DockingMinion",
-    "PredictorMinion", "ResearcherMinion", "ScreenerMinion",
+    "PredictorMinion", "ResearcherMinion", "RetrosynthesisMinion",
+    "ScreenerMinion", "ToxMinion",
 ]

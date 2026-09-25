@@ -16,7 +16,15 @@ import os
 import sys
 from pathlib import Path
 
-from .agents import DesignerMinion, DockingMinion, PredictorMinion, ResearcherMinion, ScreenerMinion
+from .agents import (
+    DesignerMinion,
+    DockingMinion,
+    PredictorMinion,
+    ResearcherMinion,
+    RetrosynthesisMinion,
+    ScreenerMinion,
+    ToxMinion,
+)
 from .contracts import ProjectSpec, RunRequest, ReasoningConfig, RunTask, export_schemas
 from .orchestrator import Runner, Store, TaskDefinition
 
@@ -26,6 +34,8 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="screen", agent="screener_minion", depends_on=["design"]),
     RunTask(task_id="predict", agent="predictor_minion", depends_on=["screen"],
             params={"providers": ["null_admet"]}),
+    RunTask(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
+    RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
 ]
 
 
@@ -40,6 +50,8 @@ def build_agents(store: Store) -> dict:
         "screener_minion": ScreenerMinion(store),
         "predictor_minion": PredictorMinion(store),
         "docking_minion": DockingMinion(store),
+        "retrosynthesis_minion": RetrosynthesisMinion(store),
+        "tox_minion": ToxMinion(store),
     }
 
 
@@ -47,7 +59,7 @@ def _inject_reasoning(tasks: list[RunTask], reasoning: ReasoningConfig | None) -
     if reasoning is None or reasoning.backend in (None, "", "none"):
         return tasks
     for t in tasks:
-        if t.agent in ("researcher_minion", "designer_minion"):
+        if t.agent in ("researcher_minion", "designer_minion", "retrosynthesis_minion"):
             t.params.setdefault("reasoning_backend", reasoning.backend)
             if reasoning.command:
                 t.params.setdefault("reasoning_command", reasoning.command)

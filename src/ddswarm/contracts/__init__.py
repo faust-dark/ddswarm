@@ -42,8 +42,15 @@ from .provenance import (
 )
 from .run_manifest import RunManifest
 from .run_request import ReasoningConfig, RunRequest, RunTask
+from .retrosynthesis_plan import (
+    RetrosynthesisEntry,
+    RetrosynthesisPlan,
+    RetrosynthesisSummary,
+    SynthesisRoute,
+)
 from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
+from .tox_profile import MoleculeToxAssessment, ToxAlert, ToxProfile, ToxSummary
 
 __all__ = [
     "AdmetPrediction",
@@ -70,12 +77,20 @@ __all__ = [
     "MoleculeDesign",
     "MoleculeProperties",
     "MoleculeScreenResult",
+    "MoleculeToxAssessment",
     "ReceptorInfo",
     "ReceptorQCCheck",
     "RedockingValidation",
+    "RetrosynthesisEntry",
+    "RetrosynthesisPlan",
+    "RetrosynthesisSummary",
     "ScreenSummary",
     "ScreenedBatch",
     "SearchBox",
+    "SynthesisRoute",
+    "ToxAlert",
+    "ToxProfile",
+    "ToxSummary",
     "MODELS",
     "ProjectSpec",
     "ProjectStatus",

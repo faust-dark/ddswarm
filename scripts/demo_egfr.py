@@ -1,4 +1,6 @@
-"""Increment 0 end-to-end demo: EGFR / gefitinib scaffold, research -> design.
+"""End-to-end demo: EGFR / gefitinib scaffold.
+
+research -> design -> screen -> predict -> dock -> retrosynth -> tox
 
 Run from the repo root after `pip install -e .`:
     .venv/bin/python scripts/demo_egfr.py
@@ -6,7 +8,15 @@ Run from the repo root after `pip install -e .`:
 
 from pathlib import Path
 
-from ddswarm.agents import DesignerMinion, DockingMinion, PredictorMinion, ResearcherMinion, ScreenerMinion
+from ddswarm.agents import (
+    DesignerMinion,
+    DockingMinion,
+    PredictorMinion,
+    ResearcherMinion,
+    RetrosynthesisMinion,
+    ScreenerMinion,
+    ToxMinion,
+)
 from ddswarm.contracts import ProjectSpec, export_schemas
 from ddswarm.orchestrator import Runner, Store, TaskDefinition
 
@@ -71,6 +81,8 @@ def main() -> None:
             task_id="dock", agent="docking_minion", depends_on=["screen"],
             params={"receptor": {"kind": "pdb_id", "identifier": "2ITY"}},
         ),
+        TaskDefinition(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
+        TaskDefinition(task_id="tox", agent="tox_minion", depends_on=["screen"]),
     ]
 
     store = Store(STORE_ROOT)
@@ -80,6 +92,8 @@ def main() -> None:
         "screener_minion": ScreenerMinion(store),
         "predictor_minion": PredictorMinion(store),
         "docking_minion": DockingMinion(store),
+        "retrosynthesis_minion": RetrosynthesisMinion(store),
+        "tox_minion": ToxMinion(store),
     }
     runner = Runner(store, agents)
 
@@ -92,7 +106,7 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design", "screen", "predict", "dock"]:
+    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")
@@ -103,10 +117,10 @@ def main() -> None:
         for w in res.warnings:
             print(f"    warning  : {w}")
     print("NOTE: Brenk is disabled in THIS run (screen.filters.enable_brenk=false) so gefitinib")
-    print("      passes screening and the full chain reaches predict + dock. With Brenk on")
-    print("      (default), gefitinib is flagged 'Aliphatic_long_chain' - see scripts/demo_screen.py.")
+    print("      passes screening and the full chain reaches predict + dock + retrosynth + tox.")
+    print("      With Brenk on (default), gefitinib is flagged 'Aliphatic_long_chain' - see demo_screen.py.")
     print("NOTE: the dock task requires tools/vina + network (RCSB) + pdbfixer/meeko/openbabel.")
-    print("      Docking scores are in-silico calculations, never experimental evidence.")
+    print("      Docking scores and tox alerts are in-silico (calculated/predicted), never experimental evidence.")
     print("=" * 70)
 
 

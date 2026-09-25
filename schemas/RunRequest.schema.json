@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "InputType": {
+      "enum": [
+        "target",
+        "ligand",
+        "class",
+        "mixed"
+      ],
+      "title": "InputType",
+      "type": "string"
+    },
+    "ProjectSpec": {
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "project_id": {
+          "title": "Project Id",
+          "type": "string"
+        },
+        "input_type": {
+          "$ref": "#/$defs/InputType"
+        },
+        "objective": {
+          "minLength": 1,
+          "title": "Objective",
+          "type": "string"
+        },
+        "targets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Targets",
+          "type": "array"
+        },
+        "starting_materials": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Starting Materials",
+          "type": "array"
+        },
+        "constraints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Constraints",
+          "type": "array"
+        },
+        "exclusions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclusions",
+          "type": "array"
+        },
+        "success_criteria": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Success Criteria",
+          "type": "array"
+        },
+        "allowed_tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Tools",
+          "type": "array"
+        },
+        "safety_constraints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Safety Constraints",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/ProjectStatus",
+          "default": "draft"
+        }
+      },
+      "required": [
+        "project_id",
+        "input_type",
+        "objective"
+      ],
+      "title": "ProjectSpec",
+      "type": "object"
+    },
+    "ProjectStatus": {
+      "enum": [
+        "draft",
+        "approved",
+        "running",
+        "blocked",
+        "completed"
+      ],
+      "title": "ProjectStatus",
+      "type": "string"
+    },
+    "ReasoningConfig": {
+      "properties": {
+        "backend": {
+          "default": "none",
+          "title": "Backend",
+          "type": "string"
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Command"
+        },
+        "max_turns": {
+          "default": 30,
+          "title": "Max Turns",
+          "type": "integer"
+        },
+        "run_budget": {
+          "default": 300,
+          "title": "Run Budget",
+          "type": "integer"
+        }
+      },
+      "title": "ReasoningConfig",
+      "type": "object"
+    },
+    "RunTask": {
+      "properties": {
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "task_id",
+        "agent"
+      ],
+      "title": "RunTask",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectSpec"
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/RunTask"
+      },
+      "title": "Tasks",
+      "type": "array"
+    },
+    "reasoning": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReasoningConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "project"
+  ],
+  "title": "RunRequest",
+  "type": "object"
+}

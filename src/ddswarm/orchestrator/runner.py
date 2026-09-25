@@ -18,10 +18,12 @@ from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskS
 from ..contracts.event_log import EventLog
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.project_spec import ProjectSpec
+from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.provenance import InputRef, utcnow
 from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
+from ..contracts.tox_profile import ToxProfile
 from ..logging.event_writer import EventWriter
 from .gates import BlockedByGate, gate_a_input_validity, result_ok
 from .store import Store
@@ -32,6 +34,8 @@ ARTIFACT_MODELS: dict[str, type] = {
     "knowledge_pack": KnowledgePack,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,
+    "retrosynthesis_plan": RetrosynthesisPlan,
+    "tox_profile": ToxProfile,
 }
 
 
