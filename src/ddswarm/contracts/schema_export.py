@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .admet_prediction import AdmetPrediction
 from .agent_result import AgentResult
 from .design_batch import DesignBatch
 from .event_log import EventLog
@@ -15,6 +16,7 @@ from .screened_batch import ScreenedBatch
 from .task_spec import TaskSpec
 
 MODELS: dict[str, type] = {
+    "AdmetPrediction": AdmetPrediction,
     "ProjectSpec": ProjectSpec,
     "AgentResult": AgentResult,
     "RunManifest": RunManifest,

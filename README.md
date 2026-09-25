@@ -1,9 +1,10 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 1: RDKit deterministic screening)
+# ddswarm — drug discovery multi-agent swarm (Increment 2: ADMET/PK prediction abstraction)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 1** adds `screener_minion` + deterministic RDKit screening on top of
-Increment 0 (contracts + orchestrator + logging + researcher/designer).
-ADMET, docking, dynamics, etc. land in later increments.
+**Increment 2** adds `predictor_minion` + a pluggable ADMET/PK prediction
+abstraction (applicability domain + uncertainty) on top of Increment 0-1
+(contracts + orchestrator + logging + researcher/designer/screener).
+Docking, dynamics, etc. land in later increments.
 
 ## Architecture
 
@@ -15,6 +16,7 @@ ADMET, docking, dynamics, etc. land in later increments.
   - `researcher_minion` — KnowledgePack from ProjectSpec + seed (refuses to fabricate).
   - `designer_minion` — DesignBatch from upstream scaffolds (labels only; no de novo yet).
   - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
+  - `predictor_minion` — ADMET/PK predictions through pluggable providers.
 - **Chemistry layer** (`chemistry/rdkit_ops.py`): sanitization, canonicalization,
   descriptors, PAINS/Brenk alerts. The agent reasons; this module computes.
 
@@ -30,6 +32,7 @@ ADMET, docking, dynamics, etc. land in later increments.
 | `KnowledgePack` | researcher output (targets/ligands/references with evidence levels) |
 | `DesignBatch` | designer output (candidates with transformation + rationale) |
 | `ScreenedBatch` | screener output (per-molecule validity, properties, alerts, verdicts) |
+| `AdmetPrediction` | predictor output (per-molecule, per-endpoint: model/version/AD/uncertainty) |
 
 Every artifact carries `evidence_level` (`observed|calculated|predicted|inferred|hypothetical`)
 and provenance (source, URL/identifier, timestamps, tool versions, hashes).
@@ -54,6 +57,28 @@ Known consequence: Brenk is conservative and flags the approved drug gefitinib
 as `Aliphatic_long_chain` (its OCCCN propyl-morpholine chain). This is a
 liability flag, not a kill criterion; disable per-project with
 `params.filters.enable_brenk=false`.
+
+## Prediction (Increment 2)
+
+`predictor_minion` runs ADMET/PK predictions through a pluggable provider
+interface (`predictors/`). Each endpoint prediction carries:
+
+- `model` + `model_version` (documented)
+- `predicted_value` + `units`
+- `prediction_status` (`predicted|not_available|out_of_domain|error`)
+- `evidence_level` = `predicted` (a computational score is never experimental evidence)
+- `applicability_domain` (status/method/note)
+- `uncertainty` (type/value/note)
+
+Providers are registered in `predictors/registry.py`. This increment ships
+`NullAdmetProvider` — a deterministic offline provider with NO model, which
+returns `not_available` for a canonical endpoint set (solubility, Caco-2, BBB,
+hERG, CYP3A4/2D6, Ames, PPB, half-life, clearance). It exercises the contract
+end-to-end without fabricating any value. A real model (e.g. `admet_ai`, which
+needs a heavy torch+CUDA install) can be dropped in later without touching the
+contract or orchestrator.
+
+No provider configured, or no molecules => `insufficient_evidence`.
 
 ## Run
 

@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "AdmetSummary": {
+      "properties": {
+        "total_molecules": {
+          "default": 0,
+          "title": "Total Molecules",
+          "type": "integer"
+        },
+        "total_endpoints": {
+          "default": 0,
+          "title": "Total Endpoints",
+          "type": "integer"
+        },
+        "predicted": {
+          "default": 0,
+          "title": "Predicted",
+          "type": "integer"
+        },
+        "not_available": {
+          "default": 0,
+          "title": "Not Available",
+          "type": "integer"
+        },
+        "out_of_domain": {
+          "default": 0,
+          "title": "Out Of Domain",
+          "type": "integer"
+        },
+        "error": {
+          "default": 0,
+          "title": "Error",
+          "type": "integer"
+        }
+      },
+      "title": "AdmetSummary",
+      "type": "object"
+    },
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "ApplicabilityDomain": {
+      "properties": {
+        "status": {
+          "default": "unknown",
+          "enum": [
+            "in_domain",
+            "out_of_domain",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "method": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Method"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "ApplicabilityDomain",
+      "type": "object"
+    },
+    "EndpointPrediction": {
+      "properties": {
+        "endpoint": {
+          "title": "Endpoint",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "predicted_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predicted Value"
+        },
+        "units": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Units"
+        },
+        "prediction_status": {
+          "default": "not_available",
+          "enum": [
+            "predicted",
+            "not_available",
+            "out_of_domain",
+            "error"
+          ],
+          "title": "Prediction Status",
+          "type": "string"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "predicted"
+        },
+        "applicability_domain": {
+          "$ref": "#/$defs/ApplicabilityDomain"
+        },
+        "uncertainty": {
+          "$ref": "#/$defs/Uncertainty"
+        }
+      },
+      "required": [
+        "endpoint",
+        "model",
+        "model_version"
+      ],
+      "title": "EndpointPrediction",
+      "type": "object"
+    },
+    "EvidenceLevel": {
+      "enum": [
+        "observed",
+        "calculated",
+        "predicted",
+        "inferred",
+        "hypothetical"
+      ],
+      "title": "EvidenceLevel",
+      "type": "string"
+    },
+    "MoleculeAdmetResult": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "canonical_smiles": {
+          "title": "Canonical Smiles",
+          "type": "string"
+        },
+        "endpoints": {
+          "items": {
+            "$ref": "#/$defs/EndpointPrediction"
+          },
+          "title": "Endpoints",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "canonical_smiles"
+      ],
+      "title": "MoleculeAdmetResult",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    },
+    "Uncertainty": {
+      "properties": {
+        "type": {
+          "default": "not_available",
+          "enum": [
+            "none",
+            "confidence",
+            "std",
+            "interval",
+            "not_available"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "Uncertainty",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "predictor_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "molecules": {
+      "items": {
+        "$ref": "#/$defs/MoleculeAdmetResult"
+      },
+      "title": "Molecules",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/AdmetSummary"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "AdmetPrediction",
+  "type": "object"
+}

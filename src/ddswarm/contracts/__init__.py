@@ -1,5 +1,13 @@
 """ddswarm JSON contracts."""
 
+from .admet_prediction import (
+    AdmetPrediction,
+    AdmetSummary,
+    ApplicabilityDomain,
+    EndpointPrediction,
+    MoleculeAdmetResult,
+    Uncertainty,
+)
 from .agent_result import AgentResult
 from .design_batch import DesignBatch, MoleculeDesign
 from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
@@ -27,6 +35,12 @@ from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
 
 __all__ = [
+    "AdmetPrediction",
+    "AdmetSummary",
+    "ApplicabilityDomain",
+    "EndpointPrediction",
+    "MoleculeAdmetResult",
+    "Uncertainty",
     "AgentResult",
     "AgentResultStatus",
     "ArtifactRef",

@@ -6,7 +6,7 @@ Run from the repo root after `pip install -e .`:
 
 from pathlib import Path
 
-from ddswarm.agents import DesignerMinion, ResearcherMinion, ScreenerMinion
+from ddswarm.agents import DesignerMinion, PredictorMinion, ResearcherMinion, ScreenerMinion
 from ddswarm.contracts import ProjectSpec, export_schemas
 from ddswarm.orchestrator import Runner, Store, TaskDefinition
 
@@ -59,7 +59,14 @@ def main() -> None:
             }]},
         ),
         TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
-        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"]),
+        TaskDefinition(
+            task_id="screen", agent="screener_minion", depends_on=["design"],
+            params={"filters": {"enable_brenk": False}},
+        ),
+        TaskDefinition(
+            task_id="predict", agent="predictor_minion", depends_on=["screen"],
+            params={"providers": ["null_admet"]},
+        ),
     ]
 
     store = Store(STORE_ROOT)
@@ -67,6 +74,7 @@ def main() -> None:
         "researcher_minion": ResearcherMinion(store),
         "designer_minion": DesignerMinion(store),
         "screener_minion": ScreenerMinion(store),
+        "predictor_minion": PredictorMinion(store),
     }
     runner = Runner(store, agents)
 
@@ -79,7 +87,7 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design", "screen"]:
+    for tid in ["research", "design", "screen", "predict"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")
@@ -89,8 +97,9 @@ def main() -> None:
             print(f"    finding  : {f}")
         for w in res.warnings:
             print(f"    warning  : {w}")
-    print("NOTE: Brenk (default on) flags gefitinib's OCCCN chain as 'Aliphatic_long_chain'.")
-    print("      That is a liability flag, not a kill criterion; disable via filters.enable_brenk=false.")
+    print("NOTE: Brenk is disabled in THIS run (screen.filters.enable_brenk=false) so gefitinib")
+    print("      passes screening and the full chain reaches predict. With Brenk on (default),")
+    print("      gefitinib is flagged 'Aliphatic_long_chain' - see scripts/demo_screen.py.")
     print("=" * 70)
 
 

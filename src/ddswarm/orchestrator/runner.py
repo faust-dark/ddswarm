@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from ..agents.base import Agent, AgentContext
+from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch
 from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskStatus
@@ -25,6 +26,7 @@ from .gates import BlockedByGate, gate_a_input_validity, result_ok
 from .store import Store
 
 ARTIFACT_MODELS: dict[str, type] = {
+    "admet_prediction": AdmetPrediction,
     "knowledge_pack": KnowledgePack,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,
