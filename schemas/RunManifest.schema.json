@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "RunStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "blocked"
+      ],
+      "title": "RunStatus",
+      "type": "string"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/RunStatus",
+      "default": "queued"
+    },
+    "task_graph": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Task Graph",
+      "type": "object"
+    },
+    "tasks": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Tasks",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "log_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Log Refs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "run_id"
+  ],
+  "title": "RunManifest",
+  "type": "object"
+}

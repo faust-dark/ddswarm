@@ -1,0 +1,262 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "EvidenceLevel": {
+      "enum": [
+        "observed",
+        "calculated",
+        "predicted",
+        "inferred",
+        "hypothetical"
+      ],
+      "title": "EvidenceLevel",
+      "type": "string"
+    },
+    "MoleculeDesign": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "smiles": {
+          "title": "Smiles",
+          "type": "string"
+        },
+        "parent_scaffold": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Scaffold"
+        },
+        "transformation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transformation"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "hypothetical"
+        }
+      },
+      "required": [
+        "id",
+        "smiles"
+      ],
+      "title": "MoleculeDesign",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "designer_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "molecules": {
+      "items": {
+        "$ref": "#/$defs/MoleculeDesign"
+      },
+      "title": "Molecules",
+      "type": "array"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "DesignBatch",
+  "type": "object"
+}
