@@ -12,12 +12,13 @@ retrosynthesis/tox/formulation + memory + report + feedback loop + safety gate +
 validation + knowledge agents + CLI + Hermes reasoning).
 
 **Increment 10** adds a deterministic **PDF report export**: every run ends in a
-self-contained "scientific essay" PDF (reportlab + matplotlib, both deterministic
-and headless) — title/abstract, methodology, per-stage results with tables and
-charts, evidence-level breakdown, validation audit, discussion, conclusion, and
-provenance. The PDF is a binary artifact alongside the JSON artifacts; a
-`ReportDocument` metadata contract references it and is versioned/hashed like
-any other artifact. The `report_pdf_minion` renders it as the final pipeline task.
+self-contained, human-readable "scientific essay" PDF (reportlab + matplotlib,
+both deterministic and headless). The body is narrative prose — a verbose
+interpretation of every result in plain language — with figures kept only as
+auxiliary aids to the text. The PDF is a binary artifact alongside the JSON
+artifacts (a `ReportDocument` metadata contract references it and is
+versioned/hashed like any other artifact), and a copy is exported to
+`reports/<project_id>.pdf` for easy access.
 
 ## Architecture
 
@@ -70,10 +71,11 @@ any other artifact. The `report_pdf_minion` renders it as the final pipeline tas
   - `report_minion` — aggregates a finished run into a structured Report
     (executive summary, per-stage findings, evidence-level breakdown, gaps,
     next steps, caveats) and writes `finding` + `feedback` to project memory.
-  - `report_pdf_minion` — renders the finished run into a self-contained PDF
-    ("scientific essay") with narrative text, tables, and matplotlib charts;
-    runs last and persists the PDF as a binary sidecar plus a `ReportDocument`
-    metadata artifact.
+  - `report_pdf_minion` — renders the finished run into a self-contained PDF in
+    plain, verbose human language (narrative interpretation of every result,
+    with figures only as auxiliary aids); runs last and persists the PDF as a
+    binary sidecar plus a `ReportDocument` metadata artifact, and the CLI copies
+    it to `reports/<project_id>.pdf`.
 - **Project memory** (`orchestrator/memory.py`): an append-only, cross-run log
   under `store/<project_id>/memory.json`. Conclusions are `inferred` (the
   swarm's reasoning), never observed data.
@@ -309,7 +311,7 @@ The `ddswarm` console script runs a whole pipeline from one versioned file:
 ```bash
 ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
     --targets "EGFR" --smiles "COC1=..."       # scaffold (default pipeline)
-ddswarm run project.json [--reasoning none|hermes] [--store ./store]
+ddswarm run project.json [--reasoning none|hermes] [--store ./store] [--reports-dir reports/]
 ddswarm runs [project_id]                       # list runs
 ddswarm report project_id [run_id]              # per-task report
 ddswarm memory project_id                       # cross-run conclusions
@@ -322,7 +324,8 @@ report_pdf);
 docking and dynamics are opt-in (need the Vina binary / OpenMM + network).
 `report` writes `finding` + `feedback` to project memory, closing the loop: the
 next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
-`ddswarm run` prints its path as `PDF report : <path>`.
+`ddswarm run` copies it to `reports/<project_id>.pdf` (override with
+`--reports-dir DIR` or the `DDSWARM_REPORTS_DIR` env var).
 
 `"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`,
 `retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/

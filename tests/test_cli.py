@@ -20,14 +20,19 @@ def _write_project(tmp_path: Path, project_id="p1", smiles="c1ccccc1") -> Path:
 def test_run_default_pipeline(tmp_path):
     f = _write_project(tmp_path)
     store = tmp_path / "store"
-    rc = cli.main(["run", str(f), "--store", str(store)])
+    reports = tmp_path / "reports"
+    rc = cli.main(["run", str(f), "--store", str(store), "--reports-dir", str(reports)])
     assert rc == 0
     runs = list((store / "p1" / "runs").iterdir())
     assert len(runs) == 1
     artifacts = list((runs[0] / "artifacts").glob("*.json"))
     kinds = {a.name.split(".")[1] for a in artifacts}
     assert {"knowledge_pack", "design_batch", "screened_batch", "admet_prediction",
-            "retrosynthesis_plan", "tox_profile", "report"} <= kinds
+            "retrosynthesis_plan", "tox_profile", "report", "report_document"} <= kinds
+    # the exported PDF is copied into the reports dir
+    pdf = reports / "p1.pdf"
+    assert pdf.exists()
+    assert pdf.read_bytes().startswith(b"%PDF")
 
 
 def test_init_writes_project(tmp_path):
@@ -44,9 +49,10 @@ def test_init_writes_project(tmp_path):
 def test_runs_and_report(tmp_path):
     f = _write_project(tmp_path, project_id="p2")
     store = tmp_path / "store"
-    assert cli.main(["run", str(f), "--store", str(store)]) == 0
+    reports = tmp_path / "reports"
+    assert cli.main(["run", str(f), "--store", str(store), "--reports-dir", str(reports)]) == 0
     assert cli.main(["runs", "p2", "--store", str(store)]) == 0
-    assert cli.main(["report", "p2", "--store", str(store)]) == 0
+    assert cli.main(["report", "p2", "--store", str(store), "--reports-dir", str(reports)]) == 0
     assert cli.main(["memory", "p2", "--store", str(store)]) == 0
 
 

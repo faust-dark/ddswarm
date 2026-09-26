@@ -63,4 +63,4 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert doc.figure_count >= 1
     assert doc.pdf_hash
     assert "Conclusion" in doc.sections
-    assert "Evidence breakdown" in doc.sections
+    assert "Evidence and confidence" in doc.sections

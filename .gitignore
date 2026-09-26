@@ -5,3 +5,4 @@ __pycache__/
 store/
 .pytest_cache/
 tools/
+reports/

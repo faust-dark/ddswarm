@@ -63,6 +63,11 @@ def _default_store() -> Path:
     return Path(os.environ.get("DDSWARM_STORE", "./store"))
 
 
+def _default_reports_dir() -> Path:
+    root = Path(__file__).resolve().parent.parent.parent / "reports"
+    return Path(os.environ.get("DDSWARM_REPORTS_DIR", str(root)))
+
+
 def build_agents(store: Store) -> dict:
     return {
         "researcher_minion": ResearcherMinion(store),
@@ -127,6 +132,27 @@ def _print_report(store: Store, project_id: str, run_id: str) -> None:
     print("=" * 70)
 
 
+def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
+                         reports_dir: Path) -> Path | None:
+    """Copy the run's exported PDF to a stable, human-facing reports directory
+    (e.g. <reports_dir>/<project_id>.pdf), so it is easy to find outside the
+    versioned store. Returns the destination path, or None if no PDF exists."""
+    adir = store.artifacts_dir(project_id, run_id)
+    if not adir.exists():
+        return None
+    docs = sorted(adir.glob("report_document_*.report_document.v*.json"))
+    if not docs:
+        return None
+    doc = ReportDocument.model_validate_json(docs[-1].read_text())
+    src = Path(doc.pdf_uri)
+    if not src.exists():
+        return None
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    dest = reports_dir / f"{project_id}.pdf"
+    dest.write_bytes(src.read_bytes())
+    return dest
+
+
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
     if args.reasoning is not None:
@@ -144,6 +170,9 @@ def cmd_run(args) -> int:
     manifest = runner.create_run(req.project, task_defs)
     final = runner.run(manifest.run_id, project_id=req.project.project_id)
     _print_report(store, req.project.project_id, manifest.run_id)
+    dest = _copy_pdf_to_reports(store, req.project.project_id, manifest.run_id, args.reports_dir)
+    if dest:
+        print(f"PDF saved to : {dest}")
     return 0 if final.status.value == "completed" else 1
 
 
@@ -178,6 +207,9 @@ def cmd_report(args) -> int:
     else:
         run_id = args.run_id
     _print_report(store, project_id, run_id)
+    dest = _copy_pdf_to_reports(store, project_id, run_id, args.reports_dir)
+    if dest:
+        print(f"PDF saved to : {dest}")
     return 0
 
 
@@ -225,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
                     help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
     pr.add_argument("--store", type=Path, default=_default_store())
+    pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
+                    help="directory to copy the exported PDF into (default: <repo>/reports)")
     pr.set_defaults(func=cmd_run)
 
     ps = sub.add_parser("runs", help="list runs in the store")
@@ -236,6 +270,8 @@ def build_parser() -> argparse.ArgumentParser:
     pt.add_argument("project_id")
     pt.add_argument("run_id", nargs="?")
     pt.add_argument("--store", type=Path, default=_default_store())
+    pt.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
+                    help="directory to copy the exported PDF into (default: <repo>/reports)")
     pt.set_defaults(func=cmd_report)
 
     pm = sub.add_parser("memory", help="show project memory (cross-run conclusions)")

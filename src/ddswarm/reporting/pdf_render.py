@@ -1,16 +1,18 @@
-"""Deterministic PDF renderer for the final run report ("scientific essay").
+"""Deterministic PDF renderer for the final run report — a readable, verbose
+"scientific essay" in plain human language.
 
 Pure function: takes the aggregated run artifacts (Report, ValidationReport, and
 the by-kind artifact map) plus the ProjectSpec, and renders a self-contained PDF
-with narrative text, tables, and matplotlib figures. No LLM, no network, no
-randomness — the same inputs produce the same document content (page/figure
-counts are deterministic). The raw PDF bytes are not guaranteed byte-identical
-across reportlab/matplotlib builds, which is why the ReportDocument metadata
-carries its own sha256 rather than promising a byte-stable artifact.
+whose body is narrative prose (interpretation of every result, not a data dump),
+with figures kept only as auxiliary aids to the text. No LLM, no network, no
+randomness — interpretation is produced by deterministic template rules from the
+structured data, so the same inputs yield the same prose (page/figure counts are
+deterministic). The raw PDF bytes are not guaranteed byte-identical across
+reportlab/matplotlib builds, which is why the ReportDocument metadata carries its
+own sha256 rather than promising a byte-stable artifact.
 
-Figures are drawn with matplotlib's Agg backend and bundled DejaVu fonts, which
-also back the PDF text via reportlab, so the whole document is self-contained
-(no external font files) and Unicode-clean."""
+Figures and text both use the DejaVu TTFs bundled with matplotlib, so the
+document is self-contained (no external font files) and Unicode-clean."""
 
 from __future__ import annotations
 
@@ -31,10 +33,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Image,
-    PageBreak,
     Paragraph,
     SimpleDocTemplate,
-    Spacer,
     Table,
     TableStyle,
 )
@@ -47,7 +47,6 @@ EVIDENCE_COLORS = {
     "hypothetical": "#9e9e9e",
 }
 
-_FONT_NAME = "DejaVu"
 _fonts_registered = False
 
 
@@ -77,10 +76,10 @@ def _styles() -> dict[str, ParagraphStyle]:
                              spaceBefore=13, spaceAfter=5, textColor=colors.HexColor("#1a1a2e")),
         "h2": ParagraphStyle("H2", fontName="DejaVu-Bold", fontSize=10.5, leading=13,
                              spaceBefore=9, spaceAfter=3),
-        "body": ParagraphStyle("Body", fontName="DejaVu", fontSize=9.5, leading=13.5,
-                               spaceAfter=5, splitLongWords=1),
-        "bullet": ParagraphStyle("Bullet", parent=None, fontName="DejaVu", fontSize=9.5,
-                                 leading=13, leftIndent=12, spaceAfter=2, splitLongWords=1),
+        "body": ParagraphStyle("Body", fontName="DejaVu", fontSize=10, leading=14.5,
+                               spaceAfter=6, splitLongWords=1),
+        "bullet": ParagraphStyle("Bullet", parent=None, fontName="DejaVu", fontSize=10,
+                                 leading=14, leftIndent=14, spaceAfter=2, splitLongWords=1),
         "small": ParagraphStyle("Small", fontName="DejaVu", fontSize=8, leading=11,
                                 textColor=colors.HexColor("#555555"), spaceAfter=4),
         "caption": ParagraphStyle("Caption", fontName="DejaVu-Oblique", fontSize=8, leading=10.5,
@@ -123,7 +122,72 @@ def _new_fig(w: float = 6.5, h: float = 3.0):
     return fig, ax
 
 
-# ---- chart builders (each returns a Figure, or None when there is no data) ----
+# ---- plain-language interpretation rules (deterministic) ----
+
+
+def _interpret_logp(logp: float) -> str:
+    if logp < 0:
+        return "hydrophilic"
+    if logp < 3:
+        return "well balanced between solubility and permeability"
+    if logp < 5:
+        return "moderately lipophilic"
+    return "highly lipophilic — a Rule-of-5 solubility risk"
+
+
+def _interpret_esol(logs: float) -> str:
+    if logs < -6:
+        return "poorly water-soluble"
+    if logs < -4:
+        return "moderately soluble"
+    return "reasonably soluble"
+
+
+def _interpret_qed(qed: float) -> str:
+    if qed >= 0.67:
+        return "attractive drug-likeness"
+    if qed >= 0.49:
+        return "moderate drug-likeness"
+    return "low drug-likeness"
+
+
+def _interpret_lipinski(n: int) -> str:
+    return ("no Lipinski rule-of-5 violations" if n == 0
+            else f"{n} Lipinski rule-of-5 violations")
+
+
+def _interpret_sa(sa: float) -> str:
+    if sa <= 3:
+        return "easy to synthesize"
+    if sa <= 6:
+        return "moderately challenging to synthesize"
+    return "difficult to synthesize"
+
+
+def _interpret_bcs(cls: str) -> str:
+    return {
+        "I": "high solubility and high permeability — the most developable class",
+        "II": "low solubility but high permeability — often a formulation (solubility) challenge",
+        "III": "high solubility but low permeability — a permeability challenge",
+        "IV": "low solubility and low permeability — a significant developability risk",
+    }.get(cls, "undetermined")
+
+
+def _interpret_affinity(a: float) -> str:
+    if a <= -8:
+        return "a strong (very favourable) predicted binder"
+    if a <= -6:
+        return "a moderate predicted binder"
+    return "a weak predicted binder"
+
+
+def _interpret_rmsd(rmsd: float) -> str:
+    if rmsd <= 2:
+        return "stable over the short relaxation"
+    return "mobile over the short relaxation — not a converged verdict"
+
+
+# ---- chart builders (kept only as auxiliary aids to the text) ----
 
 
 def _chart_evidence(eb) -> Figure | None:
@@ -131,7 +195,7 @@ def _chart_evidence(eb) -> Figure | None:
     vals = [getattr(eb, l, 0) for l in levels]
     if not any(vals):
         return None
-    fig, ax = _new_fig(6.6, 2.6)
+    fig, ax = _new_fig(6.4, 2.4)
     ax.bar(levels, vals, color=[EVIDENCE_COLORS[l] for l in levels])
     ax.set_ylabel("count", fontsize=8)
     ax.set_title("Evidence-level breakdown", fontsize=10)
@@ -153,7 +217,7 @@ def _chart_screening(sbs) -> Figure | None:
         brenk += s.summary.brenk_flagged
     if total == 0:
         return None
-    fig, ax = _new_fig(6.6, 2.6)
+    fig, ax = _new_fig(6.4, 2.4)
     labels = ["passed", "rejected", "invalid", "Brenk advisories"]
     vals = [passed, rejected, invalid, brenk]
     ax.bar(labels, vals, color=["#2e7d32", "#c62828", "#9e9e9e", "#f9a825"])
@@ -163,30 +227,6 @@ def _chart_screening(sbs) -> Figure | None:
     for i, v in enumerate(vals):
         if v:
             ax.text(i, v, str(v), ha="center", va="bottom", fontsize=8)
-    fig.tight_layout()
-    return fig
-
-
-def _chart_admet(aps) -> Figure | None:
-    items: list[tuple[str, float]] = []
-    for ap in aps:
-        for m in ap.molecules:
-            for ep in m.endpoints:
-                if ep.prediction_status == "predicted" and ep.predicted_value is not None:
-                    label = f"{m.id} · {ep.endpoint}" + (f" ({ep.units})" if ep.units else "")
-                    items.append((label, ep.predicted_value))
-    if not items:
-        return None
-    items = items[:30]
-    labels = [i[0] for i in items][::-1]
-    vals = [i[1] for i in items][::-1]
-    fig, ax = _new_fig(6.6, max(2.0, 0.28 * len(labels) + 1.0))
-    y = list(range(len(labels)))
-    ax.barh(y, vals, color="#1565c0")
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=7)
-    ax.set_xlabel("predicted value", fontsize=8)
-    ax.set_title("ADMET endpoint predictions", fontsize=10)
     fig.tight_layout()
     return fig
 
@@ -202,7 +242,7 @@ def _chart_sa(rps) -> Figure | None:
     labels = [i[0] for i in items][::-1]
     vals = [i[1] for i in items][::-1]
     cls = [i[2] for i in items][::-1]
-    fig, ax = _new_fig(6.6, max(2.0, 0.28 * len(labels) + 1.0))
+    fig, ax = _new_fig(6.4, max(2.0, 0.28 * len(labels) + 1.0))
     y = list(range(len(labels)))
     ax.barh(y, vals, color=[cls_colors.get(c, "#9e9e9e") for c in cls])
     ax.set_yticks(y)
@@ -224,7 +264,7 @@ def _chart_docking(drs) -> Figure | None:
         return None
     labels = [i[0] for i in items][::-1]
     vals = [i[1] for i in items][::-1]
-    fig, ax = _new_fig(6.6, max(2.0, 0.28 * len(labels) + 1.0))
+    fig, ax = _new_fig(6.4, max(2.0, 0.28 * len(labels) + 1.0))
     y = list(range(len(labels)))
     ax.barh(y, vals, color="#00695c")
     ax.axvline(0, color="#999999", lw=0.5)
@@ -246,35 +286,13 @@ def _chart_md(mds) -> Figure | None:
         return None
     labels = [i[0] for i in items][::-1]
     vals = [i[1] for i in items][::-1]
-    fig, ax = _new_fig(6.6, max(2.0, 0.28 * len(labels) + 1.0))
+    fig, ax = _new_fig(6.4, max(2.0, 0.28 * len(labels) + 1.0))
     y = list(range(len(labels)))
     ax.barh(y, vals, color="#283593")
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=7)
     ax.set_xlabel("backbone RMSD mean (Å)", fontsize=8)
     ax.set_title("Receptor MD — backbone RMSD (calculated)", fontsize=10)
-    fig.tight_layout()
-    return fig
-
-
-def _chart_properties(sbs) -> Figure | None:
-    pts: list[tuple[float, float, bool]] = []
-    for s in sbs:
-        for m in s.molecules:
-            if m.properties is not None:
-                pts.append((m.properties.molecular_weight, m.properties.logp, m.passed))
-    if not pts:
-        return None
-    fig, ax = _new_fig(6.6, 3.2)
-    for passed, color, label in ((True, "#2e7d32", "passed"), (False, "#c62828", "rejected")):
-        xs = [p[0] for p in pts if p[2] is passed]
-        ys = [p[1] for p in pts if p[2] is passed]
-        if xs:
-            ax.scatter(xs, ys, c=color, label=label, s=22, alpha=0.85)
-    ax.set_xlabel("molecular weight (Da)", fontsize=8)
-    ax.set_ylabel("logP", fontsize=8)
-    ax.set_title("Molecular properties of screened molecules", fontsize=10)
-    ax.legend(fontsize=8)
     fig.tight_layout()
     return fig
 
@@ -334,288 +352,389 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         sections.append(title)
         story.append(Paragraph(_esc(title), styles["h1"]))
 
+    def para(text: str) -> None:
+        story.append(Paragraph(_esc(text), styles["body"]))
+
+    def bullets(items) -> None:
+        for it in items:
+            story.append(Paragraph("•&nbsp;" + _cell(it), styles["bullet"]))
+
     def fig(f, caption: str) -> None:
         nonlocal figure_count
         if f is None:
             return
         figure_count += 1
         w_in, h_in = f.get_size_inches()
-        W = 16.0  # cm text width
+        W = 15.5
         png = figdir / f"fig{figure_count}.png"
         f.savefig(png, dpi=150, bbox_inches="tight", facecolor="white")
         plt.close(f)
         story.append(Image(str(png), width=W * cm, height=W * (h_in / w_in) * cm))
         story.append(Paragraph(_esc(caption), styles["caption"]))
 
-    def bullets(items, style_key="bullet") -> None:
-        for it in items:
-            story.append(Paragraph("•&nbsp;" + _cell(it), styles[style_key]))
+    # ---- convenience aggregates ----
+    sbs = by_kind.get("screened_batch", [])
+    aps = by_kind.get("admet_prediction", [])
+    rps = by_kind.get("retrosynthesis_plan", [])
+    tps = by_kind.get("tox_profile", [])
+    fas = by_kind.get("formulation_assessment", [])
+    drs = by_kind.get("docking_result", [])
+    mds = by_kind.get("dynamics_result", [])
+    sas = by_kind.get("safety_assessment", [])
+    kps = by_kind.get("knowledge_pack", [])
+    dbs = by_kind.get("design_batch", [])
+
+    survivors = _survivors(by_kind)
+    n_passed = sum(s.summary.passed for s in sbs)
+    n_total = sum(s.summary.total for s in sbs)
+    tools = _collect_tools(report, by_kind)
 
     with tempfile.TemporaryDirectory() as tmp:
         figdir = Path(tmp)
 
         # ---- title ----
-        story.append(Paragraph(_esc(f"ddswarm — {project_spec.project_id}"), styles["title"]))
         targets = ", ".join(project_spec.targets) or "—"
+        story.append(Paragraph(_esc(f"ddswarm — {project_spec.project_id}"), styles["title"]))
         story.append(Paragraph(_esc(f"run {report.run_id} · status {report.run_status} · targets {targets}"),
                                styles["subtitle"]))
-        story.append(Paragraph(_esc("In-silico drug-discovery pipeline report — every score below is "
-                                    "calculated or predicted, never experimental evidence."),
-                               styles["subtitle"]))
+        story.append(Paragraph(_esc("In-silico drug-discovery report — every score below is calculated "
+                                    "or predicted, never experimental evidence."), styles["subtitle"]))
 
-        # ---- abstract ----
+        # ---- abstract (verbose) ----
         section("Abstract")
-        story.append(Paragraph(_cell(report.executive_summary), styles["body"]))
+        para(_narrative_abstract(report, by_kind, project_spec, survivors, n_total, n_passed))
 
-        # ---- methodology ----
+        # ---- methodology (narrative) ----
         section("Methodology")
         agents = sorted({sf.agent for sf in report.stage_findings})
-        story.append(Paragraph(_esc("Agents executed: " + ", ".join(agents) + "."), styles["body"]))
-        tools = _collect_tools(report, by_kind)
+        para(f"This run executed a pipeline of {len(agents)} specialised agents — "
+             f"{', '.join(agents)} — each responsible for one stage of an in-silico "
+             "drug-discovery workflow. Each agent writes a versioned, hashed artifact carrying "
+             "full provenance (input/output hashes, tool versions, and an evidence level), so the "
+             "whole run is reproducible and auditable.")
         if tools:
-            story.append(Paragraph(_esc("Tool versions: " + "; ".join(tools) + "."), styles["small"]))
-        story.append(Paragraph(_esc("Input: " + "; ".join(project_spec.starting_materials)
-                                    if project_spec.starting_materials
-                                    else "no starting materials declared"), styles["body"]))
+            para("Tools and versions: " + "; ".join(tools) + ".")
+        if project_spec.starting_materials:
+            para("The analysis starts from the provided molecule(s): "
+                 + "; ".join(project_spec.starting_materials) + ".")
 
-        # ---- stage overview ----
-        section("Stage overview")
-        rows = [["task", "agent", "status", "findings", "warnings"]]
-        for sf in report.stage_findings:
-            rows.append([sf.task_id, sf.agent, sf.status,
-                         "\n".join(sf.findings) or "—",
-                         "\n".join(sf.warnings) or "—"])
-        story.append(_table(rows[0], rows[1:], [2.4, 2.8, 1.9, 4.9, 4.0], styles))
+        # ---- results, one narrative block per present stage ----
+        section("Results and interpretation")
 
-        # ---- research ----
-        if "knowledge_pack" in by_kind:
-            section("Research knowledge")
-            rows = [["id", "type", "source", "evidence", "value / notes"]]
-            for kp in by_kind["knowledge_pack"]:
-                for e in kp.entries:
-                    rows.append([e.id, e.type, e.source, e.evidence_level.value,
-                                 (e.observed_value or e.notes or "—")])
-            story.append(_table(rows[0], rows[1:], [1.8, 1.6, 2.6, 1.9, 8.1], styles))
+        if kps:
+            _narrative_research(kps, para)
+        if dbs:
+            _narrative_design(dbs, para)
 
-        # ---- design ----
-        if "design_batch" in by_kind:
-            section("Molecular design")
-            rows = [["id", "smiles", "transformation", "evidence", "rationale"]]
-            for db in by_kind["design_batch"]:
-                for m in db.molecules:
-                    rows.append([m.id, m.smiles, m.transformation or "—",
-                                 m.evidence_level.value, m.rationale or "—"])
-            story.append(_table(rows[0], rows[1:], [1.5, 5.6, 2.3, 1.8, 4.8], styles))
+        if sbs:
+            _narrative_screening(sbs, para, fig)
 
-        # ---- screening ----
-        if "screened_batch" in by_kind:
-            section("Screening")
-            fig(_chart_screening(by_kind["screened_batch"]),
-                "Screening outcome. PAINS matches are hard (eliminating); Brenk 'unwanted "
-                "functionality' alerts are advisory and reported, not eliminating.")
-            fig(_chart_properties(by_kind["screened_batch"]),
-                "Molecular weight vs logP for screened molecules, colored by pass/reject.")
-            rows = [["id", "canonical SMILES", "passed", "Ro5 violations", "PAINS", "Brenk"]]
-            for sb in by_kind["screened_batch"]:
-                for m in sb.molecules:
-                    rows.append([m.id, m.canonical_smiles or m.input_smiles,
-                                 "yes" if m.passed else "no",
-                                 "; ".join(m.rule_of_five_violations) or "—",
-                                 "; ".join(m.structural_alerts) or "—",
-                                 "; ".join(m.brenk_alerts) or "—"])
-            story.append(_table(rows[0], rows[1:], [1.2, 6.4, 1.1, 2.3, 2.5, 2.5], styles))
+        if aps:
+            _narrative_admet(aps, para, styles, story)
 
-        # ---- ADMET ----
-        if "admet_prediction" in by_kind:
-            section("ADMET prediction")
-            fig(_chart_admet(by_kind["admet_prediction"]),
-                "Numeric endpoint predictions (rule-based; evidence_level = predicted).")
-            rows = [["molecule", "endpoint", "value", "label", "status", "citation"]]
-            for ap in by_kind["admet_prediction"]:
-                for m in ap.molecules:
-                    for ep in m.endpoints:
-                        val = ""
-                        if ep.predicted_value is not None:
-                            val = f"{ep.predicted_value:.4g}"
-                            if ep.units:
-                                val += f" {ep.units}"
-                        rows.append([m.id, ep.endpoint, val or "—",
-                                     ep.predicted_label or "—", ep.prediction_status,
-                                     ep.citation or "—"])
-            story.append(_table(rows[0], rows[1:], [1.4, 2.2, 2.4, 2.0, 2.0, 6.0], styles))
+        if rps:
+            _narrative_retrosynthesis(rps, para, fig)
 
-        # ---- retrosynthesis ----
-        if "retrosynthesis_plan" in by_kind:
-            section("Retrosynthesis")
-            fig(_chart_sa(by_kind["retrosynthesis_plan"]),
-                "RDKit synthetic-accessibility (SA) score per molecule (calculated); "
-                "synthesis routes, when present, are LLM-proposed (hypothetical).")
-            rows = [["id", "canonical SMILES", "SA score", "accessibility", "routes"]]
-            for rp in by_kind["retrosynthesis_plan"]:
-                for m in rp.molecules:
-                    rows.append([m.id, m.canonical_smiles, f"{m.sa_score:.2f}",
-                                 m.synthetic_accessibility, str(len(m.routes))])
-            story.append(_table(rows[0], rows[1:], [1.2, 6.2, 1.6, 2.4, 1.6], styles))
+        if tps:
+            _narrative_tox(tps, para)
 
-        # ---- toxicity ----
-        if "tox_profile" in by_kind:
-            section("Structural toxicity alerts")
-            rows = [["id", "alerts", "count", "risk note"]]
-            for tp in by_kind["tox_profile"]:
-                for m in tp.molecules:
-                    alerts = "; ".join(f"{a.name} ({a.endpoint})" for a in m.alerts)
-                    rows.append([m.id, alerts or "—", str(m.liability_count), m.risk_note or "—"])
-            story.append(_table(rows[0], rows[1:], [1.2, 8.4, 1.2, 5.2], styles))
+        if fas:
+            _narrative_formulation(fas, para)
 
-        # ---- formulation ----
-        if "formulation_assessment" in by_kind:
-            section("Formulation / developability")
-            rows = [["id", "logP", "TPSA", "solubility", "permeability", "BCS"]]
-            for fa in by_kind["formulation_assessment"]:
-                for m in fa.molecules:
-                    rows.append([m.id,
-                                 f"{m.logp:.2f}" if m.logp is not None else "—",
-                                 f"{m.tpsa:.1f}" if m.tpsa is not None else "—",
-                                 m.solubility_class, m.permeability_class, m.bcs_class])
-            story.append(_table(rows[0], rows[1:], [1.2, 1.4, 1.5, 2.4, 2.5, 1.4], styles))
+        if drs:
+            _narrative_docking(drs, para, fig)
 
-        # ---- docking ----
-        if "docking_result" in by_kind:
-            section("Docking")
-            fig(_chart_docking(by_kind["docking_result"]),
-                "Docking affinity per pose (calculated); a failed redocking (RMSD > 2 Å) is reported as failed.")
-            rows = [["receptor", "molecule", "rank", "affinity (kcal/mol)", "RMSD l.b. / u.b."]]
-            for dr in by_kind["docking_result"]:
-                rec = dr.receptor.identifier if dr.receptor else "—"
-                for p in dr.poses:
-                    rlb = f"{p.rmsd_lower_bound:.2f}" if p.rmsd_lower_bound is not None else "—"
-                    rub = f"{p.rmsd_upper_bound:.2f}" if p.rmsd_upper_bound is not None else "—"
-                    rows.append([rec, p.molecule_id, str(p.rank),
-                                 f"{p.affinity_kcal_per_mol:.2f}" if p.affinity_kcal_per_mol is not None else "—",
-                                 f"{rlb} / {rub}"])
-            story.append(_table(rows[0], rows[1:], [1.8, 2.0, 1.0, 3.4, 3.0], styles))
-            rv = by_kind["docking_result"][0].redocking_validation
-            if rv and rv.rmsd_angstrom is not None:
-                story.append(Paragraph(
-                    _esc(f"Redocking validation: {rv.status}, RMSD {rv.rmsd_angstrom:.2f} Å "
-                         f"(threshold {rv.threshold_angstrom} Å)."), styles["small"]))
+        if mds:
+            _narrative_md(mds, para, fig)
 
-        # ---- dynamics ----
-        if "dynamics_result" in by_kind:
-            section("Receptor molecular dynamics")
-            fig(_chart_md(by_kind["dynamics_result"]),
-                "Backbone RMSD mean per receptor (calculated); a short relaxation snapshot, "
-                "not converged production MD.")
-            rows = [["receptor", "status", "backbone RMSD mean/max (Å)",
-                     "energy mean ± std (kJ/mol)"]]
-            for md in by_kind["dynamics_result"]:
-                for r in md.runs:
-                    mtr = r.metrics
-                    rmsd = "—" if mtr.backbone_rmsd_mean_angstrom is None else (
-                        f"{mtr.backbone_rmsd_mean_angstrom:.2f} / "
-                        f"{(mtr.backbone_rmsd_max_angstrom or 0):.2f}")
-                    en = "—" if mtr.potential_energy_mean_kj_per_mol is None else (
-                        f"{mtr.potential_energy_mean_kj_per_mol:.0f} ± "
-                        f"{(mtr.potential_energy_std_kj_per_mol or 0):.0f}")
-                    rows.append([r.receptor_id, r.status, rmsd, en])
-            story.append(_table(rows[0], rows[1:], [2.0, 1.8, 4.0, 4.4], styles))
+        if sas:
+            _narrative_safety(sas, para)
 
-        # ---- safety ----
-        if "safety_assessment" in by_kind:
-            section("Safety")
-            for sa in by_kind["safety_assessment"]:
-                story.append(Paragraph(
-                    _esc(f"Verdict: {sa.verdict} ({sa.summary.total_flags} flag(s); "
-                         f"block={sa.summary.block}, flag={sa.summary.flag})."), styles["body"]))
-            rows = [["id", "kind", "level", "subject", "reason", "source"]]
-            for sa in by_kind["safety_assessment"]:
-                for f in sa.flags:
-                    rows.append([f.id, f.kind, f.level, f.subject, f.reason, f.source])
-            if len(rows) > 1:
-                story.append(_table(rows[0], rows[1:], [1.2, 2.2, 1.1, 2.2, 5.6, 3.7], styles))
+        _narrative_knowledge_agents(by_kind, para)
 
-        # ---- knowledge agents (opt-in) ----
-        for kind, title, id_cols in (
-            ("patent_landscape", "Patent landscape",
-             [["id", "evidence", "note"]],),
-            ("clinical_assessment", "Clinical assessment",
-             [["id", "phase", "evidence", "note"]],),
-            ("regulatory_assessment", "Regulatory assessment",
-             [["id", "evidence", "note"]],),
-        ):
-            if kind in by_kind:
-                section(title)
-                rows = [id_cols[0]]
-                for payload in by_kind[kind]:
-                    for e in payload.entries:
-                        note = getattr(e, "note", None) or getattr(e, "observed_value", None) or "—"
-                        if kind == "clinical_assessment":
-                            rows.append([e.id, getattr(e, "phase", "—"),
-                                         e.evidence_level.value, note])
-                        else:
-                            rows.append([e.id, e.evidence_level.value, note])
-                widths = [1.4, 1.6, 1.9, 11.1] if kind == "clinical_assessment" else [1.4, 1.9, 12.7]
-                story.append(_table(rows[0], rows[1:], widths, styles))
-
-        # ---- evidence breakdown ----
-        section("Evidence breakdown")
-        fig(_chart_evidence(report.evidence_breakdown),
-            "Count of evidence-carrying units by evidence level (coarse rollup; individual "
-            "entries carry finer-grained levels).")
+        # ---- evidence and confidence ----
+        section("Evidence and confidence")
         eb = report.evidence_breakdown
-        rows = [["observed", "calculated", "predicted", "inferred", "hypothetical"],
-                [str(eb.observed), str(eb.calculated), str(eb.predicted),
-                 str(eb.inferred), str(eb.hypothetical)]]
-        story.append(_table(rows[0], rows[1:], [3.2, 3.2, 3.2, 3.2, 3.2], styles))
+        para("Every number in this report carries an evidence level. 'Observed' is a fact read from "
+             "a source; 'calculated' is a deterministic computation (docking, SA score, MD); "
+             "'predicted' is a rule-based or model estimate (ADMET, toxicity, formulation); "
+             "'inferred' is the swarm's own reasoning; 'hypothetical' is an unverified proposal "
+             "(LLM-proposed synthesis routes or analog designs).")
+        if any(getattr(eb, l, 0) for l in ("observed", "calculated", "predicted", "inferred", "hypothetical")):
+            fig(_chart_evidence(eb),
+                "Auxiliary view: how the evidence-carrying units distribute across evidence levels.")
+            para(f"Breakdown — observed: {eb.observed}, calculated: {eb.calculated}, "
+                 f"predicted: {eb.predicted}, inferred: {eb.inferred}, hypothetical: {eb.hypothetical}.")
 
         # ---- validation ----
         if validation_report is not None:
             section("Validation audit")
             vs = validation_report.summary
-            story.append(Paragraph(
-                _esc(f"{vs.passed}/{vs.total_checks} checks passed, {vs.failed} failed, "
-                     f"{vs.warned} warned."), styles["body"]))
-            rows = [["check", "status", "detail"]]
-            for c in validation_report.checks:
-                rows.append([c.name, c.status, c.detail or "—"])
-            story.append(_table(rows[0], rows[1:], [4.5, 1.5, 10.0], styles))
+            para(f"The run's bookkeeping was audited: {vs.passed} of {vs.total_checks} checks passed"
+                 + ("." if vs.failed == 0 and vs.warned == 0
+                    else f", {vs.failed} failed, {vs.warned} warned."))
+            if vs.failed == 0:
+                para("This means the artifact schemas, provenance, hash integrity, cross-agent "
+                     "consistency, evidence levels, numerics, and report consistency are all "
+                     "internally consistent.")
+            else:
+                para("Failed checks are reproducibility/bookkeeping inconsistencies in the run "
+                     "itself, not scientific judgments.")
 
         # ---- discussion ----
-        section("Discussion — gaps and caveats")
-        story.append(Paragraph(_esc("Gaps:"), styles["h2"]))
-        bullets(report.gaps or ["none reported"])
-        story.append(Paragraph(_esc("Caveats:"), styles["h2"]))
-        bullets(report.caveats or ["none reported"])
+        section("Discussion")
+        if report.gaps:
+            para("Limitations of this run:")
+            bullets(report.gaps)
+        if report.caveats:
+            para("Important caveats:")
+            bullets(report.caveats)
 
-        # ---- conclusion ----
+        # ---- conclusion (verbose) ----
         section("Conclusion")
-        verdict = f"Run status: {report.run_status}."
-        if validation_report is not None:
-            vs = validation_report.summary
-            verdict += f" Validation: {vs.passed}/{vs.total_checks} checks passed, {vs.failed} failed."
-        story.append(Paragraph(_esc(verdict), styles["body"]))
-        survivors = _survivors(by_kind)
-        if survivors:
-            story.append(Paragraph(
-                _esc("Surviving candidates: " + "; ".join(survivors[:12]) + "."), styles["body"]))
-        story.append(Paragraph(_esc("Next steps:"), styles["h2"]))
-        bullets(report.next_steps or ["validate top candidates experimentally before progressing"])
+        para(_narrative_conclusion(report, validation_report, survivors, n_passed))
 
         # ---- provenance ----
-        section("Provenance & references")
+        section("Provenance")
         if tools:
-            story.append(Paragraph(_esc("Tool versions: " + "; ".join(tools) + "."), styles["small"]))
+            para("Tool versions: " + "; ".join(tools) + ".")
         for p in report.provenance:
             if p.input_hash:
                 story.append(Paragraph(_esc(f"input_hash: {p.input_hash}"), styles["small"]))
             if p.output_hash:
                 story.append(Paragraph(_esc(f"output_hash: {p.output_hash}"), styles["small"]))
         story.append(Paragraph(
-            _esc("All computed values are in-silico. Docking, MD, ADMET, and PK/PD are "
-                 "computational evidence and are reported as such; none constitute "
-                 "experimental proof."), styles["small"]))
+            _esc("All computed values are in-silico. Docking, MD, ADMET, and PK/PD are computational "
+                 "evidence and are reported as such; none constitute experimental proof."),
+            styles["small"]))
 
         doc.build(story)
 
-    page_count = doc.page
-    return {"page_count": page_count, "figure_count": figure_count, "sections": sections}
+    return {"page_count": doc.page, "figure_count": figure_count, "sections": sections}
+
+
+# ---- narrative helpers (deterministic prose) ----
+
+
+def _narrative_abstract(report, by_kind, spec, survivors, n_total, n_passed) -> str:
+    target = ", ".join(spec.targets) or "the specified target"
+    start = "; ".join(spec.starting_materials) or "the provided starting material"
+    parts = [
+        f"This report documents one in-silico drug-discovery run against {target}, starting "
+        f"from {start}. The pipeline designed candidate molecules, screened them for drug-like "
+        "properties and structural liabilities, and computed ADMET, toxicity, and formulation "
+        "estimates for the survivors.",
+    ]
+    if n_total:
+        parts.append(f"Of {n_total} screened molecule(s), {n_passed} passed screening.")
+    if survivors:
+        parts.append("The surviving candidate(s) are: " + "; ".join(survivors[:12]) + ".")
+    if report.run_status == "completed":
+        parts.append("The run completed successfully and its internal audit passed; the results "
+                     "below are the deterministic, reproducible output of the swarm.")
+    else:
+        parts.append(f"The run ended with status '{report.run_status}'; see the results and "
+                     "discussion below.")
+    return " ".join(parts)
+
+
+def _narrative_research(kps, para) -> None:
+    n = sum(len(k.entries) for k in kps)
+    para(f"Research assembled {n} knowledge entr{'y' if n == 1 else 'ies'}: the target(s) and the "
+         "starting molecule(s) taken from the project specification. These seed the downstream "
+         "stages. Because no external literature backend was configured, these are baseline facts "
+         "(evidence level: inferred), not independently retrieved references.")
+
+
+def _narrative_design(dbs, para) -> None:
+    n = sum(len(d.molecules) for d in dbs)
+    para(f"Design produced {n} candidate molecule(s). Without a reasoning backend these are "
+         "labelled transformations of the starting scaffold (bioisostere, homologation, and "
+         "analog-design labels) rather than genuinely new chemical structures; a reasoning backend "
+         "would generate concrete analog SMILES with rationales.")
+
+
+def _narrative_screening(sbs, para, fig) -> None:
+    total = sum(s.summary.total for s in sbs)
+    passed = sum(s.summary.passed for s in sbs)
+    rejected = sum(s.summary.rejected for s in sbs)
+    invalid = sum(s.summary.invalid for s in sbs)
+    brenk = sum(s.summary.brenk_flagged for s in sbs)
+    para(f"Screening evaluated {total} molecule(s): {passed} passed, {rejected} rejected, and "
+         f"{invalid} invalid. A molecule is eliminated on a hard PAINS match or a Rule-of-5 "
+         "violation; Brenk 'unwanted functionality' alerts are advisory only and are reported "
+         f"rather than eliminating ({brenk} flagged).")
+    fig(_chart_screening(sbs), "Auxiliary view: screening outcome.")
+    for sb in sbs:
+        for m in sb.molecules:
+            if not m.passed:
+                continue
+            props = m.properties
+            if props is None:
+                continue
+            suffix = ""
+            if m.brenk_alerts:
+                suffix = (f" It carries {len(m.brenk_alerts)} advisory Brenk alert(s) "
+                          f"({'; '.join(m.brenk_alerts)}).")
+            else:
+                suffix = " It carries no hard PAINS motifs and no Brenk advisory alerts."
+            para(f"{m.id}: molecular weight {props.molecular_weight:.1f} Da (within the 500 Da "
+                 f"Rule-of-5 ceiling), logP {props.logp:.2f} ({_interpret_logp(props.logp)}), "
+                 f"{props.hbd} hydrogen-bond donor(s) and {props.hba} acceptor(s), polar surface "
+                 f"area {props.tpsa:.1f} Å²." + suffix)
+
+
+def _narrative_admet(aps, para, styles, story) -> None:
+    n_mol = sum(len(a.molecules) for a in aps)
+    n_pred = sum(a.summary.predicted for a in aps)
+    para(f"ADMET properties were predicted for {n_mol} molecule(s) using five published, "
+         f"deterministic rules ({n_pred} endpoint prediction(s)). These are rule-of-thumb estimates "
+         "(evidence level: predicted), not measured values.")
+    for ap in aps:
+        for m in ap.molecules:
+            vals: dict[str, str] = {}
+            for ep in m.endpoints:
+                if ep.prediction_status != "predicted":
+                    continue
+                if ep.predicted_value is not None:
+                    v = f"{ep.predicted_value:.4g}" + (f" {ep.units}" if ep.units else "")
+                    if ep.endpoint == "LogS_ESOL":
+                        vals[ep.endpoint] = f"{v} ({_interpret_esol(ep.predicted_value)})"
+                    elif ep.endpoint == "QED":
+                        vals[ep.endpoint] = f"{v} ({_interpret_qed(ep.predicted_value)})"
+                    elif ep.endpoint == "Lipinski_Violations":
+                        vals[ep.endpoint] = f"{v} ({_interpret_lipinski(int(ep.predicted_value))})"
+                    else:
+                        vals[ep.endpoint] = v
+                elif ep.predicted_label:
+                    vals[ep.endpoint] = ep.predicted_label
+            if vals:
+                bits = [f"{k}: {vals[k]}" for k in vals]
+                para(f"For {m.id}: " + "; ".join(bits) + ".")
+    # auxiliary table of endpoint citations
+    rows = [["molecule", "endpoint", "value", "rule source"]]
+    for ap in aps:
+        for m in ap.molecules:
+            for ep in m.endpoints:
+                val = ""
+                if ep.predicted_value is not None:
+                    val = f"{ep.predicted_value:.4g}" + (f" {ep.units}" if ep.units else "")
+                elif ep.predicted_label:
+                    val = ep.predicted_label
+                rows.append([m.id, ep.endpoint, val or "—", ep.citation or "—"])
+    if len(rows) > 1:
+        story.append(_table(rows[0], rows[1:], [1.6, 2.6, 2.6, 8.7], styles))
+
+
+def _narrative_retrosynthesis(rps, para, fig) -> None:
+    n = sum(len(r.molecules) for r in rps)
+    easy = sum(r.summary.easy for r in rps)
+    mod = sum(r.summary.moderate for r in rps)
+    hard = sum(r.summary.hard for r in rps)
+    para(f"Synthetic accessibility was scored for {n} molecule(s) on the RDKit SA scale "
+         f"(1 = trivial, 10 = very difficult): {easy} easy, {mod} moderate, {hard} hard. A low SA "
+         "score means the molecule should be straightforward to prepare in the lab.")
+    if n:
+        fig(_chart_sa(rps), "Auxiliary view: synthetic-accessibility score per molecule.")
+        for rp in rps:
+            for m in rp.molecules:
+                tail = (" No LLM-proposed synthesis route was generated (no reasoning backend)."
+                         if not m.routes
+                         else f" {len(m.routes)} synthesis route(s) proposed (hypothetical).")
+                para(f"{m.id} has an SA score of {m.sa_score:.2f} ({_interpret_sa(m.sa_score)})." + tail)
+
+
+def _narrative_tox(tps, para) -> None:
+    n = sum(t.summary.total_molecules for t in tps)
+    alerts = sum(t.summary.total_alerts for t in tps)
+    if alerts == 0:
+        para(f"Structural-toxicity screening found no toxicophore alerts across {n} molecule(s). "
+             "The curated alert set is small, so this is a limited screen, not a declaration that "
+             "the molecules are non-toxic.")
+    else:
+        para(f"Structural-toxicity screening flagged {alerts} toxicophore alert(s) across {n} "
+             "molecule(s). These are predicted liabilities from literature rules (evidence level: "
+             "predicted), not observed toxicity.")
+
+
+def _narrative_formulation(fas, para) -> None:
+    for fa in fas:
+        for m in fa.molecules:
+            para(f"{m.id}: formulation analysis places it in BCS class {m.bcs_class} — "
+                 f"{_interpret_bcs(m.bcs_class)} — with {m.solubility_class} solubility and "
+                 f"{m.permeability_class} permeability (rule-based estimates from logP/TPSA).")
+
+
+def _narrative_docking(drs, para, fig) -> None:
+    for dr in drs:
+        rec = dr.receptor.identifier if dr.receptor else "the receptor"
+        best = None
+        for p in dr.poses:
+            if p.affinity_kcal_per_mol is not None:
+                best = p.affinity_kcal_per_mol if best is None else min(best, p.affinity_kcal_per_mol)
+        if best is not None:
+            para(f"Docking into {rec} produced poses with a best predicted affinity of "
+                 f"{best:.2f} kcal/mol ({_interpret_affinity(best)}). Affinity and redocking RMSD "
+                 "are calculated in-silico values, not experimental binding data.")
+        rv = dr.redocking_validation
+        if rv and rv.rmsd_angstrom is not None:
+            para(f"Redocking validation: {rv.status}, RMSD {rv.rmsd_angstrom:.2f} Å against a "
+                 f"{rv.threshold_angstrom} Å threshold.")
+        if dr.poses:
+            fig(_chart_docking(drs), "Auxiliary view: docking affinity per pose.")
+
+
+def _narrative_md(mds, para, fig) -> None:
+    for md in mds:
+        for r in md.runs:
+            if r.status != "success":
+                para(f"Receptor molecular dynamics for {r.receptor_id} did not complete ({r.status}).")
+                continue
+            rmsd = r.metrics.backbone_rmsd_mean_angstrom
+            if rmsd is not None:
+                para(f"A short receptor molecular-dynamics relaxation of {r.receptor_id} showed a "
+                     f"mean backbone RMSD of {rmsd:.2f} Å ({_interpret_rmsd(rmsd)}). This is a "
+                     "picosecond-scale snapshot, not a converged stability assessment.")
+    if any(r.status == "success" and r.metrics.backbone_rmsd_mean_angstrom is not None
+           for md in mds for r in md.runs):
+        fig(_chart_md(mds), "Auxiliary view: backbone RMSD per receptor.")
+
+
+def _narrative_safety(sas, para) -> None:
+    for sa in sas:
+        if sa.verdict == "block":
+            para("The safety gate BLOCKED this run: a molecule or target matched the curated "
+                 "controlled-substance or dual-use list. Downstream stages were gated off.")
+        else:
+            para(f"The safety gate passed ({sa.summary.total_flags} flag(s)). Note the list is "
+                 "curated and non-exhaustive — a 'pass' is not a comprehensive legal or safety "
+                 "determination.")
+
+
+def _narrative_knowledge_agents(by_kind, para) -> None:
+    for kind, label in (("patent_landscape", "patent/freedom-to-operate landscape"),
+                        ("clinical_assessment", "clinical-stage knowledge"),
+                        ("regulatory_assessment", "regulatory knowledge")):
+        if kind in by_kind:
+            n = sum(len(p.entries) for p in by_kind[kind])
+            para(f"The {label} contributed {n} entr{'y' if n == 1 else 'ies'} (LLM-recalled, "
+                 "evidence level: inferred). These are research aids, not legal or regulatory "
+                 "determinations.")
+
+
+def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:
+    verdict = f"The run finished with status '{report.run_status}'."
+    if validation_report is not None:
+        vs = validation_report.summary
+        verdict += f" The validation audit passed {vs.passed} of {vs.total_checks} checks"
+        if vs.failed:
+            verdict += f" ({vs.failed} failed)"
+        verdict += "."
+    if survivors:
+        verdict += f" {len(survivors)} candidate(s) survived screening"
+        if n_passed:
+            verdict += f" ({n_passed} of the screened set)"
+        verdict += "."
+    verdict += (" These are in-silico leads only; the next step is experimental validation "
+                "(in-vitro/in-vivo) before any progression.")
+    return verdict
