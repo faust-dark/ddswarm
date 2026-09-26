@@ -44,16 +44,18 @@ Target(s): {targets}
 Parent scaffold(s) (id: SMILES):
 {scaffolds}
 
-Propose 4-8 analog molecules derived from the parent scaffold(s) via
+Propose 3-6 analog molecules derived from the parent scaffold(s) via
 bioisosteric replacement, scaffold hopping, or analog design. Each analog must
 be a valid, neutral SMILES string.
 
 Respond with ONLY a single JSON array of objects — no markdown, no prose, no
-code fences. Each object must have exactly these keys:
-  "smiles": the SMILES string,
+code fences, no comments. Each object must have exactly these keys:
+  "smiles": the SMILES string (one token, no spaces, no quotes),
   "parent_scaffold": the parent id it derives from,
   "transformation": the transformation name,
   "rationale": one-sentence medicinal-chemistry rationale.
+
+The array must be complete and closed with a "]" — never truncate mid-array.
 """
 
 _SYNTHESIS_PROMPT = """You are a synthetic chemist proposing synthesis routes.
@@ -150,7 +152,10 @@ code fences. Each object must have exactly these keys:
 
 def extract_json_list(text: str) -> list | None:
     """Parse a JSON array from a subagent's text output, tolerating surrounding
-    prose and markdown fences."""
+    prose, markdown fences, a trailing truncated tail, and multiple arrays.
+
+    Returns the first complete, non-empty JSON array (or a lone object wrapped
+    as a one-element list). None when nothing parses."""
     text = (text or "").strip()
     if not text:
         return None
@@ -161,20 +166,32 @@ def extract_json_list(text: str) -> list | None:
         if lines and lines[-1].strip().startswith("```"):
             lines = lines[:-1]
         text = "\n".join(lines).strip()
+    # fast path: the whole text is one JSON value
     try:
         obj = json.loads(text)
         return obj if isinstance(obj, list) else [obj]
     except json.JSONDecodeError:
         pass
-    start = text.find("[")
-    end = text.rfind("]")
-    if start != -1 and end > start:
+    # robust path: scan for the first complete JSON value at a '[' or '{', so
+    # leading prose, a trailing truncated tail, and multiple arrays are all
+    # tolerated. Prefer a non-empty array.
+    decoder = json.JSONDecoder()
+    empty_list = None
+    for idx in range(len(text)):
+        if text[idx] not in "[{":
+            continue
         try:
-            obj = json.loads(text[start:end + 1])
-            return obj if isinstance(obj, list) else [obj]
+            val, _ = decoder.raw_decode(text[idx:])
         except json.JSONDecodeError:
-            return None
-    return None
+            continue
+        if isinstance(val, list):
+            if val:
+                return val
+            if empty_list is None:
+                empty_list = val
+        elif isinstance(val, dict):
+            return [val]
+    return empty_list
 
 
 class HermesSubprocessBackend(ReasoningBackend):

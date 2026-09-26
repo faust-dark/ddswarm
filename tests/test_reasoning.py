@@ -41,6 +41,14 @@ def test_extract_json_list_variants():
     assert extract_json_list('{"a":1}') == [{"a": 1}]  # bare object
     assert extract_json_list('no json here') is None
     assert extract_json_list('') is None
+    # trailing prose after a complete array is ignored (truncated tail)
+    assert extract_json_list('[{"a":1}] and then some trailing text') == [{"a": 1}]
+    # the first complete array wins when several are present
+    assert extract_json_list('[{"a":1}] [{"b":2}]') == [{"a": 1}]
+    # brackets inside string values (SMILES) don't confuse the scanner
+    assert extract_json_list('Here are candidates:\n[{"smiles":"C[N+](C)(C)C"}]') == [{"smiles": "C[N+](C)(C)C"}]
+    # an empty array is a valid (empty) result, not a parse failure
+    assert extract_json_list('[]') == []
 
 
 # ---- null backend ----
