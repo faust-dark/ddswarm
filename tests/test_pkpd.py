@@ -9,7 +9,10 @@ from ddswarm.chemistry.pkpd import (
     emax_effect,
     fit_metrics,
     hill_effect,
+    receptor_occupancy,
     resolve_cl_vd,
+    simulate_effect_compartment,
+    simulate_indirect_response,
     simulate_one_compartment,
     simulate_two_compartment,
 )
@@ -156,3 +159,42 @@ def test_fit_metrics_empty():
     m = fit_metrics([], lambda t: 0.0, n_parameters=1)
     assert m["n_observations"] == 0
     assert "no observations" in m["identifiability_note"]
+
+
+def test_receptor_occupancy():
+    assert receptor_occupancy(0.0, 1.0) == 0.0
+    assert receptor_occupancy(1.0, 1.0) == pytest.approx(0.5, abs=1e-12)
+    assert receptor_occupancy(100.0, 1.0) == pytest.approx(100.0 / 101.0, abs=1e-12)
+    with pytest.raises(ValueError):
+        receptor_occupancy(1.0, 0.0)
+
+
+def test_indirect_response_no_drug_stays_at_baseline():
+    vals = simulate_indirect_response(lambda t: 0.0, [0.0, 1.0, 2.0, 4.0, 8.0],
+                                      baseline=100.0, kout_per_hour=0.5, imax=1.0, ic50_mg_l=0.02)
+    for v in vals:
+        assert v == pytest.approx(100.0, abs=1e-6)
+
+
+def test_indirect_response_steady_state():
+    # constant high drug -> R_ss = baseline*(1 - Imax*C/(IC50+C))
+    C = 10.0
+    vals = simulate_indirect_response(lambda t: C, [0.0, 20.0],
+                                      baseline=100.0, kout_per_hour=0.5, imax=0.8, ic50_mg_l=0.02)
+    expected_ss = 100.0 * (1.0 - 0.8 * C / (0.02 + C))
+    assert vals[0] == pytest.approx(100.0, abs=1e-6)
+    assert vals[-1] == pytest.approx(expected_ss, abs=0.5)
+
+
+def test_effect_compartment_delay():
+    # constant plasma Cp -> Ce lags: Ce(t)=Cp*(1-exp(-ke0*t)); E = Emax*Ce/(EC50+Ce)
+    import math
+    Cp, ke0, e0, emax, ec50 = 10.0, 1.0, 0.0, 100.0, 1.0
+    times = [0.0, 0.5, 10.0]
+    vals = simulate_effect_compartment(lambda t: Cp, times, ke0_per_hour=ke0,
+                                       e0=e0, emax=emax, ec50=ec50)
+    assert vals[0] == pytest.approx(0.0, abs=1e-6)  # Ce(0)=0 -> E=0 (delay)
+    ce_half = Cp * (1.0 - math.exp(-ke0 * 0.5))
+    assert vals[1] == pytest.approx(emax * ce_half / (ec50 + ce_half), abs=0.5)
+    ce_ss = Cp * (1.0 - math.exp(-ke0 * 10.0))
+    assert vals[2] == pytest.approx(emax * ce_ss / (ec50 + ce_ss), abs=0.5)

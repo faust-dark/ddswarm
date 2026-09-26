@@ -213,3 +213,77 @@ def test_pd_hill(tmp_path):
     pd = cs.pd_simulations[0]
     assert pd.model == "hill"
     assert pd.parameters.hill_coefficient == 1.2
+
+
+def _pk_params():
+    return [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+             "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9}]
+
+
+def test_pd_indirect_response(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(mechanism_of_action="turnover-mediated biomarker inhibition")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": _pk_params(),
+              "pd_parameters": [{"molecule_id": "m1", "baseline_effect": 100.0,
+                                 "kout_per_hour": 0.5, "imax": 0.8, "ic50_mg_l": 0.02}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    assert cs.summary.pd_simulated == 1
+    pd = cs.pd_simulations[0]
+    assert pd.model == "indirect_response"
+    assert pd.selection_reason == "mechanism_hint"
+    assert pd.parameters.kout_per_hour == 0.5
+    assert pd.parameters.imax == 0.8
+    # response starts at baseline and is inhibited below it
+    assert pd.effect_curve[0].effect == pytest.approx(100.0, abs=0.01)
+    assert pd.effect_curve[-1].effect < 100.0
+
+
+def test_pd_effect_compartment(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(mechanism_of_action="delayed onset of action")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": _pk_params(),
+              "pd_parameters": [{"molecule_id": "m1", "baseline_effect": 0.0,
+                                 "max_effect": 100.0, "ec50_mg_l": 0.02,
+                                 "ke0_per_hour": 0.8}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    pd = cs.pd_simulations[0]
+    assert pd.model == "effect_compartment"
+    assert pd.parameters.ke0_per_hour == 0.8
+    assert pd.effect_curve[0].effect == pytest.approx(0.0, abs=0.01)  # delayed
+
+
+def test_pd_receptor_occupancy(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(mechanism_of_action="target engagement at the receptor")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": _pk_params(),
+              "pd_parameters": [{"molecule_id": "m1", "kd_mg_l": 0.01}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    pd = cs.pd_simulations[0]
+    assert pd.model == "receptor_occupancy"
+    assert pd.parameters.kd_mg_l == 0.01
+    # fractional occupancy in [0, 1)
+    assert all(0.0 <= pt.effect < 1.0 for pt in pd.effect_curve)
+
+
+def test_pd_per_molecule_override(tmp_path):
+    store = Store(tmp_path)
+    params = {"molecules": [{"id": "a", "smiles": "c1ccccc1"},
+                            {"id": "b", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "a", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9},
+                                {"molecule_id": "b", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9}],
+              "pd_parameters": [{"molecule_id": "a", "max_effect": 100.0, "ec50_mg_l": 0.02},
+                                {"molecule_id": "b", "kd_mg_l": 0.01}],
+              "pd_model": {"a": "emax", "b": "receptor_occupancy"}}
+    result = _run(store, _spec(), params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    assert cs.summary.pd_simulated == 2
+    models = {pd.molecule_id: pd.model for pd in cs.pd_simulations}
+    assert models == {"a": "emax", "b": "receptor_occupancy"}

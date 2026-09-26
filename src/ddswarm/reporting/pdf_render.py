@@ -880,6 +880,25 @@ def _narrative_clinical_simulation(css, para) -> None:
                     f"Emax {pd.parameters.max_effect:g}, EC50 {pd.parameters.ec50_mg_l:g}"
                     f"{hill}) applied to the PK concentration curve — a direct-effect model."
                 )
+            elif pd.model == "indirect_response":
+                para(
+                    f"{pd.molecule_id}: indirect-response PD model (baseline "
+                    f"{pd.parameters.baseline_effect:g}, kout {pd.parameters.kout_per_hour:g} 1/h, "
+                    f"Imax {pd.parameters.imax:g}, IC50 {pd.parameters.ic50_mg_l:g} mg/L) — a "
+                    f"turnover-mediated effect driven by the PK curve."
+                )
+            elif pd.model == "effect_compartment":
+                para(
+                    f"{pd.molecule_id}: effect-compartment PD model (ke0 "
+                    f"{pd.parameters.ke0_per_hour:g} 1/h, E0 {pd.parameters.baseline_effect:g}, "
+                    f"Emax {pd.parameters.max_effect:g}, EC50 {pd.parameters.ec50_mg_l:g} mg/L) — "
+                    f"a delayed effect linked to plasma by ke0."
+                )
+            elif pd.model == "receptor_occupancy":
+                para(
+                    f"{pd.molecule_id}: receptor-occupancy model (Kd {pd.parameters.kd_mg_l:g} mg/L) "
+                    f"— fractional target engagement from the PK curve."
+                )
     tot = sum(c.summary.total_molecules for c in css)
     sim = sum(c.summary.simulated for c in css)
     ins = sum(c.summary.insufficient_inputs for c in css)

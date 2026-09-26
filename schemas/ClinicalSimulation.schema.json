@@ -201,6 +201,66 @@
           "default": null,
           "title": "Hill Coefficient"
         },
+        "ke0_per_hour": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ke0 Per Hour"
+        },
+        "kout_per_hour": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kout Per Hour"
+        },
+        "imax": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Imax"
+        },
+        "ic50_mg_l": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ic50 Mg L"
+        },
+        "kd_mg_l": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kd Mg L"
+        },
         "source": {
           "default": "not_available",
           "enum": [

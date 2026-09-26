@@ -88,10 +88,15 @@ class PKSimulation(BaseModel):
 
 
 class PDParameters(BaseModel):
-    baseline_effect: float | None = None    # E0
-    max_effect: float | None = None         # Emax
-    ec50_mg_l: float | None = None          # EC50
-    hill_coefficient: float | None = None   # Hill n
+    baseline_effect: float | None = None       # E0 (emax/hill/effect-comp) or R0 (indirect)
+    max_effect: float | None = None            # Emax
+    ec50_mg_l: float | None = None             # EC50
+    hill_coefficient: float | None = None      # n (Hill)
+    ke0_per_hour: float | None = None          # effect-compartment equilibration rate
+    kout_per_hour: float | None = None         # indirect-response turnover rate
+    imax: float | None = None                  # indirect-response max inhibition [0,1]
+    ic50_mg_l: float | None = None             # indirect-response IC50
+    kd_mg_l: float | None = None               # receptor-occupancy dissociation constant
     source: PKSource = "not_available"
     source_ref: str | None = None
 

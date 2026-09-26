@@ -30,7 +30,10 @@ from ..chemistry.pkpd import (
     emax_effect,
     fit_metrics,
     hill_effect,
+    receptor_occupancy,
     resolve_cl_vd,
+    simulate_effect_compartment,
+    simulate_indirect_response,
     simulate_one_compartment,
     simulate_two_compartment,
 )
@@ -69,8 +72,17 @@ _PD_HINTS = {
     "effect_compartment": ("delay", "delayed", "hysteresis", "effect compartment"),
     "receptor_occupancy": ("occupancy", "target engagement", "receptor occupancy"),
 }
-# implemented in this increment; the rest are deferred to later increments
-_IMPLEMENTED_PD = {"emax", "hill"}
+# implemented in this increment; anything else is deferred to later increments
+_IMPLEMENTED_PD = {"emax", "hill", "indirect_response", "effect_compartment",
+                   "receptor_occupancy"}
+
+_PD_NOTE = {
+    "emax": "direct-effect Emax model on the PK concentration curve",
+    "hill": "direct-effect sigmoid-Emax (Hill) model on the PK concentration curve",
+    "indirect_response": "indirect-response (turnover) model — drug inhibits response synthesis",
+    "effect_compartment": "effect-compartment (link) model — delayed effect vs plasma",
+    "receptor_occupancy": "receptor-occupancy (target-engagement) model",
+}
 
 
 class ClinicalMinion(Agent):
@@ -267,7 +279,7 @@ class ClinicalMinion(Agent):
 
     def _select_pk(self, ctx, p, mid, observed, dose_mg, route, warnings):
         """Return (kind, reason, metrics, sim_info) or (None, None, None, None)."""
-        explicit = ctx.params.get("pk_model")
+        explicit = self._resolve_override(ctx, "pk_model", mid)
         hint = self._keyword_hint(ctx.spec, _PK_HINTS)
         requested = explicit or hint
         one = self._one_compartment_result(p, dose_mg, route)
@@ -350,6 +362,14 @@ class ClinicalMinion(Agent):
         return None
 
     @staticmethod
+    def _resolve_override(ctx, key: str, mid: str):
+        """Resolve a per-molecule override param that may be a str (all) or {mid: value}."""
+        v = ctx.params.get(key)
+        if isinstance(v, dict):
+            return v.get(mid)
+        return v
+
+    @staticmethod
     def _better_fit(m1: dict, m2: dict) -> bool:
         """True if model 1 fits strictly better than model 2.
 
@@ -418,66 +438,114 @@ class ClinicalMinion(Agent):
                              pd_explicit_ids, warnings):
         if not p:
             return None
-        e0 = p.get("baseline_effect")
-        emax = p.get("max_effect")
-        ec50 = p.get("ec50_mg_l")
-        hill = p.get("hill_coefficient")
-        if emax is None or ec50 is None:
-            return None  # insufficient PD inputs; PD is additive, so skip silently
-        emax = float(emax)
-        ec50 = float(ec50)
-        e0 = float(e0) if e0 is not None else 0.0
 
-        explicit = ctx.params.get("pd_model")
+        explicit = self._resolve_override(ctx, "pd_model", mid)
         hint = self._keyword_hint(ctx.spec, _PD_HINTS)
         requested = explicit or hint
         reason = "mechanism_hint" if requested else "default"
-        if requested not in _IMPLEMENTED_PD:
-            if requested in _PD_HINTS:
-                warnings.append(f"{mid}: pd_model={requested} deferred to a later increment")
+        if requested is not None and requested not in _IMPLEMENTED_PD:
+            warnings.append(f"{mid}: pd_model={requested} not implemented")
             requested = None
-        if requested == "hill":
-            if hill is None or hill <= 0:
-                warnings.append(f"{mid}: pd_model=hill requires hill_coefficient; using emax")
-                requested = "emax"
-            else:
-                hill = float(hill)
         if requested is None:
-            requested = "emax"
+            requested = "emax"  # default direct-effect model (requires Emax+EC50)
 
+        times = [cp.time_hours for cp in pk_curve]
+        source = "user" if mid in pd_explicit_ids else "inferred"
         metrics = None
-        # data-driven: emax vs hill (complexity: Hill adds one parameter)
-        if (observed_eff and pk_fn is not None and hill is not None and hill > 0
-                and emax is not None and ec50 is not None):
-            m_emax = fit_metrics(observed_eff, lambda t: emax_effect(pk_fn(t), e0, emax, ec50), 3)
-            m_hill = fit_metrics(observed_eff, lambda t: hill_effect(pk_fn(t), e0, emax, ec50, hill), 4)
-            if self._better_fit(m_hill, m_emax):
-                requested, reason, metrics = "hill", "data_driven", m_hill
-            else:
-                requested, reason, metrics = "emax", "data_driven", m_emax
-
         curve: list[EffectPoint] = []
+        params: PDParameters
+
         try:
-            for cp in pk_curve:
-                c = cp.concentration_mg_l
+            if requested in ("emax", "hill"):
+                e0 = float(p["baseline_effect"]) if p.get("baseline_effect") is not None else 0.0
+                emax = p.get("max_effect")
+                ec50 = p.get("ec50_mg_l")
+                hill = p.get("hill_coefficient")
+                if emax is None or ec50 is None:
+                    return None  # insufficient PD inputs (silent: PD is additive)
+                emax, ec50 = float(emax), float(ec50)
                 if requested == "hill":
-                    e = hill_effect(c, e0, emax, ec50, hill)
-                else:
-                    e = emax_effect(c, e0, emax, ec50)
-                curve.append(EffectPoint(time_hours=cp.time_hours, effect=round(e, 4)))
+                    if hill is None or hill <= 0:
+                        warnings.append(f"{mid}: pd_model=hill requires hill_coefficient; using emax")
+                        requested = "emax"
+                    else:
+                        hill = float(hill)
+                # data-driven: emax vs hill (Hill adds one parameter)
+                if (observed_eff and pk_fn is not None and hill is not None and hill > 0
+                        and emax is not None and ec50 is not None):
+                    m_emax = fit_metrics(observed_eff,
+                                         lambda t: emax_effect(pk_fn(t), e0, emax, ec50), 3)
+                    m_hill = fit_metrics(observed_eff,
+                                         lambda t: hill_effect(pk_fn(t), e0, emax, ec50, hill), 4)
+                    if self._better_fit(m_hill, m_emax):
+                        requested, reason, metrics = "hill", "data_driven", m_hill
+                    else:
+                        requested, reason, metrics = "emax", "data_driven", m_emax
+                for cp in pk_curve:
+                    c = cp.concentration_mg_l
+                    e = (hill_effect(c, e0, emax, ec50, hill) if requested == "hill"
+                         else emax_effect(c, e0, emax, ec50))
+                    curve.append(EffectPoint(time_hours=cp.time_hours, effect=round(e, 4)))
+                params = PDParameters(
+                    baseline_effect=e0, max_effect=emax, ec50_mg_l=ec50,
+                    hill_coefficient=(hill if requested == "hill" else None),
+                    source=source, source_ref=p.get("source"))
+
+            elif requested == "indirect_response":
+                baseline = p.get("baseline_effect")
+                kout = p.get("kout_per_hour")
+                imax = p.get("imax")
+                ic50 = p.get("ic50_mg_l")
+                if baseline is None or kout is None or imax is None or ic50 is None:
+                    warnings.append(f"{mid}: pd_model=indirect_response requires "
+                                    "baseline_effect, kout_per_hour, imax, ic50_mg_l")
+                    return None
+                vals = simulate_indirect_response(pk_fn, times, baseline=float(baseline),
+                                                  kout_per_hour=float(kout), imax=float(imax),
+                                                  ic50_mg_l=float(ic50))
+                curve = [EffectPoint(time_hours=t, effect=round(v, 4)) for t, v in zip(times, vals)]
+                params = PDParameters(baseline_effect=float(baseline), kout_per_hour=float(kout),
+                                      imax=float(imax), ic50_mg_l=float(ic50),
+                                      source=source, source_ref=p.get("source"))
+
+            elif requested == "effect_compartment":
+                ke0 = p.get("ke0_per_hour")
+                e0 = float(p["baseline_effect"]) if p.get("baseline_effect") is not None else 0.0
+                emax = p.get("max_effect")
+                ec50 = p.get("ec50_mg_l")
+                if ke0 is None or emax is None or ec50 is None:
+                    warnings.append(f"{mid}: pd_model=effect_compartment requires "
+                                    "ke0_per_hour, max_effect, ec50_mg_l")
+                    return None
+                vals = simulate_effect_compartment(pk_fn, times, ke0_per_hour=float(ke0),
+                                                   e0=e0, emax=float(emax), ec50=float(ec50))
+                curve = [EffectPoint(time_hours=t, effect=round(v, 4)) for t, v in zip(times, vals)]
+                params = PDParameters(baseline_effect=e0, max_effect=float(emax),
+                                      ec50_mg_l=float(ec50), ke0_per_hour=float(ke0),
+                                      source=source, source_ref=p.get("source"))
+
+            elif requested == "receptor_occupancy":
+                kd = p.get("kd_mg_l")
+                if kd is None or kd <= 0:
+                    warnings.append(f"{mid}: pd_model=receptor_occupancy requires kd_mg_l")
+                    return None
+                for cp in pk_curve:
+                    curve.append(EffectPoint(time_hours=cp.time_hours,
+                                             effect=round(receptor_occupancy(cp.concentration_mg_l, kd), 4)))
+                params = PDParameters(kd_mg_l=float(kd), source=source,
+                                      source_ref=p.get("source"))
+
+            else:
+                return None
         except ValueError as exc:
             warnings.append(f"PD simulation skipped for {mid}: {exc}")
             return None
 
-        source = "user" if mid in pd_explicit_ids else "inferred"
         return PDSimulation(
             molecule_id=mid, canonical_smiles=smi, model=requested,
-            parameters=PDParameters(baseline_effect=e0, max_effect=emax, ec50_mg_l=ec50,
-                                    hill_coefficient=hill, source=source,
-                                    source_ref=p.get("source")),
-            effect_curve=curve, selection_reason=reason,
+            parameters=params, effect_curve=curve, selection_reason=reason,
             selection_metrics=self._metrics(metrics),
-            note="direct-effect PD model on the PK concentration curve",
+            note=_PD_NOTE.get(requested, "PD model"),
         )
 
     @staticmethod

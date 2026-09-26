@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 15: PK/PD model selection + PD models)
+# ddswarm — drug discovery multi-agent swarm (Increment 16: mechanism-based PD models)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -79,6 +79,23 @@ correct:
 - `indirect_response`, `effect_compartment`, `receptor_occupancy` PD models and
   the tissue/organ PBPK models (well-stirred, blood-flow-limited,
   permeability-limited) are deferred to later increments.
+
+**Increment 16** adds the mechanism-based PD model families, selected by
+mechanism (explicit `params.pd_model` or a keyword match on
+`mechanism_of_action`/`adme_issue`):
+
+- `indirect_response` — turnover model (Dayneka Type I, inhibition of kin):
+  dR/dt = kin·(1 − Imax·C/(IC50+C)) − kout·R, R(0) = baseline; integrated with a
+  fixed-step RK4 ODE solver (deterministic, no scipy).
+- `effect_compartment` — link model for delayed response: dCe/dt = ke0·(Cp − Ce),
+  E = E0 + Emax·Ce/(EC50+Ce); RK4-integrated.
+- `receptor_occupancy` — fractional target engagement RO = C/(C + Kd), algebraic.
+
+`params.pd_model` (and `pk_model`) may be a single string for all molecules or a
+`{molecule_id: model}` map for per-molecule overrides. The PD model is still
+selected by mechanism — the goodness-of-fit/AIC-BIC data-driven comparison
+remains within the direct-effect family (emax vs hill) only, since the other
+families have incommensurate output scales.
 
 ## Architecture
 

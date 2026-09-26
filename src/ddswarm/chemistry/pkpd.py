@@ -13,6 +13,7 @@ caveat in the artifact).
 
 from __future__ import annotations
 
+import bisect
 import math
 from dataclasses import dataclass, field
 
@@ -249,3 +250,107 @@ def fit_metrics(
     out["bic"] = n * math.log(rss / n) + k * math.log(n)
     out["identifiability_note"] = ident_note
     return out
+
+
+def _rk4_solve(deriv_fn, y0: float, t_end: float, dt: float = 0.1) -> tuple[list[float], list[float]]:
+    """Fixed-step RK4 integration of y' = deriv_fn(t, y) from t=0 to t_end.
+
+    Deterministic (no scipy dependency). Returns (ts, ys) including the t=0
+    starting point. The step is fixed at `dt` except the final partial step.
+    """
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    if t_end < 0:
+        raise ValueError("t_end must be non-negative")
+    ts: list[float] = [0.0]
+    ys: list[float] = [float(y0)]
+    y = float(y0)
+    t = 0.0
+    while t < t_end - 1e-12:
+        h = min(dt, t_end - t)
+        k1 = deriv_fn(t, y)
+        k2 = deriv_fn(t + h / 2.0, y + h / 2.0 * k1)
+        k3 = deriv_fn(t + h / 2.0, y + h / 2.0 * k2)
+        k4 = deriv_fn(t + h, y + h * k3)
+        y = y + (h / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        t += h
+        ts.append(t)
+        ys.append(y)
+    return ts, ys
+
+
+def _sample(ts: list[float], ys: list[float], times) -> list[float]:
+    """Linearly interpolate ys onto the requested `times`."""
+    out: list[float] = []
+    for t in times:
+        if t <= ts[0]:
+            out.append(ys[0])
+            continue
+        if t >= ts[-1]:
+            out.append(ys[-1])
+            continue
+        i = bisect.bisect_right(ts, t) - 1
+        t0, t1 = ts[i], ts[i + 1]
+        frac = (t - t0) / (t1 - t0)
+        out.append(ys[i] + frac * (ys[i + 1] - ys[i]))
+    return out
+
+
+def receptor_occupancy(concentration_mg_l: float, kd_mg_l: float) -> float:
+    """Fractional receptor occupancy = C / (C + Kd), in [0, 1)."""
+    if kd_mg_l <= 0:
+        raise ValueError("Kd must be positive")
+    return concentration_mg_l / (kd_mg_l + concentration_mg_l)
+
+
+def simulate_indirect_response(concentration_fn, times, *, baseline: float,
+                               kout_per_hour: float, imax: float, ic50_mg_l: float,
+                               dt: float = 0.1) -> list[float]:
+    """Indirect-response (turnover) model, inhibition of kin (Dayneka Type I).
+
+    dR/dt = kin * (1 - Imax*C/(IC50 + C)) - kout*R, with kin = baseline*kout and
+    R(0) = baseline. Returns the response R(t) at each time in `times`.
+    `concentration_fn(t)` supplies the plasma concentration at an arbitrary t.
+    """
+    if kout_per_hour <= 0:
+        raise ValueError("kout must be positive")
+    if baseline < 0:
+        raise ValueError("baseline must be non-negative")
+    if not (0.0 <= imax <= 1.0):
+        raise ValueError("Imax must be in [0, 1]")
+    if ic50_mg_l <= 0:
+        raise ValueError("IC50 must be positive")
+    if not times:
+        return []
+    kin = baseline * kout_per_hour
+
+    def deriv(t, R):
+        C = concentration_fn(t)
+        return kin * (1.0 - imax * C / (ic50_mg_l + C)) - kout_per_hour * R
+
+    ts, ys = _rk4_solve(deriv, baseline, float(times[-1]), dt=dt)
+    return _sample(ts, ys, times)
+
+
+def simulate_effect_compartment(concentration_fn, times, *, ke0_per_hour: float,
+                                e0: float, emax: float, ec50: float,
+                                dt: float = 0.1) -> list[float]:
+    """Effect-compartment (link) model: dCe/dt = ke0*(Cp - Ce), E = E0 + Emax*Ce/(EC50+Ce).
+
+    Introduces a delay between plasma concentration and effect. Ce(0) = 0.
+    Returns the effect E(t) at each time in `times`.
+    """
+    if ke0_per_hour <= 0:
+        raise ValueError("ke0 must be positive")
+    if ec50 <= 0:
+        raise ValueError("EC50 must be positive")
+    if not times:
+        return []
+
+    def deriv(t, Ce):
+        Cp = concentration_fn(t)
+        return ke0_per_hour * (Cp - Ce)
+
+    ts, ys = _rk4_solve(deriv, 0.0, float(times[-1]), dt=dt)
+    ces = _sample(ts, ys, times)
+    return [e0 + emax * ce / (ec50 + ce) for ce in ces]
