@@ -9,6 +9,7 @@ no backend => insufficient_evidence (never invent molecules)."""
 
 from __future__ import annotations
 
+from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch, MoleculeDesign
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
@@ -140,11 +141,16 @@ class DesignerMinion(Agent):
         scaffolds: list[tuple[str, str]] = []
         for kp in ctx.inputs.get("knowledge_pack", []):
             for e in getattr(kp, "entries", []):
+                # only valid SMILES become scaffolds; free-text ligand entries
+                # (names/CAS/references) are not structures and must be skipped
                 if e.type == "ligand" and e.observed_value:
-                    scaffolds.append((e.id, e.observed_value))
+                    s = sanitize_and_canonicalize(e.observed_value)
+                    if s.ok and s.canonical_smiles and not any(c == s.canonical_smiles for _, c in scaffolds):
+                        scaffolds.append((e.id, s.canonical_smiles))
         for smi in ctx.spec.starting_materials:
-            if not any(s == smi for _, s in scaffolds):
-                scaffolds.append(("starting_material", smi))
+            s = sanitize_and_canonicalize(smi)
+            if s.ok and s.canonical_smiles and not any(c == s.canonical_smiles for _, c in scaffolds):
+                scaffolds.append(("starting_material", s.canonical_smiles))
         return scaffolds
 
     @staticmethod

@@ -59,6 +59,9 @@ def test_inject_reasoning():
             RunTask(task_id="research", agent="researcher_minion"),
             RunTask(task_id="design", agent="designer_minion"),
             RunTask(task_id="screen", agent="screener_minion"),
+            RunTask(task_id="patent", agent="patent_minion"),
+            RunTask(task_id="clinical", agent="clinical_minion"),
+            RunTask(task_id="regulatory", agent="regulatory_minion"),
         ]
 
     out = _inject_reasoning(fresh(), ReasoningConfig(backend="hermes", command="hermes",
@@ -67,6 +70,9 @@ def test_inject_reasoning():
     assert out[0].params["reasoning_max_turns"] == 10
     assert out[1].params["reasoning_backend"] == "hermes"
     assert out[2].params == {}  # non-reasoning agents untouched
+    assert out[3].params["reasoning_backend"] == "hermes"  # patent
+    assert out[4].params["reasoning_backend"] == "hermes"  # clinical
+    assert out[5].params["reasoning_backend"] == "hermes"  # regulatory
 
     out2 = _inject_reasoning(fresh(), ReasoningConfig(backend="none"))
     assert all(t.params == {} for t in out2)

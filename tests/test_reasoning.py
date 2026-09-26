@@ -9,7 +9,7 @@ import pytest
 
 from ddswarm.agents import DesignerMinion, ResearcherMinion
 from ddswarm.agents.base import AgentContext
-from ddswarm.contracts import DesignBatch, KnowledgePack, ProjectSpec
+from ddswarm.contracts import DesignBatch, KnowledgePack, KnowledgePackEntry, ProjectSpec
 from ddswarm.orchestrator import Store
 from ddswarm.reasoning import (
     HermesSubprocessBackend,
@@ -74,6 +74,45 @@ def test_hermes_unavailable():
     b = HermesSubprocessBackend(command="/nonexistent/xyz")
     ok, _ = b.available()
     assert not ok
+
+
+def test_hermes_retry_on_unparseable(tmp_path):
+    # first invocation returns non-JSON; the backend retries and parses the 2nd
+    state = tmp_path / "state"
+    script = tmp_path / "fake_hermes_flaky.sh"
+    script.write_text(
+        '#!/bin/sh\n'
+        f'if [ ! -f "{state}" ]; then\n'
+        f'  touch "{state}"\n'
+        '  echo "not json at all"\n'
+        'else\n'
+        '  echo \'[{"smiles":"c1ccccc1Cl","parent_scaffold":"s","transformation":"t","rationale":"r"}]\'\n'
+        'fi\n'
+    )
+    script.chmod(0o755)
+    b = HermesSubprocessBackend(command=str(script))
+    res = b.design(_spec(), [("s", "c1ccccc1")], {})
+    assert res.ok
+    assert res.entries == [{"smiles": "c1ccccc1Cl", "parent_scaffold": "s",
+                            "transformation": "t", "rationale": "r"}]
+
+
+def test_designer_skips_non_smiles_scaffolds(tmp_path):
+    store = Store(tmp_path)
+    kp = KnowledgePack(project_id="p", status="success", entries=[
+        KnowledgePackEntry(id="ligand_0", type="ligand", source="x",
+                           observed_value="c1ccccc1", evidence_level="inferred"),
+        KnowledgePackEntry(id="ligand_1", type="ligand", source="x",
+                           observed_value="Gefitinib (ZD1839); CAS 184475-35-2; not a SMILES",
+                           evidence_level="inferred"),
+    ])
+    ctx = AgentContext(project_id="p", run_id="r", task_id="design", spec=_spec(),
+                       params={}, inputs={"knowledge_pack": [kp]})
+    result = DesignerMinion(store).run(ctx)
+    db = store.load_artifact(result.artifacts[0].uri, DesignBatch)
+    # only the valid SMILES scaffold survives -> 1 scaffold x 4 labels
+    assert len(db.molecules) == 4
+    assert all(m.smiles == "c1ccccc1" for m in db.molecules)
 
 
 def test_make_reasoning_backend():

@@ -354,7 +354,7 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 127 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 129 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the

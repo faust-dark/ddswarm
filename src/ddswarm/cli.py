@@ -80,7 +80,8 @@ def _inject_reasoning(tasks: list[RunTask], reasoning: ReasoningConfig | None) -
     if reasoning is None or reasoning.backend in (None, "", "none"):
         return tasks
     for t in tasks:
-        if t.agent in ("researcher_minion", "designer_minion", "retrosynthesis_minion"):
+        if t.agent in ("researcher_minion", "designer_minion", "retrosynthesis_minion",
+                       "patent_minion", "clinical_minion", "regulatory_minion"):
             t.params.setdefault("reasoning_backend", reasoning.backend)
             if reasoning.command:
                 t.params.setdefault("reasoning_command", reasoning.command)
@@ -208,7 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="run a pipeline from a project.json file")
     pr.add_argument("project_file")
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
-                    help="override reasoning backend for research/design")
+                    help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.set_defaults(func=cmd_run)
 

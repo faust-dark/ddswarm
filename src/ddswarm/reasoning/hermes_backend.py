@@ -154,6 +154,13 @@ def extract_json_list(text: str) -> list | None:
     text = (text or "").strip()
     if not text:
         return None
+    # strip a surrounding markdown code fence (```json ... ```)
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
     try:
         obj = json.loads(text)
         return obj if isinstance(obj, list) else [obj]
@@ -248,6 +255,20 @@ class HermesSubprocessBackend(ReasoningBackend):
 
     # ---- shared ----
     def _run(self, prompt: str) -> ReasoningResult:
+        # LLM output is stochastic: retry once if the first response is not
+        # parseable JSON before surfacing the failure to the agent.
+        for attempt in range(2):
+            r, stderr = self._invoke(prompt)
+            if r is None:
+                return ReasoningResult(ok=False, note=stderr)
+            if r.returncode != 0:
+                return ReasoningResult(ok=False, note=f"reasoning subprocess exited {r.returncode}: {stderr.strip()[:300]}")
+            parsed = extract_json_list(r.stdout)
+            if parsed is not None:
+                return ReasoningResult(entries=parsed, ok=True, note=f"hermes subagent ({self.command})")
+        return ReasoningResult(ok=False, note="could not parse JSON from subagent response (after 1 retry)")
+
+    def _invoke(self, prompt: str) -> tuple[subprocess.CompletedProcess | None, str]:
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
             fh.write(prompt)
             prompt_file = fh.name
@@ -255,14 +276,8 @@ class HermesSubprocessBackend(ReasoningBackend):
             cmd = [self.command, "chat", "--query-file", prompt_file, "-Q",
                    "--max-turns", str(self.max_turns), "--run-budget", str(self.run_budget)]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=self.run_budget + 60)
+            return r, r.stderr or ""
         except (OSError, subprocess.SubprocessError, subprocess.TimeoutExpired) as exc:
-            return ReasoningResult(ok=False, note=f"reasoning subprocess failed: {exc}")
+            return None, f"reasoning subprocess failed: {exc}"
         finally:
             Path(prompt_file).unlink(missing_ok=True)
-
-        if r.returncode != 0:
-            return ReasoningResult(ok=False, note=f"reasoning subprocess exited {r.returncode}: {r.stderr.strip()[:300]}")
-        parsed = extract_json_list(r.stdout)
-        if parsed is None:
-            return ReasoningResult(ok=False, note="could not parse JSON from subagent response")
-        return ReasoningResult(entries=parsed, ok=True, note=f"hermes subagent ({self.command})")
