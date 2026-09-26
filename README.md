@@ -1,6 +1,31 @@
 # ddswarm — drug discovery multi-agent swarm (Increment 18: orchestration + iteration + memory)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
+
+## Design principles
+
+Modeling is **mechanistically constrained by default**. Wherever domain
+knowledge supplies governing equations (compartmental PK mass balance,
+receptor-occupancy saturation, turnover kinetics), those equations are the
+model. Machine-learning predictions are only admissible when they do **not**
+violate conservation laws, mass balance, stoichiometry, thermodynamic
+relationships, or monotonicity constraints — and any such relaxation requires
+explicit, cited justification, never silent.
+
+When sufficient mechanistic structure exists, ddswarm uses a **hybrid
+mechanistic/ML** approach rather than a purely data-driven one: ML components
+may estimate unknown parameters, residuals, or latent relationships, while the
+mechanistic model enforces the physical constraints.
+
+These principles are enforced, not aspirational: `validation_minion` runs a
+`mechanistic_constraints` check that (a) verifies the linear-compartment
+mass-balance identity `AUC = Cmax·V/CL`, (b) requires the systemic
+concentration curve to be monotonically non-increasing (no spurious
+re-absorption), and (c) flags any ADMET endpoint labelled `predicted` without
+a citable rule. Today every computational model is deterministic and rule- or
+physics-based (published QSAR rules, AutoDock Vina scoring, OpenMM force
+fields, exact PK/PD ODEs); no unconstrained ML exists in the pipeline.
+
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
 rule-based provider** (`rule_admet`): five published QSAR rules computed from
 RDKit descriptors — ESOL aqueous solubility (Delaney 2004), QED drug-likeness

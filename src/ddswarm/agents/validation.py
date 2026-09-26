@@ -8,6 +8,8 @@ Reads the run's artifacts directly from the store and checks, per run:
   - evidence-level sanity (computed/predicted values are not labelled 'observed')
   - numeric sanity (finite, plausible docking/SA/RMSD values)
   - report-breakdown consistency (Report.evidence_breakdown matches a recount)
+  - mechanistic-constraint sanity (mass balance + monotonicity hold; every
+    predicted endpoint carries a citable rule/justification)
 
 A failed check is a reproducibility/bookkeeping inconsistency, not a scientific
 judgment. The report status is 'success' when no check fails, else 'partial'."""
@@ -92,6 +94,8 @@ class ValidationMinion(Agent):
                                   "fail" if (ns := self._numeric(by_kind)) else "pass", _join(ns)))
         checks.append(self._check("report_breakdown", "report breakdown consistency",
                                   "fail" if (rb := self._report_breakdown(by_kind)) else "pass", _join(rb)))
+        checks.append(self._check("mechanistic_constraints", "mechanistic-constraint sanity",
+                                  "fail" if (mc := self._mechanistic_constraints(by_kind)) else "pass", _join(mc)))
 
         return self._finish(ctx, checks, {
             "n_artifacts_checked": n_checked,
@@ -179,6 +183,53 @@ class ValidationMinion(Agent):
         actual = reports[0].evidence_breakdown.model_dump()
         return [f"{lvl}: report={actual.get(lvl, 0)} recount={count}"
                 for lvl, count in recount.items() if actual.get(lvl, 0) != count]
+
+    @staticmethod
+    def _mechanistic_constraints(by_kind: dict[str, list]) -> list[str]:
+        """Enforce the mechanistic-modeling principle: no prediction may violate
+        mass balance, monotonicity, or go uncited without explicit justification.
+
+        - PK/PD: the linear compartmental mass-balance identity
+          AUC = Cmax * V_central / (CL * 0.06) must hold (weight-independent,
+          follows from Cmax = F*D/(V*W) and AUC = F*D/(CL*W*0.06)); the systemic
+          concentration curve must be monotonically non-increasing (no spurious
+          re-absorption); Cmax and half-life must be positive.
+        - ADMET: every endpoint labelled 'predicted' must carry a citable rule
+          (a prediction without a mechanistic/rule citation is flagged).
+        """
+        issues: list[str] = []
+        for cs in by_kind.get("clinical_simulation", []):
+            for s in cs.simulations:
+                p = s.parameters
+                v_central = (p.volume_of_distribution_l_kg
+                             if s.model == "one_compartment" else p.central_volume_l_kg)
+                if (v_central and p.clearance_ml_min_kg
+                        and s.cmax_mg_l is not None and s.auc_mg_h_l is not None):
+                    expected = s.cmax_mg_l * v_central / (p.clearance_ml_min_kg * 0.06)
+                    if expected > 0 and not math.isclose(s.auc_mg_h_l, expected, rel_tol=0.02, abs_tol=1e-6):
+                        issues.append(
+                            f"PK {s.molecule_id}: AUC {s.auc_mg_h_l:.4g} violates mass balance "
+                            f"(expected {expected:.4g} from Cmax*V/CL)")
+                if s.cmax_mg_l is not None and s.cmax_mg_l <= 0:
+                    issues.append(f"PK {s.molecule_id}: Cmax <= 0")
+                if s.half_life_hours is not None and s.half_life_hours <= 0:
+                    issues.append(f"PK {s.molecule_id}: terminal half-life <= 0")
+                curve = [c.concentration_mg_l for c in s.concentration_curve
+                         if c.concentration_mg_l is not None]
+                for i in range(1, len(curve)):
+                    if curve[i] > curve[i - 1] + 1e-4:  # 1e-4 > 4-dp rounding noise
+                        issues.append(
+                            f"PK {s.molecule_id}: systemic concentration curve non-monotonic "
+                            f"(re-absorption without justification)")
+                        break
+        for ap in by_kind.get("admet_prediction", []):
+            for m in ap.molecules:
+                for ep in m.endpoints:
+                    if ep.prediction_status == "predicted" and not ep.citation:
+                        issues.append(
+                            f"ADMET {m.canonical_smiles}: {ep.endpoint} predicted "
+                            f"without a citable rule (no mechanistic justification)")
+        return issues
 
     # ---- plumbing ----
     @staticmethod
