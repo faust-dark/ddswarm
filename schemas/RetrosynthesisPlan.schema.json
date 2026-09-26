@@ -146,6 +146,13 @@
           "title": "Synthetic Accessibility",
           "type": "string"
         },
+        "disconnections": {
+          "items": {
+            "$ref": "#/$defs/RetrosyntheticDisconnection"
+          },
+          "title": "Disconnections",
+          "type": "array"
+        },
         "routes": {
           "items": {
             "$ref": "#/$defs/SynthesisRoute"
@@ -208,6 +215,36 @@
         }
       },
       "title": "RetrosynthesisSummary",
+      "type": "object"
+    },
+    "RetrosyntheticDisconnection": {
+      "description": "A deterministic retrosynthetic disconnection: the molecule decomposed\ninto building blocks by BRICS rules. Fragments carry attachment-point\nmarkers ([n*]) showing where bonds break. A theoretical route, not a\ndemonstrated synthesis \u2014 building-block commercial availability is never\nassessed here. When `fragments` is empty the molecule has no BRICS\ndisconnection point (a fused/aromatic scaffold built via ring-forming\nchemistry), which the note explains.",
+      "properties": {
+        "fragments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fragments",
+          "type": "array"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "calculated"
+        }
+      },
+      "title": "RetrosyntheticDisconnection",
       "type": "object"
     },
     "SynthesisRoute": {

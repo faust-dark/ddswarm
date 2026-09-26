@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 11: molecule generation + candidate identification)
+# ddswarm — drug discovery multi-agent swarm (Increment 12: synthesis pathway + readable report)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -31,6 +31,14 @@ composite (QED + BCS bonus − 0.1·SA − 0.2·tox alerts) and names the top on
 SMILES + InChIKey, plus a ranked candidate table. A reasoning backend still
 proposes LLM analogs; offline, the generator is the deterministic path.
 
+**Increment 12** makes the report readable and complete. `retrosynthesis_minion`
+now computes a deterministic **BRICS retrosynthetic disconnection** — the
+theoretical building blocks the molecule breaks into (or an honest "no simple
+disconnection" for fused/aromatic scaffolds) — alongside the SA score. The PDF
+report labels every stage as "Stage — agent" (e.g. "Synthesis —
+retrosynthesis_minion"), and the Methodology section lists, in plain language,
+what each agent does.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -50,8 +58,10 @@ proposes LLM analogs; offline, the generator is the deterministic path.
     no-model run).
   - `docking_minion` — receptor prep + QC, docking (AutoDock Vina), redocking RMSD.
   - `retrosynthesis_minion` — RDKit synthetic-accessibility score per candidate
-    (calculated) + easy/moderate/hard classification; optional LLM-proposed
-    synthesis routes (hypothetical) via the reasoning backend.
+    (calculated) + easy/moderate/hard classification; a deterministic BRICS
+    retrosynthetic disconnection (building blocks, or an honest "no simple
+    disconnection" for fused scaffolds); optional LLM-proposed synthesis routes
+    (hypothetical) via the reasoning backend.
   - `tox_minion` — deterministic, sourced structural toxicophore alerts (SMARTS),
     reported as *predicted* potential liabilities, never experimental evidence.
   - `dynamics_minion` — receptor molecular dynamics (OpenMM, amber14 + OBC2 GBSA
@@ -87,10 +97,11 @@ proposes LLM analogs; offline, the generator is the deterministic path.
     composite score, and names the top one the `identified_candidate`; also
     writes `finding` + `feedback` to project memory.
   - `report_pdf_minion` — renders the finished run into a self-contained PDF in
-    plain, verbose human language (narrative interpretation of every result,
-    with figures only as auxiliary aids); runs last and persists the PDF as a
-    binary sidecar plus a `ReportDocument` metadata artifact, and the CLI copies
-    it to `reports/<project_id>.pdf`.
+    plain, verbose human language: every stage is a labeled subsection
+    ("Synthesis — retrosynthesis_minion"), the Methodology lists what each agent
+    does, and figures are only auxiliary aids; runs last and persists the PDF as
+    a binary sidecar plus a `ReportDocument` metadata artifact, and the CLI
+    copies it to `reports/<project_id>.pdf`.
 - **Project memory** (`orchestrator/memory.py`): an append-only, cross-run log
   under `store/<project_id>/memory.json`. Conclusions are `inferred` (the
   swarm's reasoning), never observed data.

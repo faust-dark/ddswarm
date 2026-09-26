@@ -182,6 +182,8 @@ class ReportMinion(Agent):
         for rp in by_kind.get("retrosynthesis_plan", []):
             for m in rp.molecules:
                 c[m.evidence_level.value] += 1
+                for d in m.disconnections:
+                    c[d.evidence_level.value] += 1
                 for route in m.routes:
                     c[route.evidence_level.value] += 1
         for tp in by_kind.get("tox_profile", []):

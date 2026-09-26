@@ -1,10 +1,12 @@
 """retrosynthesis_minion: synthetic-accessibility scoring (deterministic RDKit
-SA Score) and, when a reasoning backend is configured, proposed synthesis
-routes (LLM, evidence_level='hypothetical').
+SA Score), a deterministic BRICS retrosynthetic disconnection (building blocks),
+and, when a reasoning backend is configured, proposed synthesis routes (LLM,
+evidence_level='hypothetical').
 
 Consumes molecules from params['molecules'], then screened_batch survivors
 (passed=True), then starting_materials. No molecules => insufficient_evidence.
 SA score and its easy/moderate/hard classification are always *calculated*;
+the BRICS disconnection is *calculated* (a deterministic structural split);
 routes are optional reasoning output and never reported as demonstrated
 chemistry."""
 
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 from rdkit import Chem
 from rdkit import rdBase
+from rdkit.Chem import BRICS
 
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..chemistry.sa_score import classify_accessibility, compute_sa_score
@@ -22,6 +25,7 @@ from ..contracts.retrosynthesis_plan import (
     RetrosynthesisEntry,
     RetrosynthesisPlan,
     RetrosynthesisSummary,
+    RetrosyntheticDisconnection,
     SynthesisRoute,
 )
 from ..logging.hashing import hash_jsonable
@@ -56,9 +60,11 @@ class RetrosynthesisMinion(Agent):
             mol = Chem.MolFromSmiles(s.canonical_smiles)
             sa = compute_sa_score(mol)
             acc = classify_accessibility(sa)
+            disconnections = self._disconnect(mol)
             entries.append(RetrosynthesisEntry(
                 id=mid, canonical_smiles=s.canonical_smiles, sa_score=sa,
                 synthetic_accessibility=acc,
+                disconnections=disconnections,
                 feasibility_note=f"RDKit SA score {sa} => '{acc}' synthetic accessibility (calculated)",
             ))
 
@@ -131,6 +137,29 @@ class RetrosynthesisMinion(Agent):
             tool_versions=[TOOL, RDKIT_TOOL],
             reproducibility={"input_hash": input_hash, "reasoning_backend": backend_name},
         )
+
+    @staticmethod
+    def _disconnect(mol) -> list[RetrosyntheticDisconnection]:
+        """Deterministic retrosynthetic disconnection via BRICS rules. Returns a
+        single-entry list: building blocks when BRICS finds disconnection bonds,
+        or an empty-fragments entry with an honest note for fused/aromatic
+        scaffolds that have no BRICS-labile bond."""
+        try:
+            frags = list(BRICS.BRICSDecompose(mol))
+        except Exception:  # noqa: BLE001
+            frags = []
+        if len(frags) > 1:
+            return [RetrosyntheticDisconnection(
+                fragments=frags,
+                note=(f"BRICS rules disconnect the molecule into {len(frags)} building blocks; "
+                      "[n*] markers show the attachment points. A theoretical route, "
+                      "not a demonstrated synthesis."),
+            )]
+        return [RetrosyntheticDisconnection(
+            fragments=[],
+            note="no BRICS retrosynthetic disconnection point — a fused/aromatic scaffold "
+                 "typically built via ring-forming chemistry rather than fragment coupling.",
+        )]
 
     def _collect_molecules(self, ctx: AgentContext) -> list[tuple[str, str]]:
         mols: list[tuple[str, str]] = []

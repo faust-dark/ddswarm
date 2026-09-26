@@ -50,6 +50,27 @@ EVIDENCE_COLORS = {
     "hypothetical": "#9e9e9e",
 }
 
+# Human-facing stage label + one-line role for each agent, used to label report
+# sections clearly and explain what each agent does.
+AGENT_LABELS: dict[str, tuple[str, str]] = {
+    "researcher_minion": ("Research", "gathers what is already known about the target and starting molecule"),
+    "designer_minion": ("Design", "proposes new analog molecules (deterministic RDKit library, or LLM with a reasoning backend)"),
+    "screener_minion": ("Screening", "filters molecules by drug-likeness and structural liabilities (PAINS is hard, Brenk advisory)"),
+    "predictor_minion": ("ADMET prediction", "estimates ADMET properties from five published rules"),
+    "retrosynthesis_minion": ("Synthesis", "scores synthetic accessibility and proposes a theoretical retrosynthetic disconnection"),
+    "tox_minion": ("Toxicity", "flags structural toxicophore alerts (predicted liabilities, not observed toxicity)"),
+    "formulation_minion": ("Formulation", "estimates developability — solubility, permeability, and BCS class"),
+    "docking_minion": ("Docking", "docks candidates into the receptor and reports predicted affinity (opt-in)"),
+    "dynamics_minion": ("Receptor MD", "runs a short receptor molecular-dynamics relaxation (opt-in)"),
+    "safety_minion": ("Safety", "safety gate — flags controlled substances and dual-use targets"),
+    "report_minion": ("Report", "aggregates the run into a structured report and ranks the survivors"),
+    "validation_minion": ("Validation", "audits the run's bookkeeping — schemas, hashes, cross-agent consistency"),
+    "report_pdf_minion": ("PDF export", "renders this document"),
+    "patent_minion": ("Patent landscape", "patent / freedom-to-operate knowledge (opt-in, LLM)"),
+    "clinical_minion": ("Clinical knowledge", "clinical-stage knowledge — known drugs, trials (opt-in, LLM)"),
+    "regulatory_minion": ("Regulatory knowledge", "regulatory status — approvals, scheduling (opt-in, LLM)"),
+}
+
 _fonts_registered = False
 
 
@@ -385,6 +406,9 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         for it in items:
             story.append(Paragraph("•&nbsp;" + _cell(it), styles["bullet"]))
 
+    def sub(stage: str, agent: str) -> None:
+        story.append(Paragraph(f"{_esc(stage)} — {_esc(agent)}", styles["h2"]))
+
     def fig(f, caption: str) -> None:
         nonlocal figure_count
         if f is None:
@@ -445,50 +469,54 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         # ---- methodology (narrative) ----
         section("Methodology")
         agents = sorted({sf.agent for sf in report.stage_findings})
-        para(f"This run executed a pipeline of {len(agents)} specialised agents — "
-             f"{', '.join(agents)} — each responsible for one stage of an in-silico "
-             "drug-discovery workflow. Each agent writes a versioned, hashed artifact carrying "
-             "full provenance (input/output hashes, tool versions, and an evidence level), so the "
-             "whole run is reproducible and auditable.")
+        para(f"This run executed {len(agents)} specialised agents, one per stage of an in-silico "
+             "drug-discovery workflow. Each agent writes a versioned, hashed artifact with full "
+             "provenance (input/output hashes, tool versions, evidence level), so the whole run "
+             "is reproducible and auditable. What each agent does:")
+        for a in agents:
+            stage, role = AGENT_LABELS.get(a, (a, "contributes one stage of the pipeline"))
+            bullets([f"{stage} ({a}) — {role}"])
         if tools:
             para("Tools and versions: " + "; ".join(tools) + ".")
         if project_spec.starting_materials:
             para("The analysis starts from the provided molecule(s): "
                  + "; ".join(project_spec.starting_materials) + ".")
 
-        # ---- results, one narrative block per present stage ----
+        # ---- results, one clearly-labeled block per present stage ----
         section("Results and interpretation")
 
         if kps:
+            sub("Research", "researcher_minion")
             _narrative_research(kps, para)
         if dbs:
+            sub("Design", "designer_minion")
             _narrative_design(dbs, para)
-
         if sbs:
+            sub("Screening", "screener_minion")
             _narrative_screening(sbs, para, fig)
-
         if aps:
+            sub("ADMET prediction", "predictor_minion")
             _narrative_admet(aps, para, styles, story)
-
         if rps:
+            sub("Synthesis", "retrosynthesis_minion")
             _narrative_retrosynthesis(rps, para, fig)
-
         if tps:
+            sub("Toxicity", "tox_minion")
             _narrative_tox(tps, para)
-
         if fas:
+            sub("Formulation", "formulation_minion")
             _narrative_formulation(fas, para)
-
         if drs:
+            sub("Docking", "docking_minion")
             _narrative_docking(drs, para, fig)
-
         if mds:
+            sub("Receptor MD", "dynamics_minion")
             _narrative_md(mds, para, fig)
-
         if sas:
+            sub("Safety", "safety_minion")
             _narrative_safety(sas, para)
 
-        _narrative_knowledge_agents(by_kind, para)
+        _narrative_knowledge_agents(by_kind, para, sub)
 
         # ---- identified candidate (the discovery outcome) ----
         section("Identified candidate")
@@ -700,10 +728,17 @@ def _narrative_retrosynthesis(rps, para, fig) -> None:
         fig(_chart_sa(rps), "Auxiliary view: synthetic-accessibility score per molecule.")
         for rp in rps:
             for m in rp.molecules:
-                tail = (" No LLM-proposed synthesis route was generated (no reasoning backend)."
-                         if not m.routes
-                         else f" {len(m.routes)} synthesis route(s) proposed (hypothetical).")
-                para(f"{m.id} has an SA score of {m.sa_score:.2f} ({_interpret_sa(m.sa_score)})." + tail)
+                para(f"{m.id} has an SA score of {m.sa_score:.2f} ({_interpret_sa(m.sa_score)}).")
+                for d in m.disconnections:
+                    if d.fragments:
+                        para(f"Theoretical retrosynthesis: it disconnects into {len(d.fragments)} "
+                             f"building blocks — {' + '.join(d.fragments)} — reconnected at the "
+                             "[n*] attachment points. A theoretical route, not a demonstrated "
+                             "synthesis.")
+                    elif d.note:
+                        para(d.note)
+                if m.routes:
+                    para(f"{len(m.routes)} LLM-proposed synthesis route(s) (hypothetical).")
 
 
 def _narrative_tox(tps, para) -> None:
@@ -773,15 +808,16 @@ def _narrative_safety(sas, para) -> None:
                  "determination.")
 
 
-def _narrative_knowledge_agents(by_kind, para) -> None:
-    for kind, label in (("patent_landscape", "patent/freedom-to-operate landscape"),
-                        ("clinical_assessment", "clinical-stage knowledge"),
-                        ("regulatory_assessment", "regulatory knowledge")):
+def _narrative_knowledge_agents(by_kind, para, sub) -> None:
+    for kind, stage, agent in (("patent_landscape", "Patent landscape", "patent_minion"),
+                               ("clinical_assessment", "Clinical knowledge", "clinical_minion"),
+                               ("regulatory_assessment", "Regulatory knowledge", "regulatory_minion")):
         if kind in by_kind:
+            sub(stage, agent)
             n = sum(len(p.entries) for p in by_kind[kind])
-            para(f"The {label} contributed {n} entr{'y' if n == 1 else 'ies'} (LLM-recalled, "
-                 "evidence level: inferred). These are research aids, not legal or regulatory "
-                 "determinations.")
+            para(f"The {stage.lower()} contributed {n} entr{'y' if n == 1 else 'ies'} "
+                 "(LLM-recalled, evidence level: inferred). These are research aids, not legal "
+                 "or regulatory determinations.")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:

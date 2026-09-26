@@ -26,11 +26,26 @@ class SynthesisRoute(BaseModel):
     evidence_level: EvidenceLevel = EvidenceLevel.hypothetical
 
 
+class RetrosyntheticDisconnection(BaseModel):
+    """A deterministic retrosynthetic disconnection: the molecule decomposed
+    into building blocks by BRICS rules. Fragments carry attachment-point
+    markers ([n*]) showing where bonds break. A theoretical route, not a
+    demonstrated synthesis — building-block commercial availability is never
+    assessed here. When `fragments` is empty the molecule has no BRICS
+    disconnection point (a fused/aromatic scaffold built via ring-forming
+    chemistry), which the note explains."""
+
+    fragments: list[str] = Field(default_factory=list)
+    note: str | None = None
+    evidence_level: EvidenceLevel = EvidenceLevel.calculated
+
+
 class RetrosynthesisEntry(BaseModel):
     id: str
     canonical_smiles: str
     sa_score: float
     synthetic_accessibility: Accessibility
+    disconnections: list[RetrosyntheticDisconnection] = Field(default_factory=list)
     routes: list[SynthesisRoute] = Field(default_factory=list)
     feasibility_note: str | None = None
     evidence_level: EvidenceLevel = EvidenceLevel.calculated

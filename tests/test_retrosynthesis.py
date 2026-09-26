@@ -105,3 +105,25 @@ def test_retrosynth_with_reasoning_routes(tmp_path):
     assert e.evidence_level.value == "calculated"  # SA score stays calculated
     assert plan.summary.molecules_with_routes == 1
     assert any("hypothetical" in w for w in result.warnings)
+
+
+# ---- deterministic retrosynthetic disconnection (BRICS) ----
+ALPRAZOLAM = "Cc1nnc2n1-c1ccc(Cl)cc1C(c1ccccc1)=NC2"
+
+
+def test_gefitinib_disconnects_into_building_blocks(tmp_path):
+    store = Store(tmp_path)
+    result = _run(store, molecules=[{"id": "m0", "smiles": GEFITINIB}])
+    plan = _plan(store, result)
+    d = plan.molecules[0].disconnections[0]
+    assert d.fragments, "gefitinib has BRICS-labile bonds -> real building blocks"
+    assert d.evidence_level.value == "calculated"
+
+
+def test_fused_scaffold_has_no_disconnection(tmp_path):
+    store = Store(tmp_path)
+    result = _run(store, molecules=[{"id": "a", "smiles": ALPRAZOLAM}])
+    plan = _plan(store, result)
+    d = plan.molecules[0].disconnections[0]
+    assert d.fragments == []
+    assert d.note and "no BRICS" in d.note
