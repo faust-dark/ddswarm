@@ -359,7 +359,7 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 131 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 138 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the
@@ -373,3 +373,9 @@ insufficient_evidence without a backend) are tested offline. Real
 Hermes-subagent delegation was verified once manually (researcher returned 24
 sourced entries, designer 8 analog SMILES); real receptor MD was verified on
 the 2ITY kinase domain (backbone RMSD ~0.19 A over a 0.4 ps bounded relaxation).
+
+Hardening (point 4) adds: filesystem-ID validation (project/task/artifact IDs
+reject path traversal at both the contract and Store layers), CLI error
+handling (missing file / bad JSON / bad IDs exit 1 with a clean message), and
+an end-to-end reproducibility test (two runs of the default pipeline produce
+identical artifact fingerprints, excluding timestamp/run_id metadata).

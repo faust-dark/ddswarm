@@ -96,7 +96,10 @@ class ReportMinion(Agent):
         next_steps = self._next_steps(gaps)
         caveats = self._caveats()
 
-        input_hash = hash_jsonable({"project_id": ctx.project_id, "run_id": ctx.run_id})
+        input_hash = hash_jsonable({
+            kind: [a.model_dump(mode="json", exclude={"provenance", "run_id"}) for a in arts]
+            for kind, arts in sorted(by_kind.items())
+        })
         output_hash = hash_jsonable({
             "stage_findings": [s.model_dump() for s in stage_findings],
             "executive_summary": exec_summary, "gaps": gaps, "next_steps": next_steps,

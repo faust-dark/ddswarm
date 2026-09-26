@@ -11,7 +11,7 @@ from .enums import InputType, ProjectStatus
 
 class ProjectSpec(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
-    project_id: str
+    project_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     input_type: InputType
     objective: str = Field(min_length=1)
     targets: list[str] = Field(default_factory=list)

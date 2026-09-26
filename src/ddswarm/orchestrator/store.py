@@ -3,6 +3,7 @@ agent results, and artifacts. Nothing is overwritten without a new version."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -13,6 +14,15 @@ from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import TaskSpec
 from ..logging.hashing import hash_content
 
+_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _check_id(value: str, what: str) -> None:
+    """Reject identifiers that could escape the store root via a filesystem
+    path (empty, slashes, '..', control chars)."""
+    if not isinstance(value, str) or not _ID_RE.match(value):
+        raise ValueError(f"invalid {what} for filesystem path: {value!r}")
+
 
 class Store:
     def __init__(self, root: str | Path):
@@ -20,12 +30,14 @@ class Store:
 
     # ---- paths ----
     def project_dir(self, project_id: str) -> Path:
+        _check_id(project_id, "project_id")
         return self.root / project_id
 
     def project_spec_path(self, project_id: str) -> Path:
         return self.project_dir(project_id) / "project_spec.json"
 
     def run_dir(self, project_id: str, run_id: str) -> Path:
+        _check_id(run_id, "run_id")
         return self.project_dir(project_id) / "runs" / run_id
 
     def run_manifest_path(self, project_id: str, run_id: str) -> Path:
@@ -62,27 +74,32 @@ class Store:
 
     # ---- task ledger ----
     def save_task_spec(self, spec: TaskSpec) -> Path:
+        _check_id(spec.task_id, "task_id")
         p = self.tasks_dir(spec.project_id, spec.run_id) / f"{spec.task_id}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(spec.model_dump_json(indent=2))
         return p
 
     def load_task_spec(self, project_id: str, run_id: str, task_id: str) -> TaskSpec:
+        _check_id(task_id, "task_id")
         p = self.tasks_dir(project_id, run_id) / f"{task_id}.json"
         return TaskSpec.model_validate_json(p.read_text())
 
     # ---- agent results (versioned per attempt) ----
     def save_agent_result(self, result: AgentResult, run_id: str, attempt: int) -> Path:
+        _check_id(result.task_id, "task_id")
         p = self.tasks_dir(result.project_id, run_id) / f"{result.task_id}.result.v{attempt}.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(result.model_dump_json(indent=2))
         return p
 
     def load_agent_result(self, project_id: str, run_id: str, task_id: str, attempt: int) -> AgentResult:
+        _check_id(task_id, "task_id")
         p = self.tasks_dir(project_id, run_id) / f"{task_id}.result.v{attempt}.json"
         return AgentResult.model_validate_json(p.read_text())
 
     def latest_attempt(self, project_id: str, run_id: str, task_id: str) -> int:
+        _check_id(task_id, "task_id")
         d = self.tasks_dir(project_id, run_id)
         cands = list(d.glob(f"{task_id}.result.v*.json"))
         if not cands:
@@ -99,6 +116,8 @@ class Store:
     def save_artifact(
         self, project_id: str, run_id: str, artifact: BaseModel, kind: str, artifact_id: str
     ) -> tuple[Path, int, str]:
+        _check_id(artifact_id, "artifact_id")
+        _check_id(kind, "kind")
         d = self.artifacts_dir(project_id, run_id)
         d.mkdir(parents=True, exist_ok=True)
         existing = list(d.glob(f"{artifact_id}.{kind}.v*.json"))

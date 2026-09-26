@@ -97,7 +97,7 @@ class ValidationMinion(Agent):
             "n_artifacts_checked": n_checked,
             "n_missing_provenance": len(missing_prov),
             "n_hash_mismatch": len(hash_mismatch),
-        })
+        }, by_kind)
 
     # ---- checks ----
     @staticmethod
@@ -186,7 +186,7 @@ class ValidationMinion(Agent):
         return ValidationCheck(check_id=check_id, name=name, status=status, detail=detail)
 
     def _finish(self, ctx: AgentContext, checks: list[ValidationCheck],
-                reproducibility: dict) -> AgentResult:
+                reproducibility: dict, by_kind: dict | None = None) -> AgentResult:
         summary = ValidationSummary(
             total_checks=len(checks),
             passed=sum(1 for c in checks if c.status == "pass"),
@@ -196,7 +196,10 @@ class ValidationMinion(Agent):
         status = AgentResultStatus.success if summary.failed == 0 else AgentResultStatus.partial
         failed = [c.name for c in checks if c.status == "fail"]
 
-        input_hash = hash_jsonable({"project_id": ctx.project_id, "run_id": ctx.run_id})
+        input_hash = hash_jsonable({
+            kind: [a.model_dump(mode="json", exclude={"provenance", "run_id"}) for a in arts]
+            for kind, arts in sorted((by_kind or {}).items())
+        })
         output_hash = hash_jsonable([c.model_dump() for c in checks])
         report = ValidationReport(
             project_id=ctx.project_id, run_id=ctx.run_id, status=status,

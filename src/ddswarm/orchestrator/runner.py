@@ -56,7 +56,7 @@ ARTIFACT_MODELS: dict[str, type] = {
 
 
 class TaskDefinition(BaseModel):
-    task_id: str
+    task_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     agent: str
     depends_on: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)

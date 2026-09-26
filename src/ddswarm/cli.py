@@ -34,7 +34,10 @@ from .agents import (
     ValidationMinion,
 )
 from .contracts import ProjectSpec, RunRequest, ReasoningConfig, RunTask, export_schemas
+from pydantic import ValidationError
+
 from .orchestrator import Runner, Store, TaskDefinition
+from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
 
 DEFAULT_PIPELINE = [
@@ -243,7 +246,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except (FileNotFoundError, ValidationError, BlockedByGate, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
