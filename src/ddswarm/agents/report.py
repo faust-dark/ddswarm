@@ -23,6 +23,7 @@ from ..contracts.memory import MemoryEntry
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.report import EvidenceBreakdown, Report, StageFinding
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
+from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.tox_profile import ToxProfile
 from ..logging.hashing import hash_jsonable
@@ -41,6 +42,7 @@ _KIND_MODELS: dict[str, type] = {
     "formulation_assessment": FormulationAssessment,
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
+    "safety_assessment": SafetyAssessment,
 }
 
 
@@ -173,6 +175,9 @@ class ReportMinion(Agent):
             for m in tp.molecules:
                 for a in m.alerts:
                     c[a.evidence_level.value] += 1
+        for sa in by_kind.get("safety_assessment", []):
+            for f in sa.flags:
+                c[f.evidence_level.value] += 1
         return c
 
     @staticmethod
@@ -217,6 +222,9 @@ class ReportMinion(Agent):
             for r in md.runs:
                 if r.status == "success" and r.metrics.backbone_rmsd_mean_angstrom is not None:
                     parts.append(f"receptor MD backbone RMSD {r.metrics.backbone_rmsd_mean_angstrom:.2f} A")
+        sas = by_kind.get("safety_assessment", [])
+        if sas:
+            parts.append(f"safety {sas[0].verdict} ({sum(s.summary.total_flags for s in sas)} flags)")
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."

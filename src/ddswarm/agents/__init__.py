@@ -9,11 +9,14 @@ from .predictor import PredictorMinion
 from .report import ReportMinion
 from .researcher import ResearcherMinion
 from .retrosynthesis import RetrosynthesisMinion
+from .safety import SafetyMinion
 from .screener import ScreenerMinion
 from .tox import ToxMinion
+from .validation import ValidationMinion
 
 __all__ = [
     "Agent", "AgentContext", "DesignerMinion", "DockingMinion", "DynamicsMinion",
     "FormulationMinion", "PredictorMinion", "ReportMinion", "ResearcherMinion",
-    "RetrosynthesisMinion", "ScreenerMinion", "ToxMinion",
+    "RetrosynthesisMinion", "SafetyMinion", "ScreenerMinion", "ToxMinion",
+    "ValidationMinion",
 ]

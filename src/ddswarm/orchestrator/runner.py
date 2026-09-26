@@ -22,11 +22,13 @@ from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
+from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.provenance import InputRef, utcnow
 from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
 from ..contracts.tox_profile import ToxProfile
+from ..contracts.validation_report import ValidationReport
 from ..logging.event_writer import EventWriter
 from .gates import BlockedByGate, gate_a_input_validity, result_ok
 from .store import Store
@@ -42,6 +44,8 @@ ARTIFACT_MODELS: dict[str, type] = {
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
     "report": Report,
+    "safety_assessment": SafetyAssessment,
+    "validation_report": ValidationReport,
 }
 
 

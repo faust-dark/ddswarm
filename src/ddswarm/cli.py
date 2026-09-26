@@ -25,16 +25,19 @@ from .agents import (
     ReportMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
+    SafetyMinion,
     ScreenerMinion,
     ToxMinion,
+    ValidationMinion,
 )
 from .contracts import ProjectSpec, RunRequest, ReasoningConfig, RunTask, export_schemas
 from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.memory import MemoryStore
 
 DEFAULT_PIPELINE = [
+    RunTask(task_id="safety", agent="safety_minion"),
     RunTask(task_id="research", agent="researcher_minion", params={"seed_entries": []}),
-    RunTask(task_id="design", agent="designer_minion", depends_on=["research"]),
+    RunTask(task_id="design", agent="designer_minion", depends_on=["research", "safety"]),
     RunTask(task_id="screen", agent="screener_minion", depends_on=["design"]),
     RunTask(task_id="predict", agent="predictor_minion", depends_on=["screen"],
             params={"providers": ["null_admet"]}),
@@ -42,6 +45,7 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
     RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "formulation"]),
+    RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
 ]
 
 
@@ -60,6 +64,8 @@ def build_agents(store: Store) -> dict:
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
         "formulation_minion": FormulationMinion(store),
+        "safety_minion": SafetyMinion(store),
+        "validation_minion": ValidationMinion(store),
         "report_minion": ReportMinion(store),
     }
 

@@ -52,9 +52,11 @@ from .retrosynthesis_plan import (
     RetrosynthesisSummary,
     SynthesisRoute,
 )
+from .safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
 from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
 from .tox_profile import MoleculeToxAssessment, ToxAlert, ToxProfile, ToxSummary
+from .validation_report import ValidationCheck, ValidationReport, ValidationSummary
 
 __all__ = [
     "AdmetPrediction",
@@ -117,10 +119,16 @@ __all__ = [
     "RunRequest",
     "RunTask",
     "RunStatus",
+    "SafetyAssessment",
+    "SafetyFlag",
+    "SafetySummary",
     "SourceRef",
     "TaskSpec",
     "TaskStatus",
     "ToolVersion",
+    "ValidationCheck",
+    "ValidationReport",
+    "ValidationSummary",
     "export_schemas",
     "utcnow",
 ]

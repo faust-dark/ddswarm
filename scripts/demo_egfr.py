@@ -1,7 +1,7 @@
 """End-to-end demo: EGFR / gefitinib scaffold.
 
-research -> design -> screen -> predict -> dock -> retrosynth -> tox
-         -> formulation -> dynamics -> report
+safety -> research -> design -> screen -> predict -> dock -> retrosynth -> tox
+       -> formulation -> dynamics -> report -> validation
 
 Run from the repo root after `pip install -e .`:
     .venv/bin/python scripts/demo_egfr.py
@@ -18,8 +18,10 @@ from ddswarm.agents import (
     ReportMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
+    SafetyMinion,
     ScreenerMinion,
     ToxMinion,
+    ValidationMinion,
 )
 from ddswarm.contracts import ProjectSpec, export_schemas
 from ddswarm.orchestrator import Runner, Store, TaskDefinition
@@ -55,6 +57,7 @@ def main() -> None:
     )
 
     tasks = [
+        TaskDefinition(task_id="safety", agent="safety_minion"),
         TaskDefinition(
             task_id="research",
             agent="researcher_minion",
@@ -72,7 +75,7 @@ def main() -> None:
                 "notes": "reference ligand + scaffold source for analog design",
             }]},
         ),
-        TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
+        TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research", "safety"]),
         TaskDefinition(
             task_id="screen", agent="screener_minion", depends_on=["design"],
             params={"filters": {"enable_brenk": False}},
@@ -97,6 +100,7 @@ def main() -> None:
             task_id="report", agent="report_minion",
             depends_on=["predict", "dock", "retrosynth", "tox", "formulation", "dynamics"],
         ),
+        TaskDefinition(task_id="validation", agent="validation_minion", depends_on=["report"]),
     ]
 
     store = Store(STORE_ROOT)
@@ -110,6 +114,8 @@ def main() -> None:
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
         "formulation_minion": FormulationMinion(store),
+        "safety_minion": SafetyMinion(store),
+        "validation_minion": ValidationMinion(store),
         "report_minion": ReportMinion(store),
     }
     runner = Runner(store, agents)
@@ -123,7 +129,7 @@ def main() -> None:
     print(f"run status : {final.status.value}")
     print(f"events log : {store.events_path(spec.project_id, manifest.run_id)}")
     print("-" * 70)
-    for tid in ["research", "design", "screen", "predict", "dock", "retrosynth", "tox", "formulation", "dynamics", "report"]:
+    for tid in ["safety", "research", "design", "screen", "predict", "dock", "retrosynth", "tox", "formulation", "dynamics", "report", "validation"]:
         ts = store.load_task_spec(spec.project_id, manifest.run_id, tid)
         res = store.load_latest_agent_result(spec.project_id, manifest.run_id, tid)
         print(f"[{tid}] task_status={ts.status.value}  agent={ts.agent}  retries={ts.retry_count}")
