@@ -29,7 +29,11 @@ class MoleculeScreenResult(BaseModel):
     sanitization_error: str | None = None
     properties: MoleculeProperties | None = None
     rule_of_five_violations: list[str] = Field(default_factory=list)
+    # hard structural alerts (PAINS only) — these eliminate
     structural_alerts: list[str] = Field(default_factory=list)
+    # Brenk "unwanted functionality" alerts — advisory, reported but not
+    # eliminating unless filters.brenk_hard is set
+    brenk_alerts: list[str] = Field(default_factory=list)
     advisories: list[str] = Field(default_factory=list)
     passed: bool
     elimination_reasons: list[str] = Field(default_factory=list)
@@ -40,6 +44,7 @@ class ScreenSummary(BaseModel):
     passed: int
     rejected: int
     invalid: int
+    brenk_flagged: int = 0
 
 
 class ScreenedBatch(BaseModel):

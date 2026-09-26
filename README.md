@@ -118,17 +118,17 @@ Hard elimination (default, all configurable via `params.filters`):
 4. HBD > 5
 5. HBA > 10
 6. any PAINS match (RDKit FilterCatalog)
-7. any Brenk match (RDKit FilterCatalog)
 
 Advisory (reported, not eliminating): TPSA > 140, rotatable bonds > 10,
-|formal charge| > 1.
+|formal charge| > 1, and any Brenk match (RDKit FilterCatalog, reported in
+`brenk_alerts`).
 
 Strict Ro5: any single violation eliminates (approved default).
 
-Known consequence: Brenk is conservative and flags the approved drug gefitinib
-as `Aliphatic_long_chain` (its OCCCN propyl-morpholine chain). This is a
-liability flag, not a kill criterion; disable per-project with
-`params.filters.enable_brenk=false`.
+Brenk is advisory by default: its "unwanted functionality" alerts are
+liability flags, not kill criteria — e.g. it flags the approved drug gefitinib
+as `Aliphatic_long_chain` on the OCCCN propyl-morpholine chain. Restore hard
+Brenk per-project with `params.filters.brenk_hard=true`.
 
 ## Prediction (Increment 2)
 
@@ -354,7 +354,7 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 129 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 130 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the

@@ -76,10 +76,7 @@ def main() -> None:
             }]},
         ),
         TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research", "safety"]),
-        TaskDefinition(
-            task_id="screen", agent="screener_minion", depends_on=["design"],
-            params={"filters": {"enable_brenk": False}},
-        ),
+        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"]),
         TaskDefinition(
             task_id="predict", agent="predictor_minion", depends_on=["screen"],
             params={"providers": ["rule_admet"]},
@@ -139,9 +136,9 @@ def main() -> None:
             print(f"    finding  : {f}")
         for w in res.warnings:
             print(f"    warning  : {w}")
-    print("NOTE: Brenk is disabled in THIS run (screen.filters.enable_brenk=false) so gefitinib")
-    print("      passes screening and the full chain reaches predict + dock + retrosynth + tox.")
-    print("      With Brenk on (default), gefitinib is flagged 'Aliphatic_long_chain' - see demo_screen.py.")
+    print("NOTE: Brenk is advisory by default (screen.filters.brenk_hard=false) — gefitinib's")
+    print("      'Aliphatic_long_chain' flag is reported but does not eliminate, so the full")
+    print("      chain reaches predict + dock + retrosynth + tox. Set brenk_hard=true to restore hard Brenk.")
     print("NOTE: the dock task requires tools/vina + network (RCSB) + pdbfixer/meeko/openbabel.")
     print("      Docking scores and tox alerts are in-silico (calculated/predicted), never experimental evidence.")
     print("NOTE: the dynamics task runs a SHORT (ps-scale) receptor MD relaxation (amber14 + GBSA),")

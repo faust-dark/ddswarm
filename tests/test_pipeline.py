@@ -40,12 +40,13 @@ def test_research_design_screen(tmp_path):
     res = store.load_latest_agent_result("p1", manifest.run_id, "screen")
     assert res.status.value == "success"
     batch = store.load_artifact(res.artifacts[0].uri, ScreenedBatch)
-    # designer emits 4 labeled designs over the gefitinib scaffold; all are valid
-    # and all are Brenk-flagged (Aliphatic_long_chain) under the default filters.
+    # designer emits 4 labeled designs over the gefitinib scaffold; all are valid.
+    # Brenk is advisory by default: all pass, carrying Aliphatic_long_chain advisories.
     assert batch.summary.total == 4
     assert all(m.valid for m in batch.molecules)
-    assert batch.summary.rejected == 4
-    assert batch.summary.passed == 0
+    assert batch.summary.passed == 4
+    assert batch.summary.rejected == 0
+    assert batch.summary.brenk_flagged == 4
 
 
 def test_research_design_screen_predict(tmp_path):
@@ -63,9 +64,8 @@ def test_research_design_screen_predict(tmp_path):
             "evidence_level": "observed",
         }]}),
         TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
-        # Brenk off so gefitinib passes screening and flows to prediction
-        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"],
-                       params={"filters": {"enable_brenk": False}}),
+        # Brenk is advisory by default, so gefitinib passes screening and flows to prediction
+        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"]),
         TaskDefinition(task_id="predict", agent="predictor_minion", depends_on=["screen"],
                        params={"providers": ["null_admet"]}),
     ]
@@ -76,7 +76,7 @@ def test_research_design_screen_predict(tmp_path):
     res = store.load_latest_agent_result("p1", manifest.run_id, "predict")
     assert res.status.value == "success"
     batch = store.load_artifact(res.artifacts[0].uri, AdmetPrediction)
-    # 4 gefitinib designs pass screening (Brenk off) -> 4 molecules x 10 endpoints
+    # 4 gefitinib designs pass screening (Brenk advisory) -> 4 molecules x 10 endpoints
     assert batch.summary.total_molecules == 4
     assert batch.summary.total_endpoints == 40
     assert batch.summary.not_available == 40

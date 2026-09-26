@@ -207,6 +207,9 @@ class ReportMinion(Agent):
         sbs = by_kind.get("screened_batch", [])
         if sbs:
             parts.append(f"{sum(s.summary.passed for s in sbs)}/{sum(s.summary.total for s in sbs)} passed screening")
+            brenk = sum(s.summary.brenk_flagged for s in sbs)
+            if brenk:
+                parts.append(f"{brenk} Brenk advisories")
         aps = by_kind.get("admet_prediction", [])
         if aps:
             parts.append(f"ADMET {sum(a.summary.predicted for a in aps)} predicted / "
@@ -316,6 +319,7 @@ class ReportMinion(Agent):
             "All scores are in-silico (calculated/predicted); none are experimental evidence.",
             "Evidence breakdown is a coarse rollup; individual entries carry finer-grained evidence_level.",
             "Structural tox alerts are predicted liabilities from literature rules, not observed toxicity.",
+            "Brenk 'unwanted functionality' alerts are advisory, not eliminating (PAINS stays hard); set filters.brenk_hard=true to make Brenk eliminate.",
             "LLM-contributed entries are inferred/hypothetical; verify against primary sources.",
             "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",
             "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",

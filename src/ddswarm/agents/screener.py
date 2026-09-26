@@ -32,6 +32,7 @@ DEFAULT_FILTERS = {
     "max_hba": 10,
     "enable_pains": True,
     "enable_brenk": True,
+    "brenk_hard": False,
     "advisory_tpsa": 140.0,
     "advisory_rotatable_bonds": 10,
     "advisory_max_abs_charge": 1,
@@ -63,6 +64,7 @@ class ScreenerMinion(Agent):
             passed=sum(1 for r in results if r.passed),
             rejected=sum(1 for r in results if r.valid and not r.passed),
             invalid=sum(1 for r in results if not r.valid),
+            brenk_flagged=sum(1 for r in results if r.brenk_alerts),
         )
 
         warnings = self._exclusion_warnings(ctx)
@@ -143,13 +145,16 @@ class ScreenerMinion(Agent):
             ro5.append("HBA")
             reasons.append(f"hba {props['hba']} > {filters['max_hba']}")
 
-        alerts: list[str] = []
+        pains: list[str] = []
+        brenk: list[str] = []
         if filters.get("enable_pains", True):
-            alerts += match_alerts(mol, "pains")
+            pains += match_alerts(mol, "pains")
         if filters.get("enable_brenk", True):
-            alerts += match_alerts(mol, "brenk")
-        if alerts:
-            reasons.append("structural alert(s): " + "; ".join(alerts))
+            brenk += match_alerts(mol, "brenk")
+        if pains:
+            reasons.append("PAINS alert(s): " + "; ".join(pains))
+        if brenk and filters.get("brenk_hard", False):
+            reasons.append("Brenk alert(s): " + "; ".join(brenk))
 
         advisories: list[str] = []
         if props["tpsa"] > filters.get("advisory_tpsa", 140.0):
@@ -159,7 +164,8 @@ class ScreenerMinion(Agent):
         if abs(props["formal_charge"]) > filters.get("advisory_max_abs_charge", 1):
             advisories.append(f"formal_charge {props['formal_charge']} outside +/- {filters.get('advisory_max_abs_charge', 1)}")
 
-        passed = not ro5 and not alerts
+        hard_alerts = pains + (brenk if filters.get("brenk_hard", False) else [])
+        passed = not ro5 and not hard_alerts
         return MoleculeScreenResult(
             id=mid,
             input_smiles=smi,
@@ -167,7 +173,8 @@ class ScreenerMinion(Agent):
             valid=True,
             properties=props,
             rule_of_five_violations=ro5,
-            structural_alerts=alerts,
+            structural_alerts=pains,
+            brenk_alerts=brenk,
             advisories=advisories,
             passed=passed,
             elimination_reasons=reasons,

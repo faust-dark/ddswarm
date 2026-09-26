@@ -122,6 +122,13 @@
           "title": "Structural Alerts",
           "type": "array"
         },
+        "brenk_alerts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Brenk Alerts",
+          "type": "array"
+        },
         "advisories": {
           "items": {
             "type": "string"
@@ -267,6 +274,11 @@
         },
         "invalid": {
           "title": "Invalid",
+          "type": "integer"
+        },
+        "brenk_flagged": {
+          "default": 0,
+          "title": "Brenk Flagged",
           "type": "integer"
         }
       },

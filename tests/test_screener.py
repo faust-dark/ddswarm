@@ -50,12 +50,23 @@ def test_pains_rejection(tmp_path):
     assert any("PAINS:" in a for a in m.structural_alerts)
 
 
-def test_brenk_rejection(tmp_path):
+def test_brenk_advisory_by_default(tmp_path):
     store = Store(tmp_path)
     batch = _batch(store, _run(store, [{"id": "g", "smiles": GEFITINIB}]))
     m = batch.molecules[0]
+    # Brenk is advisory: reported, but does not eliminate by default
+    assert m.valid and m.passed
+    assert any("BRENK:Aliphatic_long_chain" in a for a in m.brenk_alerts)
+    assert m.structural_alerts == []  # no hard PAINS alert
+
+
+def test_brenk_hard_rejection(tmp_path):
+    store = Store(tmp_path)
+    batch = _batch(store, _run(store, [{"id": "g", "smiles": GEFITINIB}], filters={"brenk_hard": True}))
+    m = batch.molecules[0]
     assert m.valid and not m.passed
-    assert any("BRENK:Aliphatic_long_chain" in a for a in m.structural_alerts)
+    assert any("BRENK:Aliphatic_long_chain" in a for a in m.brenk_alerts)
+    assert any("Brenk alert(s)" in r for r in m.elimination_reasons)
 
 
 def test_clean_passes(tmp_path):
