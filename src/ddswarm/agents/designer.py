@@ -1,14 +1,15 @@
-"""designer_minion: proposes a DesignBatch from upstream scaffolds, optionally
-delegating actual analog design to a reasoning backend (e.g. a Hermes subagent).
+"""designer_minion: proposes a DesignBatch from upstream scaffolds.
 
-When no backend is configured it falls back to deterministic transformation
-labels over the parent SMILES (no new structures). A reasoning backend proposes
-real analog SMILES; its output is LLM reasoning, so every molecule it
+Without a reasoning backend it generates real analog molecules deterministically
+(the RDKit transformation library in chemistry/analog_generator.py) — new
+SMILES, not copies of the input. A reasoning backend proposes real analog
+SMILES via the LLM; its output is LLM reasoning, so every molecule it
 contributes is forced to evidence_level='hypothetical'. No scaffold input, and
 no backend => insufficient_evidence (never invent molecules)."""
 
 from __future__ import annotations
 
+from ..chemistry.analog_generator import generate_analogs
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
 from ..contracts.design_batch import DesignBatch, MoleculeDesign
@@ -66,12 +67,14 @@ class DesignerMinion(Agent):
         used_reasoning = False
 
         if backend_name in (None, "", "none"):
-            molecules = self._labels(scaffolds)
+            molecules, notes = self._offline_design(scaffolds)
+            warnings.extend(notes)
         else:
             backend, note = self._resolve_backend(ctx)
             if backend is None:
                 warnings.append(note)
-                molecules = self._labels(scaffolds)
+                molecules, notes = self._offline_design(scaffolds)
+                warnings.extend(notes)
             else:
                 res = backend.design(ctx.spec, scaffolds, ctx.params)
                 if res.ok and res.entries:
@@ -83,11 +86,13 @@ class DesignerMinion(Agent):
                     if molecules:
                         used_reasoning = True
                     else:
-                        warnings.append("reasoning produced no valid molecules; using labels")
-                        molecules = self._labels(scaffolds)
+                        warnings.append("reasoning produced no valid molecules; falling back to deterministic design")
+                        molecules, notes = self._offline_design(scaffolds)
+                        warnings.extend(notes)
                 else:
-                    warnings.append(f"reasoning failed: {res.note}; using labels")
-                    molecules = self._labels(scaffolds)
+                    warnings.append(f"reasoning failed: {res.note}; falling back to deterministic design")
+                    molecules, notes = self._offline_design(scaffolds)
+                    warnings.extend(notes)
 
         if used_reasoning:
             warnings.append("molecules proposed by reasoning backend are LLM-generated (evidence_level=hypothetical); not RDKit-validated here")
@@ -101,7 +106,8 @@ class DesignerMinion(Agent):
             provenance=[ProvenanceEntry(
                 source="KnowledgePack + ProjectSpec" + (" + reasoning backend" if used_reasoning else ""),
                 tool_versions=[TOOL],
-                params={"scaffold_count": len(scaffolds), "transformations": self.TRANSFORMATIONS,
+                params={"scaffold_count": len(scaffolds),
+                        "design_mode": "reasoning" if used_reasoning else "deterministic",
                         "reasoning_backend": backend_name},
                 input_hash=input_hash,
                 output_hash=output_hash,
@@ -112,7 +118,7 @@ class DesignerMinion(Agent):
             project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
             status=AgentResultStatus.success, artifacts=[art], input_refs=ctx.input_refs,
             findings=[f"DesignBatch with {len(molecules)} candidate designs"
-                      f"{' (reasoning backend)' if used_reasoning else ' (labels only)'}"],
+                      f"{' (reasoning backend)' if used_reasoning else ' (deterministic analog generation)'}"],
             warnings=warnings,
             provenance=[ProvenanceEntry(source="KnowledgePack + ProjectSpec", output_hash=art.hash, tool_versions=[TOOL])],
             tool_versions=[TOOL], reproducibility={"scaffold_count": len(scaffolds)},
@@ -128,6 +134,41 @@ class DesignerMinion(Agent):
                     evidence_level=EvidenceLevel.hypothetical,
                 ))
         return molecules
+
+    @staticmethod
+    def _generate(scaffolds: list[tuple[str, str]]) -> tuple[list[MoleculeDesign], list[str]]:
+        """Deterministic analog generation: new SMILES via the RDKit library."""
+        molecules: list[MoleculeDesign] = []
+        notes: list[str] = []
+        seen: set[str] = set()
+        for i, (parent_id, smi) in enumerate(scaffolds):
+            analogs = generate_analogs(smi)
+            if not analogs:
+                notes.append(f"scaffold {parent_id}: no deterministic transformation applicable")
+                continue
+            for a in analogs:
+                if a.smiles in seen:
+                    continue
+                seen.add(a.smiles)
+                molecules.append(MoleculeDesign(
+                    id=f"mol_{i}_{a.transformation}",
+                    smiles=a.smiles,
+                    parent_scaffold=parent_id,
+                    transformation=a.transformation,
+                    rationale=a.rationale,
+                    evidence_level=EvidenceLevel.hypothetical,
+                ))
+        return molecules, notes
+
+    def _offline_design(self, scaffolds: list[tuple[str, str]]) -> tuple[list[MoleculeDesign], list[str]]:
+        """Deterministic design path: generate real analogs, and only fall back
+        to label-only designs when no transformation applies to any scaffold."""
+        molecules, notes = self._generate(scaffolds)
+        if not molecules:
+            molecules = self._labels(scaffolds)
+            notes.append("no deterministic transformation applied to any scaffold; "
+                         "retained label-only designs (no new structures)")
+        return molecules, notes
 
     @staticmethod
     def _from_reasoning(raw: dict, i: int) -> MoleculeDesign:

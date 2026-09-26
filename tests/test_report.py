@@ -87,8 +87,11 @@ def test_designer_consumes_feedback(tmp_path):
     result = DesignerMinion(store).run(ctx)
     assert result.status.value == "success"
     db = store.load_artifact(result.artifacts[0].uri, DesignBatch)
-    # 2 scaffolds (benzene + survivor) x 4 labels = 8
-    assert len(db.molecules) == 8
+    # benzene scaffold has no transformable handles; the chlorobenzene survivor
+    # yields 3 halogen-swap analogs (Cl->F/Br/I).
+    assert len(db.molecules) == 3
+    assert all(m.parent_scaffold == "prior_r0_0" for m in db.molecules)
+    assert {m.transformation for m in db.molecules} == {"cl_to_f", "cl_to_br", "cl_to_i"}
     assert any("feedback loop" in w for w in result.warnings)
 
 

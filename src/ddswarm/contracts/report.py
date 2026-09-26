@@ -31,6 +31,18 @@ class EvidenceBreakdown(BaseModel):
     hypothetical: int = 0
 
 
+class CandidateSelection(BaseModel):
+    """One ranked candidate from the survivor set. The score is a deterministic
+    composite over the candidate's computed/predicted properties (see
+    ReportMinion._rank_survivors); it is a ranking aid, not experimental merit."""
+
+    rank: int
+    smiles: str
+    score: float
+    criteria: list[str] = Field(default_factory=list)
+    rationale: str | None = None
+
+
 class Report(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
     project_id: str
@@ -41,6 +53,8 @@ class Report(BaseModel):
     executive_summary: str
     stage_findings: list[StageFinding] = Field(default_factory=list)
     evidence_breakdown: EvidenceBreakdown = Field(default_factory=EvidenceBreakdown)
+    identified_candidate: CandidateSelection | None = None
+    ranked_candidates: list[CandidateSelection] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
     next_steps: list[str] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)

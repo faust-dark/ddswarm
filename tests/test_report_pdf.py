@@ -64,3 +64,4 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert doc.pdf_hash
     assert "Conclusion" in doc.sections
     assert "Evidence and confidence" in doc.sections
+    assert "Identified candidate" in doc.sections

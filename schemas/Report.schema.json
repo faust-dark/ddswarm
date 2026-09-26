@@ -11,6 +11,49 @@
       "title": "AgentResultStatus",
       "type": "string"
     },
+    "CandidateSelection": {
+      "description": "One ranked candidate from the survivor set. The score is a deterministic\ncomposite over the candidate's computed/predicted properties (see\nReportMinion._rank_survivors); it is a ranking aid, not experimental merit.",
+      "properties": {
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "smiles": {
+          "title": "Smiles",
+          "type": "string"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "criteria": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Criteria",
+          "type": "array"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        }
+      },
+      "required": [
+        "rank",
+        "smiles",
+        "score"
+      ],
+      "title": "CandidateSelection",
+      "type": "object"
+    },
     "EvidenceBreakdown": {
       "description": "Counts of evidence-carrying units (entries/molecules/endpoints/poses)\nper evidence level. Coarse rollup; individual entries carry finer level.",
       "properties": {
@@ -266,6 +309,24 @@
     },
     "evidence_breakdown": {
       "$ref": "#/$defs/EvidenceBreakdown"
+    },
+    "identified_candidate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CandidateSelection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "ranked_candidates": {
+      "items": {
+        "$ref": "#/$defs/CandidateSelection"
+      },
+      "title": "Ranked Candidates",
+      "type": "array"
     },
     "gaps": {
       "items": {

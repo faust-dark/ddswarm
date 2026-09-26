@@ -25,6 +25,9 @@ matplotlib.use("Agg")
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from rdkit import Chem
+from rdkit.Chem import AllChem, Draw
+from rdkit.Chem.inchi import MolToInchiKey
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
@@ -187,6 +190,28 @@ def _interpret_rmsd(rmsd: float) -> str:
     return "mobile over the short relaxation — not a converged verdict"
 
 
+def _mol_to_png(smiles: str, path: Path, size: tuple[int, int] = (360, 360)) -> bool:
+    """Render a 2D depiction of one molecule to a PNG. Returns False when the
+    SMILES does not parse. Deterministic for a given RDKit build (2D coordinate
+    generation is deterministic)."""
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return False
+    AllChem.Compute2DCoords(mol)
+    Draw.MolToImage(mol, size=size).save(path, "PNG")
+    return True
+
+
+def _inchikey(smiles: str) -> str | None:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    try:
+        return MolToInchiKey(mol)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ---- chart builders (kept only as auxiliary aids to the text) ----
 
 
@@ -347,6 +372,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     story: list = []
     sections: list[str] = []
     figure_count = 0
+    mol_counter = 0
 
     def section(title: str) -> None:
         sections.append(title)
@@ -371,6 +397,18 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         plt.close(f)
         story.append(Image(str(png), width=W * cm, height=W * (h_in / w_in) * cm))
         story.append(Paragraph(_esc(caption), styles["caption"]))
+
+    def mol_img(smiles: str, width_cm: float = 5.5, caption: str | None = None) -> None:
+        """Embed a 2D molecule depiction as an auxiliary image (not counted as a
+        chart figure)."""
+        nonlocal mol_counter
+        png = figdir / f"mol_{mol_counter}.png"
+        mol_counter += 1
+        if not _mol_to_png(smiles, png):
+            return
+        story.append(Image(str(png), width=width_cm * cm, height=width_cm * cm))
+        if caption:
+            story.append(Paragraph(_esc(caption), styles["caption"]))
 
     # ---- convenience aggregates ----
     sbs = by_kind.get("screened_batch", [])
@@ -451,6 +489,30 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
             _narrative_safety(sas, para)
 
         _narrative_knowledge_agents(by_kind, para)
+
+        # ---- identified candidate (the discovery outcome) ----
+        section("Identified candidate")
+        cand = report.identified_candidate
+        if cand is None:
+            para("No molecule survived screening to be identified as a lead candidate; "
+                 "this run produced no viable candidate to carry forward.")
+        else:
+            para(f"The top-ranked lead candidate is rank #{cand.rank} by the deterministic "
+                 f"composite score of {cand.score:.4f}, computed as QED + BCS bonus "
+                 "- 0.1 x synthetic-accessibility - 0.2 x structural-toxicity alerts. "
+                 "Its structure:")
+            mol_img(cand.smiles, width_cm=5.5,
+                    caption="Identified lead candidate (2D structure).")
+            ik = _inchikey(cand.smiles)
+            para(f"SMILES: {cand.smiles}" + (f"  ·  InChIKey: {ik}" if ik else ""))
+            if cand.criteria:
+                para("Ranking criteria: " + "; ".join(cand.criteria) + ".")
+            if len(report.ranked_candidates) > 1:
+                para("Full ranked list of surviving candidates:")
+                rows = [["rank", "score", "SMILES"]]
+                for c in report.ranked_candidates:
+                    rows.append([str(c.rank), f"{c.score:.4f}", c.smiles])
+                story.append(_table(rows[0], rows[1:], [1.2, 2.0, 12.3], styles))
 
         # ---- evidence and confidence ----
         section("Evidence and confidence")

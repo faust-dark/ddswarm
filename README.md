@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 10: PDF report export)
+# ddswarm — drug discovery multi-agent swarm (Increment 11: molecule generation + candidate identification)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -20,6 +20,17 @@ artifacts (a `ReportDocument` metadata contract references it and is
 versioned/hashed like any other artifact), and a copy is exported to
 `reports/<project_id>.pdf` for easy access.
 
+**Increment 11** turns ddswarm into a *discovery* pipeline, not just a
+characterization one. `designer_minion` now generates genuinely NEW analog
+molecules offline through a deterministic RDKit transformation library
+(`chemistry/analog_generator.py`: Cl→F/Br/I halogen swaps, methyl→ethyl
+homologation, N-demethylation) — real SMILES, not label-only copies of the
+input. `report_minion` ranks the screening survivors by a deterministic
+composite (QED + BCS bonus − 0.1·SA − 0.2·tox alerts) and names the top one the
+`identified_candidate`; the PDF report draws its 2D structure (RDKit) with
+SMILES + InChIKey, plus a ranked candidate table. A reasoning backend still
+proposes LLM analogs; offline, the generator is the deterministic path.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -29,8 +40,10 @@ versioned/hashed like any other artifact), and a copy is exported to
 - **Agents**:
   - `researcher_minion` — KnowledgePack from ProjectSpec + seed, plus optional
     delegation to a reasoning backend (Hermes subagent) for literature research.
-  - `designer_minion` — DesignBatch; deterministic labels, or real analog SMILES
-    from a reasoning backend when configured.
+  - `designer_minion` — DesignBatch. Offline: deterministic analog generation
+    via an RDKit transformation library (halogen swaps, homologation,
+    N-demethylation) — real new SMILES. With a reasoning backend: LLM-proposed
+    analog SMILES (hypothetical).
   - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
   - `predictor_minion` — ADMET/PK predictions through pluggable providers
     (default: deterministic `rule_admet` rules; `null_admet` for an explicit
@@ -70,7 +83,9 @@ versioned/hashed like any other artifact), and a copy is exported to
     `inferred`.
   - `report_minion` — aggregates a finished run into a structured Report
     (executive summary, per-stage findings, evidence-level breakdown, gaps,
-    next steps, caveats) and writes `finding` + `feedback` to project memory.
+    next steps, caveats), ranks the screening survivors by a deterministic
+    composite score, and names the top one the `identified_candidate`; also
+    writes `finding` + `feedback` to project memory.
   - `report_pdf_minion` — renders the finished run into a self-contained PDF in
     plain, verbose human language (narrative interpretation of every result,
     with figures only as auxiliary aids); runs last and persists the PDF as a

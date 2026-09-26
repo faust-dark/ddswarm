@@ -23,7 +23,7 @@ from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.memory import MemoryEntry
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
-from ..contracts.report import EvidenceBreakdown, Report, StageFinding
+from ..contracts.report import CandidateSelection, EvidenceBreakdown, Report, StageFinding
 from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.safety_assessment import SafetyAssessment
@@ -95,6 +95,8 @@ class ReportMinion(Agent):
         gaps = self._gaps(by_kind)
         next_steps = self._next_steps(gaps)
         caveats = self._caveats()
+        ranked = self._rank_survivors(by_kind)
+        identified = ranked[0] if ranked else None
 
         input_hash = hash_jsonable({
             kind: [a.model_dump(mode="json", exclude={"provenance", "run_id"}) for a in arts]
@@ -103,6 +105,7 @@ class ReportMinion(Agent):
         output_hash = hash_jsonable({
             "stage_findings": [s.model_dump() for s in stage_findings],
             "executive_summary": exec_summary, "gaps": gaps, "next_steps": next_steps,
+            "ranked_candidates": [c.model_dump() for c in ranked],
         })
 
         report = Report(
@@ -110,6 +113,7 @@ class ReportMinion(Agent):
             status=AgentResultStatus.success, run_status=run_status,
             executive_summary=exec_summary, stage_findings=stage_findings,
             evidence_breakdown=EvidenceBreakdown(**counts),
+            identified_candidate=identified, ranked_candidates=ranked,
             gaps=gaps, next_steps=next_steps, caveats=caveats,
             provenance=[ProvenanceEntry(
                 source="run aggregation", tool_versions=[TOOL],
@@ -346,4 +350,62 @@ class ReportMinion(Agent):
             for m in db.molecules:
                 if m.smiles and m.smiles not in out:
                     out.append(m.smiles)
+        return out
+
+    @staticmethod
+    def _rank_survivors(by_kind: dict[str, list]) -> list[CandidateSelection]:
+        """Rank screening survivors by a deterministic composite score over
+        their computed/predicted properties:
+
+            score = QED + BCS_bonus - 0.1*SA - 0.2*tox_alerts
+
+        BCS bonus: I=1.0, II/III=0.5, else 0.0. Missing properties use neutral
+        defaults (QED 0.0, SA 5.0, tox 0, BCS unknown). Ties broken by canonical
+        SMILES (lexicographic) so the ordering is always deterministic. The score
+        is a ranking aid, not experimental merit."""
+        survivors = ReportMinion._survivors(by_kind)
+        if not survivors:
+            return []
+
+        qed: dict[str, float] = {}
+        for ap in by_kind.get("admet_prediction", []):
+            for m in ap.molecules:
+                for ep in m.endpoints:
+                    if (ep.endpoint == "QED" and ep.prediction_status == "predicted"
+                            and ep.predicted_value is not None):
+                        qed[m.canonical_smiles] = ep.predicted_value
+        sa: dict[str, float] = {}
+        for rp in by_kind.get("retrosynthesis_plan", []):
+            for m in rp.molecules:
+                sa[m.canonical_smiles] = m.sa_score
+        tox: dict[str, int] = {}
+        for tp in by_kind.get("tox_profile", []):
+            for m in tp.molecules:
+                tox[m.canonical_smiles] = len(m.alerts)
+        bcs: dict[str, str] = {}
+        for fa in by_kind.get("formulation_assessment", []):
+            for m in fa.molecules:
+                bcs[m.canonical_smiles] = m.bcs_class
+
+        def bonus(b: str) -> float:
+            return 1.0 if b == "I" else (0.5 if b in ("II", "III") else 0.0)
+
+        scored: list[tuple[str, float, dict[str, str]]] = []
+        for smi in survivors:
+            q = qed.get(smi, 0.0)
+            s = sa.get(smi, 5.0)
+            t = tox.get(smi, 0)
+            b = bcs.get(smi, "unknown")
+            score = q + bonus(b) - 0.1 * s - 0.2 * t
+            crit = {"QED": f"{q:.2f}", "SA": f"{s:.2f}", "tox alerts": str(t), "BCS": b}
+            scored.append((smi, score, crit))
+
+        scored.sort(key=lambda x: (-x[1], x[0]))
+        out: list[CandidateSelection] = []
+        for rank, (smi, score, crit) in enumerate(scored, 1):
+            out.append(CandidateSelection(
+                rank=rank, smiles=smi, score=round(score, 4),
+                criteria=[f"{k}: {v}" for k, v in crit.items()],
+                rationale="composite = QED + BCS bonus - 0.1*SA - 0.2*tox alerts",
+            ))
         return out
