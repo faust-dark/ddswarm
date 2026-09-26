@@ -14,8 +14,9 @@ from ddswarm.contracts import (
     ReportDocument,
     StageFinding,
 )
+from ddswarm.contracts.docking_result import DockedPose, DockingResult
 from ddswarm.orchestrator import Runner, Store, TaskDefinition
-from ddswarm.reporting.pdf_render import render_report_pdf
+from ddswarm.reporting.pdf_render import _chart_docking, render_report_pdf
 
 
 def test_renderer_minimal(tmp_path):
@@ -65,3 +66,25 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert "Conclusion" in doc.sections
     assert "Evidence and confidence" in doc.sections
     assert "Identified candidate" in doc.sections
+
+
+def test_chart_docking_one_bar_per_molecule():
+    # Vina emits ~9 poses per ligand; the chart must collapse to ONE bar per
+    # molecule, or a 6x9=54-bar chart overflows the page (LayoutError).
+    import matplotlib.pyplot as plt
+
+    poses = []
+    for m in range(6):
+        for rank in range(9):
+            poses.append(DockedPose(molecule_id=f"mol_{m}", rank=rank + 1,
+                                    affinity_kcal_per_mol=-7.0 + m * 0.1 + rank * 0.01))
+    dr = DockingResult(project_id="p", status=AgentResultStatus.success, poses=poses)
+    fig = _chart_docking([dr])
+    try:
+        assert fig is not None
+        assert len(fig.axes[0].patches) == 6, "expected one bar per molecule"
+        # the collapsed chart must be short enough to fit a page (inches)
+        assert fig.get_size_inches()[1] < 4.0
+    finally:
+        if fig is not None:
+            plt.close(fig)

@@ -301,13 +301,18 @@ def _chart_sa(rps) -> Figure | None:
 
 
 def _chart_docking(drs) -> Figure | None:
-    items: list[tuple[str, float]] = []
+    # Collapse to the BEST pose per molecule: Vina emits several poses per
+    # ligand, so plotting every pose would build a 9x-taller bar chart that
+    # overflows the page (LayoutError). One bar per molecule, best affinity.
+    best: dict[str, float] = {}
     for dr in drs:
         for p in dr.poses:
             if p.affinity_kcal_per_mol is not None:
-                items.append((f"{p.molecule_id} · rank{p.rank}", p.affinity_kcal_per_mol))
-    if not items:
+                if p.molecule_id not in best or p.affinity_kcal_per_mol < best[p.molecule_id]:
+                    best[p.molecule_id] = p.affinity_kcal_per_mol
+    if not best:
         return None
+    items = sorted(best.items(), key=lambda kv: kv[1])  # best (most negative) first
     labels = [i[0] for i in items][::-1]
     vals = [i[1] for i in items][::-1]
     fig, ax = _new_fig(6.4, max(2.0, 0.28 * len(labels) + 1.0))
@@ -317,7 +322,7 @@ def _chart_docking(drs) -> Figure | None:
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=7)
     ax.set_xlabel("affinity (kcal/mol, lower is better)", fontsize=8)
-    ax.set_title("Docking affinity (calculated)", fontsize=10)
+    ax.set_title("Docking affinity — best pose per molecule (calculated)", fontsize=10)
     fig.tight_layout()
     return fig
 
@@ -416,10 +421,15 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         figure_count += 1
         w_in, h_in = f.get_size_inches()
         W = 15.5
+        H = W * (h_in / w_in)
+        MAX_H = 16.0  # cm cap so an over-tall chart still fits the page frame
+        if H > MAX_H:
+            W = W * (MAX_H / H)
+            H = MAX_H
         png = figdir / f"fig{figure_count}.png"
         f.savefig(png, dpi=150, bbox_inches="tight", facecolor="white")
         plt.close(f)
-        story.append(Image(str(png), width=W * cm, height=W * (h_in / w_in) * cm))
+        story.append(Image(str(png), width=W * cm, height=H * cm))
         story.append(Paragraph(_esc(caption), styles["caption"]))
 
     def mol_img(smiles: str, width_cm: float = 5.5, caption: str | None = None) -> None:
