@@ -101,3 +101,115 @@ def test_pk_parameters_backend_method(tmp_path):
     assert len(res.entries) == 1
     assert res.entries[0]["clearance_ml_min_kg"] == 12.0
     assert res.entries[0]["volume_of_distribution_l_kg"] == 4.5
+
+
+# ---- model complexity selection (one- vs two-compartment) ----
+
+def _two_comp_params():
+    return [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+             "central_volume_l_kg": 3.0, "intercompartmental_clearance_ml_min_kg": 10.0,
+             "peripheral_volume_l_kg": 7.0, "bioavailability": 0.9, "source": "DrugBank"}]
+
+
+def test_pk_two_compartment_mechanism_hint(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(adme_issue="extensive tissue distribution, biphasic kinetics")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": _two_comp_params()}
+    result = _run(store, spec, params)
+    assert result.status.value == "success"
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.model == "two_compartment"
+    assert s.selection_reason == "mechanism_hint"
+    assert s.distribution_half_life_hours == pytest.approx(1.435, abs=0.01)
+    assert s.half_life_hours == pytest.approx(16.28, abs=0.1)
+
+
+def test_pk_default_selection_is_one_compartment(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec()  # no mechanism/adme hint
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.model == "one_compartment"
+    assert s.selection_reason == "default"
+    assert s.selection_metrics is None
+
+
+def test_pk_data_driven_selects_two_compartment(tmp_path):
+    import math
+    from ddswarm.chemistry.pkpd import simulate_two_compartment
+
+    # observed data generated from a genuinely biphasic (two-compartment) curve
+    r = simulate_two_compartment(dose_mg=10.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                 intercompartmental_clearance_ml_min_kg=10.0, v2_l_kg=7.0)
+    obs_times = [0.1, 0.2, 0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 12.0]
+    observed = [
+        {"molecule_id": "m1", "time_hours": t,
+         "concentration_mg_l": r.a_coefficient * math.exp(-r.alpha_per_hour * t)
+         + r.b_coefficient * math.exp(-r.beta_per_hour * t)}
+        for t in obs_times
+    ]
+    # both model families are feasible (1-comp via Vd = V1+V2, 2-comp via V1/Q/V2)
+    params = {
+        "molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+        "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                           "volume_of_distribution_l_kg": 10.0,
+                           "central_volume_l_kg": 3.0,
+                           "intercompartmental_clearance_ml_min_kg": 10.0,
+                           "peripheral_volume_l_kg": 7.0, "bioavailability": 1.0}],
+        "observed_concentrations": observed,
+    }
+    result = _run(Store(tmp_path), _spec(), params)
+    cs = _load(Store(tmp_path), result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.model == "two_compartment"
+    assert s.selection_reason == "data_driven"
+    assert s.selection_metrics is not None
+    assert s.selection_metrics.residual_sum_of_squares == 0.0  # observed == 2-comp curve
+    assert "perfect fit" in s.selection_metrics.identifiability_note
+
+
+# ---- PD Emax/Hill ----
+
+def _pd_params(hill=None):
+    p = {"molecule_id": "m1", "baseline_effect": 0.0, "max_effect": 100.0,
+         "ec50_mg_l": 0.02, "source": "literature"}
+    if hill is not None:
+        p["hill_coefficient"] = hill
+    return [p]
+
+
+def test_pd_emax(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(mechanism_of_action="direct receptor agonist")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9}],
+              "pd_parameters": _pd_params(), "pd_model": "emax"}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    assert cs.summary.pd_simulated == 1
+    pd = cs.pd_simulations[0]
+    assert pd.model == "emax"
+    assert pd.selection_reason == "mechanism_hint"
+    assert len(pd.effect_curve) == 9
+    # effect saturates toward Emax at high concentration (Cmax ~0.0286 >> EC50 0.02)
+    assert pd.effect_curve[0].effect > 50.0
+
+
+def test_pd_hill(tmp_path):
+    store = Store(tmp_path)
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9}],
+              "pd_parameters": _pd_params(hill=1.2), "pd_model": "hill"}
+    result = _run(store, _spec(), params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    pd = cs.pd_simulations[0]
+    assert pd.model == "hill"
+    assert pd.parameters.hill_coefficient == 1.2

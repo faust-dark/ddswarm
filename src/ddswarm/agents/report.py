@@ -213,7 +213,7 @@ class ReportMinion(Agent):
             for e in ca.entries:
                 c[e.evidence_level.value] += 1
         for cs in by_kind.get("clinical_simulation", []):
-            c["calculated"] += len(cs.simulations)  # one-compartment model is deterministic math
+            c["calculated"] += len(cs.simulations) + len(cs.pd_simulations)  # deterministic math
         for ra in by_kind.get("regulatory_assessment", []):
             for e in ra.entries:
                 c[e.evidence_level.value] += 1
@@ -282,10 +282,12 @@ class ReportMinion(Agent):
         if css:
             sim = sum(c.summary.simulated for c in css)
             tot = sum(c.summary.total_molecules for c in css)
-            t12s = [f"{s.molecule_id}: t1/2 {s.half_life_hours}h"
+            pds = sum(c.summary.pd_simulated for c in css)
+            t12s = [f"{s.molecule_id}: {s.model} t1/2 {s.half_life_hours}h"
                     for c in css for s in c.simulations[:2]]
-            parts.append(f"PK/PD {sim}/{tot} simulated (one-compartment"
-                         + (f"; {', '.join(t12s)})" if t12s else ")"))
+            parts.append(f"PK/PD {sim}/{tot} PK simulated"
+                         + (f" ({', '.join(t12s)})" if t12s else "")
+                         + (f", {pds} PD" if pds else ""))
         ras = by_kind.get("regulatory_assessment", [])
         if ras:
             parts.append(f"regulatory {sum(r.summary.total_entries for r in ras)} findings")
@@ -359,7 +361,7 @@ class ReportMinion(Agent):
             "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
             "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
-            "PK/PD simulations are a one-compartment model on predicted/inferred parameters — not measured human pharmacokinetics.",
+            "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred parameters — not measured human pharmacokinetics.",
         ]
 
     @staticmethod

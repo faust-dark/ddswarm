@@ -27,6 +27,11 @@
           "default": 0,
           "title": "Insufficient Inputs",
           "type": "integer"
+        },
+        "pd_simulated": {
+          "default": 0,
+          "title": "Pd Simulated",
+          "type": "integer"
         }
       },
       "title": "ClinicalSimulationSummary",
@@ -48,6 +53,260 @@
         "concentration_mg_l"
       ],
       "title": "ConcentrationPoint",
+      "type": "object"
+    },
+    "EffectPoint": {
+      "properties": {
+        "time_hours": {
+          "title": "Time Hours",
+          "type": "number"
+        },
+        "effect": {
+          "title": "Effect",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_hours",
+        "effect"
+      ],
+      "title": "EffectPoint",
+      "type": "object"
+    },
+    "ModelSelectionMetrics": {
+      "properties": {
+        "n_observations": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "N Observations"
+        },
+        "n_parameters": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "N Parameters"
+        },
+        "residual_sum_of_squares": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Residual Sum Of Squares"
+        },
+        "aic": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Aic"
+        },
+        "bic": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bic"
+        },
+        "identifiability_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifiability Note"
+        }
+      },
+      "title": "ModelSelectionMetrics",
+      "type": "object"
+    },
+    "PDParameters": {
+      "properties": {
+        "baseline_effect": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Baseline Effect"
+        },
+        "max_effect": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Effect"
+        },
+        "ec50_mg_l": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ec50 Mg L"
+        },
+        "hill_coefficient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hill Coefficient"
+        },
+        "source": {
+          "default": "not_available",
+          "enum": [
+            "predicted",
+            "inferred",
+            "user",
+            "derived",
+            "not_available"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Ref"
+        }
+      },
+      "title": "PDParameters",
+      "type": "object"
+    },
+    "PDSimulation": {
+      "properties": {
+        "molecule_id": {
+          "title": "Molecule Id",
+          "type": "string"
+        },
+        "canonical_smiles": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Smiles"
+        },
+        "model": {
+          "default": "emax",
+          "enum": [
+            "emax",
+            "hill",
+            "indirect_response",
+            "effect_compartment",
+            "receptor_occupancy"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "parameters": {
+          "$ref": "#/$defs/PDParameters"
+        },
+        "effect_curve": {
+          "items": {
+            "$ref": "#/$defs/EffectPoint"
+          },
+          "title": "Effect Curve",
+          "type": "array"
+        },
+        "selection_reason": {
+          "default": "default",
+          "enum": [
+            "mechanism_hint",
+            "data_driven",
+            "default"
+          ],
+          "title": "Selection Reason",
+          "type": "string"
+        },
+        "selection_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelSelectionMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "molecule_id"
+      ],
+      "title": "PDSimulation",
       "type": "object"
     },
     "PKParameters": {
@@ -99,6 +358,42 @@
           ],
           "default": null,
           "title": "Half Life Hours"
+        },
+        "central_volume_l_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Central Volume L Kg"
+        },
+        "intercompartmental_clearance_ml_min_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Intercompartmental Clearance Ml Min Kg"
+        },
+        "peripheral_volume_l_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peripheral Volume L Kg"
         },
         "source": {
           "default": "not_available",
@@ -155,6 +450,19 @@
           "title": "Route",
           "type": "string"
         },
+        "model": {
+          "default": "one_compartment",
+          "enum": [
+            "one_compartment",
+            "two_compartment",
+            "multi_compartment",
+            "well_stirred",
+            "blood_flow_limited",
+            "permeability_limited"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
         "parameters": {
           "$ref": "#/$defs/PKParameters"
         },
@@ -181,6 +489,30 @@
           ],
           "default": null,
           "title": "Half Life Hours"
+        },
+        "alpha_per_hour": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alpha Per Hour"
+        },
+        "distribution_half_life_hours": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distribution Half Life Hours"
         },
         "cmax_mg_l": {
           "anyOf": [
@@ -213,10 +545,26 @@
           "title": "Concentration Curve",
           "type": "array"
         },
-        "model": {
-          "default": "one-compartment, instant absorption",
-          "title": "Model",
+        "selection_reason": {
+          "default": "default",
+          "enum": [
+            "mechanism_hint",
+            "data_driven",
+            "default"
+          ],
+          "title": "Selection Reason",
           "type": "string"
+        },
+        "selection_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelSelectionMetrics"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "note": {
           "anyOf": [
@@ -401,6 +749,13 @@
         "$ref": "#/$defs/PKSimulation"
       },
       "title": "Simulations",
+      "type": "array"
+    },
+    "pd_simulations": {
+      "items": {
+        "$ref": "#/$defs/PDSimulation"
+      },
+      "title": "Pd Simulations",
       "type": "array"
     },
     "summary": {

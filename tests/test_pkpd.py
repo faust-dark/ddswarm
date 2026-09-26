@@ -4,7 +4,15 @@ import math
 
 import pytest
 
-from ddswarm.chemistry.pkpd import DEFAULT_TIMES, resolve_cl_vd, simulate_one_compartment
+from ddswarm.chemistry.pkpd import (
+    DEFAULT_TIMES,
+    emax_effect,
+    fit_metrics,
+    hill_effect,
+    resolve_cl_vd,
+    simulate_one_compartment,
+    simulate_two_compartment,
+)
 
 
 def test_one_compartment_known_values():
@@ -69,3 +77,82 @@ def test_resolve_cl_vd_combinations():
 def test_resolve_cl_vd_rejects_nonpositive():
     assert resolve_cl_vd(half_life_hours=0.0, volume_of_distribution_l_kg=4.5) is None
     assert resolve_cl_vd(half_life_hours=-1.0, clearance_ml_min_kg=12.0) is None
+
+
+def test_two_compartment_known_values():
+    r = simulate_two_compartment(dose_mg=10.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                 intercompartmental_clearance_ml_min_kg=10.0, v2_l_kg=7.0)
+    assert r.k10_per_hour == pytest.approx(0.24, abs=1e-9)
+    assert r.k12_per_hour == pytest.approx(0.2, abs=1e-9)
+    assert r.k21_per_hour == pytest.approx(10 * 0.06 / 7.0, abs=1e-9)
+    assert r.alpha_per_hour == pytest.approx(0.4831, abs=1e-3)
+    assert r.beta_per_hour == pytest.approx(0.04258, abs=1e-4)
+    assert r.terminal_half_life_hours == pytest.approx(16.28, abs=0.05)
+    assert r.distribution_half_life_hours == pytest.approx(1.435, abs=0.01)
+    # cmax at t=0 equals C1(0) = F*D/(V1*W)
+    assert r.cmax_mg_l == pytest.approx(10.0 / (3.0 * 70.0), abs=1e-6)
+    # AUC == D/CL_total (mass balance)
+    assert r.auc_mg_h_l == pytest.approx(10.0 / (12.0 * 70.0 * 0.06), abs=1e-3)
+    # A + B = C1(0)
+    assert r.a_coefficient + r.b_coefficient == pytest.approx(r.cmax_mg_l, abs=1e-6)
+
+
+def test_two_compartment_curve_matches_analytic():
+    r = simulate_two_compartment(dose_mg=10.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                 intercompartmental_clearance_ml_min_kg=10.0, v2_l_kg=7.0)
+    import math
+    for t, c in r.curve:
+        expect = r.a_coefficient * math.exp(-r.alpha_per_hour * t) + \
+                 r.b_coefficient * math.exp(-r.beta_per_hour * t)
+        assert c == pytest.approx(expect, abs=1e-9)
+
+
+def test_two_compartment_rejects_nonpositive():
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        simulate_two_compartment(dose_mg=0.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                 intercompartmental_clearance_ml_min_kg=10.0, v2_l_kg=7.0)
+
+
+def test_emax_effect():
+    assert emax_effect(0.0, 0.0, 100.0, 0.02) == 0.0
+    assert emax_effect(0.02, 0.0, 100.0, 0.02) == pytest.approx(50.0, abs=1e-9)
+    assert emax_effect(1000.0, 0.0, 100.0, 0.02) == pytest.approx(100.0, abs=0.01)
+    # baseline offset
+    assert emax_effect(0.02, 10.0, 100.0, 0.02) == pytest.approx(60.0, abs=1e-9)
+
+
+def test_hill_effect():
+    # n=1 reduces to Emax
+    assert hill_effect(0.02, 0.0, 100.0, 0.02, 1.0) == pytest.approx(50.0, abs=1e-9)
+    # n=2 at C=EC50 gives half Emax
+    assert hill_effect(0.02, 0.0, 100.0, 0.02, 2.0) == pytest.approx(50.0, abs=1e-9)
+    assert hill_effect(0.0, 0.0, 100.0, 0.02, 2.0) == 0.0
+    with pytest.raises(ValueError):
+        hill_effect(0.02, 0.0, 100.0, 0.02, 0.0)
+
+
+def test_fit_metrics_perfect_fit():
+    m = fit_metrics([(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)], lambda t: t, n_parameters=1)
+    assert m["residual_sum_of_squares"] == 0.0
+    assert "perfect fit" in m["identifiability_note"]
+
+
+def test_fit_metrics_aic_bic_and_identifiability():
+    m = fit_metrics([(0.0, 1.0), (1.0, 1.0), (2.0, 1.0)], lambda t: 0.0, n_parameters=2)
+    assert m["residual_sum_of_squares"] == pytest.approx(3.0, abs=1e-9)
+    # n=3, rss=3 -> rss/n=1 -> ln(1)=0 -> aic = 2*(2+1) = 6, bic = 3*ln(3)
+    assert m["aic"] == pytest.approx(6.0, abs=1e-9)
+    assert m["bic"] == pytest.approx(3.0 * math.log(3.0), abs=1e-9)
+    assert m["identifiability_note"].startswith("identifiable")
+
+
+def test_fit_metrics_underidentified():
+    m = fit_metrics([(0.0, 1.0), (1.0, 1.0)], lambda t: 0.0, n_parameters=3)
+    assert "under-identified" in m["identifiability_note"]
+
+
+def test_fit_metrics_empty():
+    m = fit_metrics([], lambda t: 0.0, n_parameters=1)
+    assert m["n_observations"] == 0
+    assert "no observations" in m["identifiability_note"]

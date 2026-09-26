@@ -842,15 +842,44 @@ def _narrative_clinical_simulation(css, para) -> None:
                "derived": "derived", "predicted": "predicted"}
     for cs in css:
         for s in cs.simulations:
-            para(
-                f"{s.molecule_id}: one-compartment PK model at {s.dose_mg:g} mg {s.route} "
-                f"({src_txt.get(s.parameters.source, s.parameters.source)} clearance "
-                f"{s.parameters.clearance_ml_min_kg:g} mL/min/kg, Vd "
-                f"{s.parameters.volume_of_distribution_l_kg:g} L/kg, F "
-                f"{s.parameters.bioavailability:g}) gives half-life t1/2 = "
-                f"{s.half_life_hours:g} h, Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = "
-                f"{s.auc_mg_h_l:.3f} mg*h/L. This is a model, not measured human PK."
-            )
+            src = src_txt.get(s.parameters.source, s.parameters.source)
+            if s.model == "two_compartment":
+                para(
+                    f"{s.molecule_id}: two-compartment PK model at {s.dose_mg:g} mg {s.route} "
+                    f"({src} clearance {s.parameters.clearance_ml_min_kg:g} mL/min/kg, "
+                    f"V1 {s.parameters.central_volume_l_kg:g} L/kg, "
+                    f"Q {s.parameters.intercompartmental_clearance_ml_min_kg:g} mL/min/kg, "
+                    f"V2 {s.parameters.peripheral_volume_l_kg:g} L/kg) gives distribution "
+                    f"t1/2 = {s.distribution_half_life_hours:g} h, terminal t1/2 = "
+                    f"{s.half_life_hours:g} h, Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = "
+                    f"{s.auc_mg_h_l:.3f} mg*h/L."
+                )
+            else:
+                para(
+                    f"{s.molecule_id}: one-compartment PK model at {s.dose_mg:g} mg {s.route} "
+                    f"({src} clearance {s.parameters.clearance_ml_min_kg:g} mL/min/kg, Vd "
+                    f"{s.parameters.volume_of_distribution_l_kg:g} L/kg, F "
+                    f"{s.parameters.bioavailability:g}) gives half-life t1/2 = "
+                    f"{s.half_life_hours:g} h, Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = "
+                    f"{s.auc_mg_h_l:.3f} mg*h/L."
+                )
+            if s.selection_reason != "default":
+                reason = {"mechanism_hint": "a mechanism hint", "data_driven": "goodness-of-fit "
+                          "(AIC/BIC/RSS against observed data)"}[s.selection_reason]
+                extra = ""
+                if s.selection_metrics and s.selection_metrics.bic is not None:
+                    extra = f" (BIC {s.selection_metrics.bic:.1f}, "
+                    f"{s.selection_metrics.identifiability_note})"
+                para(f"Model complexity selected by {reason}{extra}.")
+            para("This is a model, not measured human PK.")
+        for pd in cs.pd_simulations:
+            if pd.model in ("emax", "hill"):
+                hill = f", Hill n {pd.parameters.hill_coefficient:g}" if pd.model == "hill" else ""
+                para(
+                    f"{pd.molecule_id}: {pd.model} PD model (E0 {pd.parameters.baseline_effect:g}, "
+                    f"Emax {pd.parameters.max_effect:g}, EC50 {pd.parameters.ec50_mg_l:g}"
+                    f"{hill}) applied to the PK concentration curve — a direct-effect model."
+                )
     tot = sum(c.summary.total_molecules for c in css)
     sim = sum(c.summary.simulated for c in css)
     ins = sum(c.summary.insufficient_inputs for c in css)

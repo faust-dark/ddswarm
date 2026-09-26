@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 14: deterministic PK/PD + Hermes reasoning by default)
+# ddswarm — drug discovery multi-agent swarm (Increment 15: PK/PD model selection + PD models)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -60,6 +60,25 @@ input now carries `mechanism_of_action`, `indication`, `existing_drugs`,
 swarm workflow schema's primary-input fields. **Hermes reasoning is now the
 default** (`reasoning.backend` defaults to `hermes`); `--reasoning none` opts
 out.
+
+**Increment 15** adds PK/PD model *complexity selection* and mechanism-based PD
+models, per the schema's 7C requirement to not assume the simplest model is
+correct:
+
+- **PK**: `one_compartment` (existing) + `two_compartment` (new; analytic
+  biexponential solution with distribution α / terminal β half-lives, V1/Q/V2).
+- **PD**: `emax` and `hill` (sigmoid-Emax) direct-effect models on the PK
+  concentration curve.
+- **Model selection** is two-level: `mechanism_hint` (explicit
+  `params.pk_model`/`params.pd_model`, or a documented keyword match against
+  `mechanism_of_action`/`adme_issue`), then `data_driven` (goodness-of-fit
+  RSS/AIC/BIC + a parameter-identifiability note against supplied observed
+  concentration/effect data), else a labelled `default` (never claimed as
+  validated). Parameters (V1/Q/V2, Emax/EC50/Hill-n) come from `params`
+  (user) or LLM recall (inferred); the math is always `calculated`.
+- `indirect_response`, `effect_compartment`, `receptor_occupancy` PD models and
+  the tissue/organ PBPK models (well-stirred, blood-flow-limited,
+  permeability-limited) are deferred to later increments.
 
 ## Architecture
 
