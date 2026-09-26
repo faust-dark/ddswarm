@@ -652,10 +652,17 @@ def _narrative_research(kps, para) -> None:
 
 def _narrative_design(dbs, para) -> None:
     n = sum(len(d.molecules) for d in dbs)
-    para(f"Design produced {n} candidate molecule(s). Without a reasoning backend these are "
-         "labelled transformations of the starting scaffold (bioisostere, homologation, and "
-         "analog-design labels) rather than genuinely new chemical structures; a reasoning backend "
-         "would generate concrete analog SMILES with rationales.")
+    real = sum(1 for d in dbs for m in d.molecules if m.transformation)
+    if real:
+        para(f"Design produced {n} candidate molecule(s) via a deterministic RDKit "
+             f"transformation library ({real} genuinely new analog structure(s) — halogen "
+             f"swap, homologation, N-demethylation). A reasoning backend would add further "
+             f"LLM-proposed analogs with rationales.")
+    else:
+        para(f"Design produced {n} candidate molecule(s). With no reasoning backend and no "
+             f"applicable deterministic transformation, these are label-only designs of the "
+             f"starting scaffold; a reasoning backend would generate concrete analog SMILES "
+             f"with rationales.")
 
 
 def _narrative_screening(sbs, para, fig) -> None:
