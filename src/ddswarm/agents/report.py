@@ -30,6 +30,7 @@ from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.tox_profile import ToxProfile
 from ..logging.hashing import hash_jsonable
+from ..chemistry.iupac import fetch_iupac_name
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
 
@@ -96,6 +97,14 @@ class ReportMinion(Agent):
         next_steps = self._next_steps(gaps)
         caveats = self._caveats()
         ranked = self._rank_survivors(by_kind)
+        # Opt-in IUPAC readability labels (network service; non-deterministic).
+        iupac_enabled = bool(ctx.params.get("iupac"))
+        if iupac_enabled and ranked:
+            for c in ranked:
+                c.iupac_name = fetch_iupac_name(c.smiles)
+            caveats.append("IUPAC names were fetched from the NIH CACTUS web service — "
+                           "readability-only, non-deterministic (network + third-party), "
+                           "not authoritative.")
         identified = ranked[0] if ranked else None
 
         input_hash = hash_jsonable({
@@ -105,7 +114,9 @@ class ReportMinion(Agent):
         output_hash = hash_jsonable({
             "stage_findings": [s.model_dump() for s in stage_findings],
             "executive_summary": exec_summary, "gaps": gaps, "next_steps": next_steps,
-            "ranked_candidates": [c.model_dump() for c in ranked],
+            # iupac_name is a network-fetched readability label -> excluded so the
+            # report hash stays deterministic across runs.
+            "ranked_candidates": [c.model_dump(exclude={"iupac_name"}) for c in ranked],
         })
 
         report = Report(

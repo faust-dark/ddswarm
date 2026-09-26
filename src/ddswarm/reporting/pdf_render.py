@@ -533,6 +533,9 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
                     caption="Identified lead candidate (2D structure).")
             ik = _inchikey(cand.smiles)
             para(f"SMILES: {cand.smiles}" + (f"  ·  InChIKey: {ik}" if ik else ""))
+            if cand.iupac_name:
+                para(f"IUPAC name (via NIH CACTUS web service — readability-only, "
+                     f"not authoritative): {cand.iupac_name}")
             if cand.criteria:
                 para("Ranking criteria: " + "; ".join(cand.criteria) + ".")
             if len(report.ranked_candidates) > 1:

@@ -161,6 +161,10 @@ def cmd_run(args) -> int:
 
     tasks = req.tasks or list(DEFAULT_PIPELINE)
     tasks = _inject_reasoning(list(tasks), req.reasoning)
+    if args.iupac:
+        for t in tasks:
+            if t.agent == "report_minion":
+                t.params["iupac"] = True
 
     store = Store(args.store)
     runner = Runner(store, build_agents(store))
@@ -256,6 +260,8 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("project_file")
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
                     help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
+    pr.add_argument("--iupac", action="store_true",
+                    help="fetch IUPAC names (NIH CACTUS web service) for the ranked candidates as a readability label (non-deterministic)")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
                     help="directory to copy the exported PDF into (default: <repo>/reports)")

@@ -121,3 +121,48 @@ def test_researcher_consumes_finding(tmp_path):
     mem_entries = [e for e in kp.entries if e.source == "project memory"]
     assert len(mem_entries) == 1
     assert mem_entries[0].evidence_level.value == "inferred"
+
+
+def test_report_iupac_opt_in(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    tasks = [
+        TaskDefinition(task_id="research", agent="researcher_minion", params={"seed_entries": []}),
+        TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
+        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"]),
+        TaskDefinition(task_id="predict", agent="predictor_minion", depends_on=["screen"],
+                       params={"providers": ["null_admet"]}),
+        TaskDefinition(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
+        TaskDefinition(task_id="tox", agent="tox_minion", depends_on=["screen"]),
+        TaskDefinition(task_id="report", agent="report_minion",
+                       depends_on=["predict", "retrosynth", "tox"], params={"iupac": True}),
+    ]
+    monkeypatch.setattr("ddswarm.agents.report.fetch_iupac_name",
+                        lambda smi: f"IUPAC({smi})")
+    runner = Runner(store, _agents(store))
+    manifest = runner.create_run(_spec(), tasks)
+    final = runner.run(manifest.run_id, project_id="p")
+    assert final.status.value == "completed"
+
+    res = store.load_latest_agent_result("p", manifest.run_id, "report")
+    report = store.load_artifact(res.artifacts[0].uri, Report)
+    assert report.identified_candidate is not None
+    assert report.identified_candidate.iupac_name == f"IUPAC({report.identified_candidate.smiles})"
+    assert any("NIH CACTUS" in c for c in report.caveats)
+
+
+def test_report_iupac_off_by_default(tmp_path, monkeypatch):
+    called = []
+
+    def spy(smi):
+        called.append(smi)
+        return "should-not-be-fetched"
+
+    store = Store(tmp_path)
+    monkeypatch.setattr("ddswarm.agents.report.fetch_iupac_name", spy)
+    runner = Runner(store, _agents(store))
+    manifest = runner.create_run(_spec(), _tasks())
+    runner.run(manifest.run_id, project_id="p")
+    res = store.load_latest_agent_result("p", manifest.run_id, "report")
+    report = store.load_artifact(res.artifacts[0].uri, Report)
+    assert report.identified_candidate.iupac_name is None
+    assert called == []

@@ -12,7 +12,7 @@
       "type": "string"
     },
     "CandidateSelection": {
-      "description": "One ranked candidate from the survivor set. The score is a deterministic\ncomposite over the candidate's computed/predicted properties (see\nReportMinion._rank_survivors); it is a ranking aid, not experimental merit.",
+      "description": "One ranked candidate from the survivor set. The score is a deterministic\ncomposite over the candidate's computed/predicted properties (see\nReportMinion._rank_survivors); it is a ranking aid, not experimental merit.\n\n`iupac_name` is an optional, HUMAN-READABILITY label fetched from the NIH\nCACTUS web service when the run opts in (`--iupac`). It is non-deterministic\n(network + third-party), NOT authoritative, and excluded from the report's\noutput hash \u2014 canonical SMILES + InChIKey remain the identifiers.",
       "properties": {
         "rank": {
           "title": "Rank",
@@ -44,6 +44,18 @@
           ],
           "default": null,
           "title": "Rationale"
+        },
+        "iupac_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Iupac Name"
         }
       },
       "required": [

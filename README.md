@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 12: synthesis pathway + readable report)
+# ddswarm — drug discovery multi-agent swarm (Increment 13: IUPAC readability labels)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -38,6 +38,13 @@ disconnection" for fused/aromatic scaffolds) — alongside the SA score. The PDF
 report labels every stage as "Stage — agent" (e.g. "Synthesis —
 retrosynthesis_minion"), and the Methodology section lists, in plain language,
 what each agent does.
+
+**Increment 13** adds an opt-in **IUPAC name** as a human-readability label
+alongside the canonical identifiers. SMILES + InChIKey remain the machine
+backbone (every compute step consumes SMILES); the IUPAC name is fetched only
+when asked for, from the NIH CACTUS web service (`--iupac`), and is clearly
+marked non-deterministic + non-authoritative — it is excluded from the report's
+reproducibility hash.
 
 ## Architecture
 
@@ -337,7 +344,7 @@ The `ddswarm` console script runs a whole pipeline from one versioned file:
 ```bash
 ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
     --targets "EGFR" --smiles "COC1=..."       # scaffold (default pipeline)
-ddswarm run project.json [--reasoning none|hermes] [--store ./store] [--reports-dir reports/]
+ddswarm run project.json [--reasoning none|hermes] [--iupac] [--store ./store] [--reports-dir reports/]
 ddswarm runs [project_id]                       # list runs
 ddswarm report project_id [run_id]              # per-task report
 ddswarm memory project_id                       # cross-run conclusions
@@ -363,6 +370,13 @@ the knowledge agents return `insufficient_evidence` (they have no offline
 baseline). LLM-contributed entries are forced to `evidence_level`
 `inferred`/`hypothetical` and tagged "verify against primary source", because a
 recalled PubChem ID or patent number is not experimental evidence.
+
+`--iupac` fetches IUPAC names for the ranked candidates from the NIH CACTUS web
+service and prints them in the report as a readability label (alongside the 2D
+structure, SMILES and InChIKey). It is opt-in because it is network-dependent
+and third-party: the names are non-deterministic across time and not
+authoritative, so they are excluded from the report's reproducibility hash.
+Canonical SMILES + InChIKey remain the identifiers of record.
 
 ## Run
 

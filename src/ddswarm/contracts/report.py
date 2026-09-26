@@ -34,13 +34,19 @@ class EvidenceBreakdown(BaseModel):
 class CandidateSelection(BaseModel):
     """One ranked candidate from the survivor set. The score is a deterministic
     composite over the candidate's computed/predicted properties (see
-    ReportMinion._rank_survivors); it is a ranking aid, not experimental merit."""
+    ReportMinion._rank_survivors); it is a ranking aid, not experimental merit.
+
+    `iupac_name` is an optional, HUMAN-READABILITY label fetched from the NIH
+    CACTUS web service when the run opts in (`--iupac`). It is non-deterministic
+    (network + third-party), NOT authoritative, and excluded from the report's
+    output hash — canonical SMILES + InChIKey remain the identifiers."""
 
     rank: int
     smiles: str
     score: float
     criteria: list[str] = Field(default_factory=list)
     rationale: str | None = None
+    iupac_name: str | None = None
 
 
 class Report(BaseModel):
