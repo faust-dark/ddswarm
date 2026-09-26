@@ -36,7 +36,9 @@ from .docking_result import (
     SearchBox,
 )
 from .dynamics_result import DynamicsResult, DynamicsSummary, MdMetrics, MdProtocol, MdRun
+from .execution_plan import ConvergenceConfig, ExecutionPlan, PlanStage
 from .formulation_assessment import FormulationAssessment, FormulationSummary, MoleculeFormulation
+from .generation_memory import GenerationCandidate, GenerationMemory
 from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
 from .enums import (
     AgentResultStatus,
@@ -52,6 +54,11 @@ from .memory import MemoryEntry, ProjectMemory
 from .patent_landscape import PatentEntry, PatentLandscape, PatentSummary
 from .project_spec import ProjectSpec
 from .regulatory_assessment import RegulatoryAssessment, RegulatoryFinding, RegulatorySummary
+from .regulatory_checklist import (
+    RegulatoryChecklist,
+    RegulatoryChecklistEntry,
+    RegulatoryChecklistSummary,
+)
 from .provenance import (
     ArtifactRef,
     InputRef,
@@ -93,6 +100,7 @@ __all__ = [
     "ClinicalSimulationSummary",
     "ClinicalSummary",
     "ConcentrationPoint",
+    "ConvergenceConfig",
     "EffectPoint",
     "DesignBatch",
     "DockedPose",
@@ -104,8 +112,11 @@ __all__ = [
     "EventLog",
     "EvidenceBreakdown",
     "EvidenceLevel",
+    "ExecutionPlan",
     "FormulationAssessment",
     "FormulationSummary",
+    "GenerationCandidate",
+    "GenerationMemory",
     "InputRef",
     "InputType",
     "KnowledgePack",
@@ -127,6 +138,7 @@ __all__ = [
     "PatentEntry",
     "PatentLandscape",
     "PatentSummary",
+    "PlanStage",
     "ProjectMemory",
     "ReceptorInfo",
     "ReceptorQCCheck",
@@ -153,6 +165,9 @@ __all__ = [
     "ProvenanceEntry",
     "ReasoningConfig",
     "RegulatoryAssessment",
+    "RegulatoryChecklist",
+    "RegulatoryChecklistEntry",
+    "RegulatoryChecklistSummary",
     "RegulatoryFinding",
     "RegulatorySummary",
     "RunManifest",

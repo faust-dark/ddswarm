@@ -19,13 +19,16 @@ from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
+from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
+from ..contracts.generation_memory import GenerationMemory
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.memory import MemoryEntry
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.report import CandidateSelection, EvidenceBreakdown, Report, StageFinding
 from ..contracts.regulatory_assessment import RegulatoryAssessment
+from ..contracts.regulatory_checklist import RegulatoryChecklist
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
@@ -52,6 +55,9 @@ _KIND_MODELS: dict[str, type] = {
     "clinical_assessment": ClinicalAssessment,
     "clinical_simulation": ClinicalSimulation,
     "regulatory_assessment": RegulatoryAssessment,
+    "regulatory_checklist": RegulatoryChecklist,
+    "execution_plan": ExecutionPlan,
+    "generation_memory": GenerationMemory,
 }
 
 
@@ -218,6 +224,9 @@ class ReportMinion(Agent):
         for ra in by_kind.get("regulatory_assessment", []):
             for e in ra.entries:
                 c[e.evidence_level.value] += 1
+        for rc in by_kind.get("regulatory_checklist", []):
+            for e in rc.entries:
+                c[e.evidence_level.value] += 1
         return c
 
     @staticmethod
@@ -292,6 +301,19 @@ class ReportMinion(Agent):
         ras = by_kind.get("regulatory_assessment", [])
         if ras:
             parts.append(f"regulatory {sum(r.summary.total_entries for r in ras)} findings")
+        rcs = by_kind.get("regulatory_checklist", [])
+        if rcs:
+            s = rcs[0].summary
+            parts.append(f"regulatory 7D {s.ok} ok/{s.flag} flag/{s.unknown} unknown/{s.na} na")
+        plans = by_kind.get("execution_plan", [])
+        if plans:
+            p = plans[0]
+            parts.append(f"plan generation {p.generation}/{p.convergence.max_generations}, "
+                         f"{len(p.stages)} stages")
+        gms = by_kind.get("generation_memory", [])
+        if gms:
+            parts.append(f"generation memory {len(gms[0].best_candidates)} best/"
+                         f"{len(gms[0].avoided)} avoid")
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."
@@ -319,6 +341,8 @@ class ReportMinion(Agent):
             gaps.append("no PK/PD simulation (insufficient PK inputs: clearance+Vd via params or reasoning recall)")
         if "regulatory_assessment" not in by_kind:
             gaps.append("no regulatory assessment (opt-in; needs reasoning.backend=hermes)")
+        if "regulatory_checklist" not in by_kind:
+            gaps.append("no 7D regulatory checklist (opt-in; needs reasoning.backend=hermes)")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")

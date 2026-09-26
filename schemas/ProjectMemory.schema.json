@@ -27,7 +27,8 @@
             "decision",
             "lesson",
             "constraint",
-            "feedback"
+            "feedback",
+            "generation"
           ],
           "title": "Kind",
           "type": "string"

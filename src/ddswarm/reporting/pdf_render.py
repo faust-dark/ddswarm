@@ -51,25 +51,10 @@ EVIDENCE_COLORS = {
 }
 
 # Human-facing stage label + one-line role for each agent, used to label report
-# sections clearly and explain what each agent does.
-AGENT_LABELS: dict[str, tuple[str, str]] = {
-    "researcher_minion": ("Research", "gathers what is already known about the target and starting molecule"),
-    "designer_minion": ("Design", "proposes new analog molecules (deterministic RDKit library, or LLM with a reasoning backend)"),
-    "screener_minion": ("Screening", "filters molecules by drug-likeness and structural liabilities (PAINS is hard, Brenk advisory)"),
-    "predictor_minion": ("ADMET prediction", "estimates ADMET properties from five published rules"),
-    "retrosynthesis_minion": ("Synthesis", "scores synthetic accessibility and proposes a theoretical retrosynthetic disconnection"),
-    "tox_minion": ("Toxicity", "flags structural toxicophore alerts (predicted liabilities, not observed toxicity)"),
-    "formulation_minion": ("Formulation", "estimates developability — solubility, permeability, and BCS class"),
-    "docking_minion": ("Docking", "docks candidates into the receptor and reports predicted affinity (opt-in)"),
-    "dynamics_minion": ("Receptor MD", "runs a short receptor molecular-dynamics relaxation (opt-in)"),
-    "safety_minion": ("Safety", "safety gate — flags controlled substances and dual-use targets"),
-    "report_minion": ("Report", "aggregates the run into a structured report and ranks the survivors"),
-    "validation_minion": ("Validation", "audits the run's bookkeeping — schemas, hashes, cross-agent consistency"),
-    "report_pdf_minion": ("PDF export", "renders this document"),
-    "patent_minion": ("Patent landscape", "patent / freedom-to-operate knowledge (opt-in, LLM)"),
-    "clinical_minion": ("Clinical knowledge", "clinical-stage knowledge — known drugs, trials (opt-in, LLM)"),
-    "regulatory_minion": ("Regulatory knowledge", "regulatory status — approvals, scheduling (opt-in, LLM)"),
-}
+# sections clearly and explain what each agent does. Single source of truth in
+# agents/roles.py so the PDF and the ExecutionPlan reflect the exact same schema.
+from ..agents.roles import AGENT_ROLES as AGENT_LABELS
+from ..contracts.regulatory_checklist import DIMENSION_LABELS as _DIMENSION_LABELS
 
 _fonts_registered = False
 
@@ -472,6 +457,11 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         story.append(Paragraph(_esc("In-silico drug-discovery report — every score below is calculated "
                                     "or predicted, never experimental evidence."), styles["subtitle"]))
 
+        # ---- reasoning preamble (why and how we reached these candidates) ----
+        section("Reasoning and plan")
+        for p in _narrative_reasoning(by_kind, report, project_spec):
+            para(p)
+
         # ---- abstract (verbose) ----
         section("Abstract")
         para(_narrative_abstract(report, by_kind, project_spec, survivors, n_total, n_passed))
@@ -491,6 +481,13 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if project_spec.starting_materials:
             para("The analysis starts from the provided molecule(s): "
                  + "; ".join(project_spec.starting_materials) + ".")
+
+        # ---- exact workflow schema reflection ----
+        section("Workflow schema")
+        plans = by_kind.get("execution_plan", [])
+        para("The ordered workflow — each stage, its agent, its role, and its upstream "
+             "dependencies — exactly as planned:")
+        _narrative_schema(report, plans, para)
 
         # ---- results, one clearly-labeled block per present stage ----
         section("Results and interpretation")
@@ -835,6 +832,71 @@ def _narrative_knowledge_agents(by_kind, para, sub) -> None:
             para(f"The {stage.lower()} contributed {n} entr{'y' if n == 1 else 'ies'} "
                  "(LLM-recalled, evidence level: inferred). These are research aids, not legal "
                  "or regulatory determinations.")
+    for rc in by_kind.get("regulatory_checklist", []):
+        sub("Regulatory readiness (7D)", "regulatory_minion")
+        _narrative_regulatory_checklist(rc, para)
+
+
+def _narrative_regulatory_checklist(rc, para) -> None:
+    s = rc.summary
+    para(f"A seven-dimension regulatory readiness checklist assessed quality/CMC, nonclinical "
+         f"toxicity, clinical efficacy, clinical safety, pharmacology/PK-PD, intellectual "
+         f"property, and regulatory pathway. Result: {s.ok} ok, {s.flag} flag, {s.unknown} "
+         f"unknown, {s.na} not-applicable (LLM-recalled, evidence level: inferred; verify "
+         f"against primary sources).")
+    for e in rc.entries:
+        label = _DIMENSION_LABELS.get(e.dimension, e.dimension)
+        para(f"{label}: {e.status} — {e.summary}" + (f" ({e.notes})" if e.notes else ""))
+
+
+def _narrative_reasoning(by_kind, report, spec) -> list[str]:
+    """The 'why and how we reached these candidates' preamble — deterministic prose
+    built from the ExecutionPlan (if present), the GenerationMemory (if present), and
+    the report's own ranking rationale."""
+    out: list[str] = []
+    plans = by_kind.get("execution_plan", [])
+    mems = by_kind.get("generation_memory", [])
+    if plans:
+        p = plans[0]
+        out.append(f"Generation {p.generation} of at most {p.convergence.max_generations}. "
+                   f"The orchestrator assembled {len(p.stages)} stages.")
+        if p.rationale:
+            out.append(p.rationale)
+    else:
+        target = ", ".join(spec.targets) or "the specified target"
+        out.append(f"This run targeted {target}. The pipeline designed candidate analogs, "
+                   "screened them, predicted ADMET, scored synthetic accessibility, flagged "
+                   "toxicity, and estimated formulation — every stage writing a versioned, "
+                   "hashed artifact.")
+    if mems:
+        m = mems[0]
+        if m.best_candidates:
+            names = ", ".join(c.smiles for c in m.best_candidates[:3])
+            out.append(f"The prior generation's best candidate(s) were {names}; "
+                       f"{len(m.avoided)} rejected scaffold(s) were recorded as 'avoid'.")
+        for ins in m.insights[:3]:
+            out.append(f"Insight: {ins}.")
+    ranked = report.ranked_candidates
+    if ranked:
+        top = ranked[0]
+        out.append("Candidates were ranked by the deterministic composite score "
+                   f"(QED + BCS bonus - 0.1 x SA - 0.2 x tox alerts); the top-ranked survivor "
+                   f"is {top.smiles} at score {top.score:.4f}.")
+    else:
+        out.append("No molecule survived screening, so no lead candidate was identified this run.")
+    return out
+
+
+def _narrative_schema(report, plans, para) -> None:
+    """Reflect the exact workflow schema: the ordered stage -> agent -> role mapping."""
+    if plans:
+        for st in plans[0].stages:
+            deps = ", ".join(st.depends_on) if st.depends_on else "—"
+            para(f"{st.stage_id} — {st.agent} ({st.role}) · after: {deps}")
+        return
+    for sf in report.stage_findings:
+        stage, role = AGENT_LABELS.get(sf.agent, (sf.agent, "contributes one stage of the pipeline"))
+        para(f"{sf.task_id} — {sf.agent} ({role})")
 
 
 def _narrative_clinical_simulation(css, para) -> None:

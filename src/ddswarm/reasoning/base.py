@@ -54,6 +54,11 @@ class ReasoningBackend(ABC):
         """Return raw dicts for RegulatoryFinding (validated by the agent)."""
 
     @abstractmethod
+    def regulatory_checklist(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts ({dimension, status, summary, notes}) for a 7D
+        RegulatoryChecklistEntry (validated by the agent)."""
+
+    @abstractmethod
     def pk_parameters(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         """Return raw dicts ({molecule_id, clearance_ml_min_kg, volume_of_distribution_l_kg,
         bioavailability, half_life_hours, source, notes}) of human PK parameters for

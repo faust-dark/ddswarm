@@ -84,3 +84,21 @@ def test_inject_reasoning():
 
     out2 = _inject_reasoning(fresh(), ReasoningConfig(backend="none"))
     assert all(t.params == {} for t in out2)
+
+
+def test_run_iterations_two_generations(tmp_path):
+    f = _write_project(tmp_path, project_id="piter")
+    store = tmp_path / "store"
+    reports = tmp_path / "reports"
+    rc = cli.main(["run", str(f), "--reasoning", "none", "--iterations", "2",
+                   "--store", str(store), "--reports-dir", str(reports)])
+    assert rc == 0
+    runs = list((store / "piter" / "runs").iterdir())
+    assert len(runs) == 2  # two generations = two runs
+    # the last generation produced the orchestration + memory artifacts
+    last = sorted(runs)[-1]
+    artifacts = list((last / "artifacts").glob("*.json"))
+    kinds = {a.name.split(".")[1] for a in artifacts}
+    assert "execution_plan" in kinds
+    assert "generation_memory" in kinds
+    assert "report_document" in kinds

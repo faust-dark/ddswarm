@@ -104,3 +104,50 @@ def test_agent_openmm_real(tmp_path):
     assert r.runs[0].metrics.backbone_rmsd_mean_angstrom is not None
     assert r.protocol.engine == "openmm"
     assert r.protocol.note == "short relaxation trajectory; NOT production MD"
+
+
+# ---- four-branch gate (predictor + docking + tox + formulation) ----
+def _branch_inputs():
+    from ddswarm.contracts import (
+        AdmetPrediction, AdmetSummary, DockingResult, DockedPose,
+        MoleculeAdmetResult, FormulationAssessment, FormulationSummary,
+        MoleculeFormulation, ToxProfile, ToxSummary, MoleculeToxAssessment,
+    )
+    admet = AdmetPrediction(project_id="p", status="success",
+                            summary=AdmetSummary(total_molecules=1, predicted=0, not_available=10),
+                            molecules=[MoleculeAdmetResult(id="m1", canonical_smiles="c1ccccc1", endpoints=[])])
+    docking = DockingResult(project_id="p", status="success",
+                            poses=[DockedPose(molecule_id="m1", rank=1)])
+    tox = ToxProfile(project_id="p", status="success",
+                     summary=ToxSummary(total_alerts=0),
+                     molecules=[MoleculeToxAssessment(id="m1", canonical_smiles="c1ccccc1", alerts=[])])
+    formulation = FormulationAssessment(
+        project_id="p", status="success",
+        summary=FormulationSummary(total_molecules=1),
+        molecules=[MoleculeFormulation(id="m1", canonical_smiles="c1ccccc1", bcs_class="I")])
+    return {
+        "admet_prediction": [admet],
+        "docking_result": [docking],
+        "tox_profile": [tox],
+        "formulation_assessment": [formulation],
+    }
+
+
+def test_agent_gate_missing_branches(tmp_path):
+    store = Store(tmp_path)
+    res = _run(store, {"engine": "null", "gate_branches": True,
+                       "receptor": {"kind": "file", "identifier": "trp_cage",
+                                    "path": str(FIXTURE)}})
+    assert res.status.value == "insufficient_evidence"
+    assert any("gated" in w for w in res.warnings)
+
+
+def test_agent_gate_all_branches_present(tmp_path):
+    store = Store(tmp_path)
+    res = _run(store, {"engine": "null", "gate_branches": True,
+                       "receptor": {"kind": "file", "identifier": "trp_cage",
+                                    "path": str(FIXTURE)}},
+               inputs=_branch_inputs())
+    assert res.status.value == "success"
+    r = _loaded(store, res)
+    assert r.runs[0].status == "not_run"  # null engine, but gate passed

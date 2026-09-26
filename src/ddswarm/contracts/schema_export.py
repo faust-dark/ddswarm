@@ -13,12 +13,15 @@ from .design_batch import DesignBatch
 from .docking_result import DockingResult
 from .dynamics_result import DynamicsResult
 from .event_log import EventLog
+from .execution_plan import ExecutionPlan
 from .formulation_assessment import FormulationAssessment
+from .generation_memory import GenerationMemory
 from .knowledge_pack import KnowledgePack
 from .memory import ProjectMemory
 from .patent_landscape import PatentLandscape
 from .project_spec import ProjectSpec
 from .regulatory_assessment import RegulatoryAssessment
+from .regulatory_checklist import RegulatoryChecklist
 from .report import Report
 from .report_document import ReportDocument
 from .run_manifest import RunManifest
@@ -43,6 +46,8 @@ MODELS: dict[str, type] = {
     "DockingResult": DockingResult,
     "DynamicsResult": DynamicsResult,
     "FormulationAssessment": FormulationAssessment,
+    "ExecutionPlan": ExecutionPlan,
+    "GenerationMemory": GenerationMemory,
     "RunRequest": RunRequest,
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "ToxProfile": ToxProfile,
@@ -53,6 +58,7 @@ MODELS: dict[str, type] = {
     "ClinicalAssessment": ClinicalAssessment,
     "ClinicalSimulation": ClinicalSimulation,
     "RegulatoryAssessment": RegulatoryAssessment,
+    "RegulatoryChecklist": RegulatoryChecklist,
     "SafetyAssessment": SafetyAssessment,
     "ValidationReport": ValidationReport,
 }

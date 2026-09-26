@@ -23,11 +23,28 @@ from .base import Agent, AgentContext
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
 _RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
 
+# The four upstream branches that must all clear a candidate before receptor MD
+# is justified (opt-in via params['gate_branches']=true, paired with depends_on
+# predictor + docking + tox + formulation).
+_BRANCH_KINDS = {
+    "predictor": "admet_prediction",
+    "docking": "docking_result",
+    "tox": "tox_profile",
+    "formulation": "formulation_assessment",
+}
+
 
 class DynamicsMinion(Agent):
     name = "dynamics_minion"
 
     def run(self, ctx: AgentContext) -> AgentResult:
+        ok, gate_msg, eligible = self._branch_gate(ctx)
+        if not ok:
+            return self._result(
+                ctx, AgentResultStatus.insufficient_evidence, warnings=[gate_msg],
+                reproducibility={"reason": "branch_gate", "eligible_molecules": len(eligible)},
+            )
+
         engine_name = ctx.params.get("engine", "openmm")
         try:
             engine = make_engine(engine_name)
@@ -106,6 +123,35 @@ class DynamicsMinion(Agent):
             provenance=[ProvenanceEntry(source="receptor MD", output_hash=art.hash, tool_versions=[TOOL])],
             reproducibility={"input_hash": input_hash, "engine": engine_name, "receptor": identifier},
         )
+
+    def _branch_gate(self, ctx: AgentContext) -> tuple[bool, str, set[str]]:
+        """Opt-in gate: receptor MD runs only when predictor + docking + tox +
+        formulation all produced results for at least one candidate. Returns
+        (ok, message, eligible_smiles)."""
+        if not ctx.params.get("gate_branches", False):
+            return True, "", set()
+        missing = [b for b, k in _BRANCH_KINDS.items()
+                   if k not in ctx.inputs or not ctx.inputs[k]]
+        if missing:
+            return (False,
+                    "receptor MD gated: requires results from predictor + docking + tox + "
+                    f"formulation; missing {', '.join(missing)}", set())
+        smi_sets: list[set[str]] = []
+        for k in ("admet_prediction", "tox_profile", "formulation_assessment"):
+            s: set[str] = set()
+            for art in ctx.inputs.get(k, []):
+                for m in getattr(art, "molecules", []):
+                    smi = getattr(m, "canonical_smiles", None)
+                    if smi:
+                        s.add(smi)
+            smi_sets.append(s)
+        eligible = set.intersection(*smi_sets) if smi_sets else set()
+        docked = any(getattr(art, "poses", []) for art in ctx.inputs.get("docking_result", []))
+        if not docked:
+            return False, "receptor MD gated: docking produced no docked poses", set()
+        if not eligible:
+            return False, "receptor MD gated: no molecule cleared predictor + tox + formulation", set()
+        return True, "", eligible
 
     def _resolve_pdb(self, receptor_cfg: dict, kind: str, identifier: str, ctx: AgentContext):
         work_dir = Path(self.store.run_dir(ctx.project_id, ctx.run_id)) / "dynamics" / ctx.task_id

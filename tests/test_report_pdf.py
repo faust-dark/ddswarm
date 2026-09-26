@@ -36,8 +36,44 @@ def test_renderer_minimal(tmp_path):
     assert out.exists()
     assert out.read_bytes().startswith(b"%PDF")
     assert meta["page_count"] >= 1
+    assert "Reasoning and plan" in meta["sections"]
+    assert "Workflow schema" in meta["sections"]
     assert "Abstract" in meta["sections"]
     assert "Conclusion" in meta["sections"]
+
+
+def test_narrative_reasoning_text():
+    from ddswarm.contracts.report import CandidateSelection
+    from ddswarm.reporting.pdf_render import _narrative_reasoning
+
+    report = Report(
+        project_id="x", run_id="run_1", status=AgentResultStatus.success,
+        run_status="completed", executive_summary="s",
+        ranked_candidates=[CandidateSelection(rank=1, smiles="c1ccccc1Cl", score=1.5,
+                                              criteria=["QED: 0.5"])],
+    )
+    spec = ProjectSpec(project_id="x", input_type="mixed", objective="obj",
+                       targets=["EGFR"], status="approved")
+    lines = _narrative_reasoning({}, report, spec)
+    joined = " ".join(lines)
+    assert "EGFR" in joined
+    assert "composite score" in joined
+    assert "c1ccccc1Cl" in joined
+
+
+def test_narrative_schema_reflects_stages():
+    from ddswarm.contracts import ExecutionPlan, PlanStage
+    from ddswarm.reporting.pdf_render import _narrative_schema
+
+    plan = ExecutionPlan(project_id="x", run_id="r", generation=0, stages=[
+        PlanStage(stage_id="design", agent="designer_minion",
+                  role="proposes analogs", depends_on=["research"]),
+    ])
+    report = Report(project_id="x", run_id="r", status=AgentResultStatus.success,
+                    run_status="completed", executive_summary="s")
+    lines = []
+    _narrative_schema(report, [plan], lines.append)
+    assert any("designer_minion" in l and "research" in l for l in lines)
 
 
 def test_default_pipeline_exports_pdf(tmp_path):

@@ -19,11 +19,14 @@ from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
 from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskStatus
 from ..contracts.event_log import EventLog
+from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
+from ..contracts.generation_memory import GenerationMemory
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.regulatory_assessment import RegulatoryAssessment
+from ..contracts.regulatory_checklist import RegulatoryChecklist
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
 from ..contracts.report_document import ReportDocument
@@ -54,8 +57,11 @@ ARTIFACT_MODELS: dict[str, type] = {
     "clinical_assessment": ClinicalAssessment,
     "clinical_simulation": ClinicalSimulation,
     "regulatory_assessment": RegulatoryAssessment,
+    "regulatory_checklist": RegulatoryChecklist,
     "safety_assessment": SafetyAssessment,
     "validation_report": ValidationReport,
+    "execution_plan": ExecutionPlan,
+    "generation_memory": GenerationMemory,
 }
 
 

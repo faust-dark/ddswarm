@@ -22,6 +22,8 @@ from .agents import (
     DockingMinion,
     DynamicsMinion,
     FormulationMinion,
+    MemoryMinion,
+    OrchestratorMinion,
     PatentMinion,
     PredictorMinion,
     RegulatoryMinion,
@@ -35,7 +37,7 @@ from .agents import (
     ValidationMinion,
 )
 from .contracts import (
-    ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
+    GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
 )
 from pydantic import ValidationError
 
@@ -84,6 +86,8 @@ def build_agents(store: Store) -> dict:
         "patent_minion": PatentMinion(store),
         "clinical_minion": ClinicalMinion(store),
         "regulatory_minion": RegulatoryMinion(store),
+        "orchestrator_minion": OrchestratorMinion(store),
+        "memory_minion": MemoryMinion(store),
         "report_minion": ReportMinion(store),
         "report_pdf_minion": ReportPdfMinion(store),
     }
@@ -153,6 +157,37 @@ def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
     return dest
 
 
+def _with_orchestration(tasks: list[RunTask], iterations: int) -> list[RunTask]:
+    """Wrap a task list with an orchestrator (first) and a memory_minion (after
+    report), wiring entry tasks to the orchestrator and validation to memory.
+    Returns a fresh task list; does not mutate the input."""
+    base = [t.model_copy(deep=True) for t in tasks]
+    task_ids = {t.task_id for t in base}
+    for t in base:
+        if not t.depends_on:
+            t.depends_on = ["orchestrator"]
+        if t.task_id == "validation":
+            t.depends_on = list(t.depends_on) + ["memory"]
+    if "report" in task_ids:
+        base.append(RunTask(task_id="memory", agent="memory_minion", depends_on=["report"]))
+    orch = RunTask(task_id="orchestrator", agent="orchestrator_minion",
+                   params={"iterations": iterations,
+                           "tasks": [{"task_id": t.task_id, "agent": t.agent,
+                                      "depends_on": list(t.depends_on)} for t in base]})
+    return [orch] + base
+
+
+def _read_generation_memory(store: Store, project_id: str, run_id: str) -> GenerationMemory | None:
+    try:
+        res = store.load_latest_agent_result(project_id, run_id, "memory")
+    except FileNotFoundError:
+        return None
+    for a in res.artifacts:
+        if a.kind == "generation_memory" and a.uri:
+            return GenerationMemory.model_validate_json(Path(a.uri).read_text())
+    return None
+
+
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
     # Hermes reasoning is the project standard: default ON unless the JSON sets
@@ -169,15 +204,36 @@ def cmd_run(args) -> int:
             if t.agent == "report_minion":
                 t.params["iupac"] = True
 
+    iterations = max(1, int(args.iterations))
+    if iterations > 1:
+        tasks = _with_orchestration(tasks, iterations)
+
     store = Store(args.store)
     runner = Runner(store, build_agents(store))
-    task_defs = [TaskDefinition(task_id=t.task_id, agent=t.agent, depends_on=t.depends_on, params=t.params)
-                 for t in tasks]
 
-    manifest = runner.create_run(req.project, task_defs)
-    final = runner.run(manifest.run_id, project_id=req.project.project_id)
-    _print_report(store, req.project.project_id, manifest.run_id)
-    dest = _copy_pdf_to_reports(store, req.project.project_id, manifest.run_id, args.reports_dir)
+    final = None
+    last_manifest = None
+    prior_best: set[str] = set()
+    for gen in range(iterations):
+        gen_tasks = [t.model_copy(deep=True) for t in tasks]
+        for t in gen_tasks:
+            if t.agent in ("orchestrator_minion", "memory_minion"):
+                t.params["generation"] = gen
+        task_defs = [TaskDefinition(task_id=t.task_id, agent=t.agent,
+                                    depends_on=t.depends_on, params=t.params)
+                     for t in gen_tasks]
+        manifest = runner.create_run(req.project, task_defs)
+        final = runner.run(manifest.run_id, project_id=req.project.project_id)
+        last_manifest = manifest
+        if iterations > 1:
+            mem = _read_generation_memory(store, req.project.project_id, manifest.run_id)
+            new_best = {c.smiles for c in mem.best_candidates} if mem else set()
+            if gen > 0 and not (new_best - prior_best):
+                break  # converged: no new candidates vs the prior generation
+            prior_best = new_best
+
+    _print_report(store, req.project.project_id, last_manifest.run_id)
+    dest = _copy_pdf_to_reports(store, req.project.project_id, last_manifest.run_id, args.reports_dir)
     if dest:
         print(f"PDF saved to : {dest}")
     return 0 if final.status.value == "completed" else 1
@@ -265,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
     pr.add_argument("--iupac", action="store_true",
                     help="fetch IUPAC names (NIH CACTUS web service) for the ranked candidates as a readability label (non-deterministic)")
+    pr.add_argument("--iterations", type=int, default=1,
+                    help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
                     help="directory to copy the exported PDF into (default: <repo>/reports)")

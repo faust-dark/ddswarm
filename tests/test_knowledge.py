@@ -16,6 +16,7 @@ from ddswarm.contracts import (
     PatentLandscape,
     ProjectSpec,
     RegulatoryAssessment,
+    RegulatoryChecklist,
 )
 from ddswarm.orchestrator import Store
 
@@ -23,6 +24,28 @@ from ddswarm.orchestrator import Store
 def _fake_hermes(tmp_path: Path, payload) -> str:
     script = tmp_path / "fake_hermes.sh"
     script.write_text(f"#!/bin/sh\necho '{json.dumps(payload)}'\n")
+    script.chmod(0o755)
+    return str(script)
+
+
+def _fake_hermes_dispatch(tmp_path: Path, assessment, checklist) -> str:
+    """A fake 'hermes' that echoes the assessment payload for the regulatory
+    assessment prompt and the checklist payload for the 7D checklist prompt
+    (dispatched on a keyword in the --query-file)."""
+    script = tmp_path / "fake_hermes_dispatch.sh"
+    script.write_text(
+        "#!/bin/sh\n"
+        "qf=\"\"; prev=\"\"\n"
+        "for a in \"$@\"; do\n"
+        "  [ \"$prev\" = \"--query-file\" ] && qf=\"$a\"\n"
+        "  prev=\"$a\"\n"
+        "done\n"
+        "if grep -q \"seven dimensions\" \"$qf\" 2>/dev/null; then\n"
+        f"  echo '{json.dumps(checklist)}'\n"
+        "else\n"
+        f"  echo '{json.dumps(assessment)}'\n"
+        "fi\n"
+    )
     script.chmod(0o755)
     return str(script)
 
@@ -115,6 +138,33 @@ def test_regulatory_delegation(tmp_path):
     assert ra.summary.total_entries == 2
     assert ra.summary.agency_counts == {"FDA": 1, "EMA": 1}
     assert all(e.evidence_level.value == "inferred" for e in ra.entries)
+
+
+def test_regulatory_checklist_delegation(tmp_path):
+    store = Store(tmp_path)
+    assessment = [{"molecule_id": None, "agency": "FDA", "designation": "approved",
+                   "status": "approved", "source": "FDA Orange Book"}]
+    checklist = [
+        {"dimension": "quality_cmc", "status": "flag",
+         "summary": "no CMC data for a novel scaffold", "notes": "needs synthesis"},
+        {"dimension": "clinical_efficacy", "status": "unknown",
+         "summary": "no clinical efficacy data"},
+        {"dimension": "regulatory_pathway", "status": "ok",
+         "summary": "orphan designation plausible"},
+    ]
+    params = {"reasoning_backend": "hermes",
+              "reasoning_command": _fake_hermes_dispatch(tmp_path, assessment, checklist)}
+    result = _run(RegulatoryMinion, store, _spec(), params)
+    assert result.status.value == "success"
+    rc_arts = [a for a in result.artifacts if a.kind == "regulatory_checklist"]
+    assert rc_arts, "expected a regulatory_checklist artifact"
+    rc = store.load_artifact(rc_arts[0].uri, RegulatoryChecklist)
+    assert rc.summary.total_dimensions == 3
+    assert rc.summary.ok == 1
+    assert rc.summary.flag == 1
+    assert rc.summary.unknown == 1
+    assert all(e.evidence_level.value == "inferred" for e in rc.entries)
+    assert all("verify against primary source" in e.notes for e in rc.entries)
 
 
 # ---- schema export ----

@@ -15,6 +15,11 @@ from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.regulatory_assessment import RegulatoryAssessment, RegulatoryFinding, RegulatorySummary
+from ..contracts.regulatory_checklist import (
+    RegulatoryChecklist,
+    RegulatoryChecklistEntry,
+    RegulatoryChecklistSummary,
+)
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
@@ -71,12 +76,29 @@ class RegulatoryMinion(Agent):
             )],
         )
         art = self.persist_artifact(ctx, "regulatory_assessment", f"ra_{ctx.project_id}", payload)
-        finding = (f"regulatory: {summary.total_entries} findings; "
-                   f"agencies {agency_counts or 'n/a'} (all inferred)")
+
+        # ---- 7D regulatory readiness checklist (second, structured artifact) ----
+        checklist_art = None
+        checklist_summary_txt = ""
+        cres = backend.regulatory_checklist(ctx.spec, molecules, ctx.params)
+        if cres.ok and cres.entries:
+            checklist = self._build_checklist(ctx, cres.entries, warnings, input_hash)
+            if checklist is not None:
+                checklist_art = self.persist_artifact(
+                    ctx, "regulatory_checklist", f"rc_{ctx.project_id}", checklist)
+                s = checklist.summary
+                checklist_summary_txt = (f"7D checklist {s.ok} ok/{s.flag} flag/"
+                                        f"{s.unknown} unknown/{s.na} na")
+
+        findings = [f"regulatory: {summary.total_entries} findings; "
+                    f"agencies {agency_counts or 'n/a'} (all inferred)"]
+        if checklist_summary_txt:
+            findings.append(f"regulatory: {checklist_summary_txt} (all inferred)")
+        artifacts = [art] + ([checklist_art] if checklist_art else [])
         return AgentResult(
             project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
-            status=AgentResultStatus.success, artifacts=[art], input_refs=ctx.input_refs,
-            findings=[finding], warnings=warnings,
+            status=AgentResultStatus.success, artifacts=artifacts, input_refs=ctx.input_refs,
+            findings=findings, warnings=warnings,
             provenance=[ProvenanceEntry(source="regulatory assessment", output_hash=art.hash, tool_versions=[TOOL])],
             tool_versions=[TOOL], reproducibility={"input_hash": input_hash},
         )
@@ -134,3 +156,39 @@ class RegulatoryMinion(Agent):
         if "verify against primary source" not in notes:
             data["notes"] = (notes + " | LLM-recalled via reasoning backend; verify against primary source").strip(" |")
         return RegulatoryFinding.model_validate(data)
+
+    @staticmethod
+    def _build_checklist(ctx: AgentContext, raw_entries: list[dict], warnings: list[str],
+                         input_hash: str) -> RegulatoryChecklist | None:
+        entries: list[RegulatoryChecklistEntry] = []
+        for i, raw in enumerate(raw_entries):
+            try:
+                data = dict(raw)
+                data.setdefault("id", f"rc_{i}")
+                data["evidence_level"] = "inferred"  # LLM recall is not observed data
+                data["source"] = data.get("source") or "Hermes subagent (LLM reasoning)"
+                notes = data.get("notes") or ""
+                if "verify against primary source" not in notes:
+                    data["notes"] = (notes + " | LLM-recalled via reasoning backend; verify against primary source").strip(" |")
+                entries.append(RegulatoryChecklistEntry.model_validate(data))
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"checklist entry {i} invalid, skipped: {exc}")
+        if not entries:
+            return None
+        counts = {"ok": 0, "flag": 0, "unknown": 0, "na": 0}
+        for e in entries:
+            counts[e.status] = counts.get(e.status, 0) + 1
+        summary = RegulatoryChecklistSummary(
+            total_dimensions=len(entries), ok=counts["ok"], flag=counts["flag"],
+            unknown=counts["unknown"], na=counts["na"],
+        )
+        return RegulatoryChecklist(
+            project_id=ctx.project_id, status=AgentResultStatus.success.value,
+            entries=entries, summary=summary,
+            provenance=[ProvenanceEntry(
+                source="Hermes subagent (LLM reasoning)",
+                tool_versions=[TOOL], input_hash=input_hash,
+                output_hash=hash_jsonable([e.model_dump() for e in entries]),
+                params={"dimensions": len(entries)},
+            )],
+        )

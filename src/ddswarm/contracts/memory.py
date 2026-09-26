@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from .enums import EvidenceLevel
 from .provenance import ProvenanceEntry, utcnow
 
-MemoryKind = Literal["finding", "decision", "lesson", "constraint", "feedback"]
+MemoryKind = Literal["finding", "decision", "lesson", "constraint", "feedback", "generation"]
 
 
 class MemoryEntry(BaseModel):

@@ -149,6 +149,36 @@ code fences. Each object must have exactly these keys:
   "notes": caveats or uncertainty.
 """
 
+_REGULATORY_CHECKLIST_PROMPT = """You are a regulatory-affairs analyst inside a reproducible drug-discovery pipeline.
+
+Project objective: {objective}
+Target(s): {targets}
+Candidate molecule(s) (id: SMILES):
+{molecules}
+
+Assess regulatory readiness across EXACTLY these seven dimensions. For each,
+give a status of "ok" (no blocking concern identified from recalled knowledge),
+"flag" (a concern needs attention), "unknown" (insufficient recalled
+knowledge), or "na" (not applicable to this stage). Do NOT fabricate: if you
+are unsure, use "unknown" and say so.
+
+The seven dimensions (fixed):
+1. "quality_cmc" — chemistry, manufacturing, controls
+2. "nonclinical_toxicity" — nonclinical toxicology
+3. "clinical_efficacy" — clinical efficacy
+4. "clinical_safety" — clinical safety
+5. "pharmacology_pkpd" — pharmacology / PK-PD
+6. "intellectual_property" — intellectual property / freedom-to-operate
+7. "regulatory_pathway" — regulatory pathway / designations
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "dimension": one of the seven dimension strings above,
+  "status": "ok" | "flag" | "unknown" | "na",
+  "summary": one-sentence assessment,
+  "notes": caveats or uncertainty.
+"""
+
 _PK_PROMPT = """You are a clinical pharmacologist providing human PK parameters.
 
 Project objective: {objective}
@@ -287,6 +317,16 @@ class HermesSubprocessBackend(ReasoningBackend):
     def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
         prompt = _REGULATORY_PROMPT.format(
+            objective=spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            molecules=mol_lines,
+        )
+        return self._run(prompt)
+
+    # ---- regulatory checklist (7D) ----
+    def regulatory_checklist(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _REGULATORY_CHECKLIST_PROMPT.format(
             objective=spec.objective,
             targets="; ".join(spec.targets) or "(none)",
             molecules=mol_lines,

@@ -1,0 +1,280 @@
+{
+  "$defs": {
+    "EvidenceLevel": {
+      "enum": [
+        "observed",
+        "calculated",
+        "predicted",
+        "inferred",
+        "hypothetical"
+      ],
+      "title": "EvidenceLevel",
+      "type": "string"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "RegulatoryChecklistEntry": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "dimension": {
+          "enum": [
+            "quality_cmc",
+            "nonclinical_toxicity",
+            "clinical_efficacy",
+            "clinical_safety",
+            "pharmacology_pkpd",
+            "intellectual_property",
+            "regulatory_pathway"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "status": {
+          "default": "unknown",
+          "enum": [
+            "ok",
+            "flag",
+            "unknown",
+            "na"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "summary": {
+          "default": "",
+          "title": "Summary",
+          "type": "string"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "inferred"
+        },
+        "source": {
+          "default": "Hermes subagent (LLM reasoning)",
+          "title": "Source",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "dimension"
+      ],
+      "title": "RegulatoryChecklistEntry",
+      "type": "object"
+    },
+    "RegulatoryChecklistSummary": {
+      "properties": {
+        "total_dimensions": {
+          "default": 0,
+          "title": "Total Dimensions",
+          "type": "integer"
+        },
+        "ok": {
+          "default": 0,
+          "title": "Ok",
+          "type": "integer"
+        },
+        "flag": {
+          "default": 0,
+          "title": "Flag",
+          "type": "integer"
+        },
+        "unknown": {
+          "default": 0,
+          "title": "Unknown",
+          "type": "integer"
+        },
+        "na": {
+          "default": 0,
+          "title": "Na",
+          "type": "integer"
+        }
+      },
+      "title": "RegulatoryChecklistSummary",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/RegulatoryChecklistEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/RegulatoryChecklistSummary"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "RegulatoryChecklist",
+  "type": "object"
+}

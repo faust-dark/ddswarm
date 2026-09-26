@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 17: multi-compartment + organ models)
+# ddswarm — drug discovery multi-agent swarm (Increment 18: orchestration + iteration + memory)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -116,13 +116,42 @@ data-driven model selection compares ALL feasible systemic models (1 vs 2 vs N)
 via a total-order fit key (perfect fit < BIC < RSS); whole-body multi-organ PBPK
 is deliberately out of scope (no deterministic parameter source).
 
+**Increment 18** ties the remaining schema items together — orchestration,
+iteration, and memory as one linked loop:
+
+- `orchestrator_minion` runs first and emits an `ExecutionPlan` (ordered
+  stages + roles + convergence config + a deterministic prose rationale) — the
+  auditable record of *why* and *how* the pipeline was assembled.
+- `memory_minion` runs after report and distils the generation into a
+  `GenerationMemory` (best candidates, avoided scaffolds, insights), also
+  written as a durable `generation` memory entry for the next cycle.
+- Iteration loop: `ddswarm run --iterations N` runs N generations (each a full
+  run); the designer already consumes prior survivors via the feedback loop,
+  and the CLI stops early when no new candidate emerges (convergence).
+- `dynamics_minion` gains an opt-in four-branch gate (`params.gate_branches=true`):
+  receptor MD runs only when predictor + docking + tox + formulation all produced
+  results for at least one candidate.
+- `regulatory_minion` now also emits a seven-dimension `RegulatoryChecklist`
+  (quality/CMC, nonclinical tox, efficacy, safety, PK-PD, IP/FTO, pathway).
+- The PDF opens with a "Reasoning and plan" section (why/how we reached the
+  candidates, from the plan + generation memory + ranking rationale) and a
+  "Workflow schema" section that reflects the exact stage -> agent -> role
+  mapping (single source of truth in `agents/roles.py`).
+
+Single-generation runs are unchanged (backward compatible); orchestration +
+memory agents are injected only when `--iterations >= 2`.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
   `ddswarm` provides the contract + state-machine layer that Hermes invokes.
-- **Orchestrator** (`orchestrator_minion`): task graph, gating, retry,
-  idempotent versioning, resume. Produces no chemistry.
+- **Runner** (`orchestrator/runner.py`): the state machine — task graph, gating,
+  retry, idempotent versioning, resume. Produces no chemistry.
 - **Agents**:
+  - `orchestrator_minion` — runs first; emits the ExecutionPlan (stages, roles,
+    convergence, deterministic rationale).
+  - `memory_minion` — runs after report; emits the GenerationMemory and writes a
+    durable `generation` memory entry for the next cycle.
   - `researcher_minion` — KnowledgePack from ProjectSpec + seed, plus optional
     delegation to a reasoning backend (Hermes subagent) for literature research.
   - `designer_minion` — DesignBatch. Offline: deterministic analog generation
