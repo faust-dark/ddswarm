@@ -17,6 +17,7 @@ from .researcher import ResearcherMinion
 from .retrosynthesis import RetrosynthesisMinion
 from .safety import SafetyMinion
 from .screener import ScreenerMinion
+from .selectivity import SelectivityMinion
 from .tox import ToxMinion
 from .validation import ValidationMinion
 
@@ -26,5 +27,5 @@ __all__ = [
     "MemoryMinion", "OrchestratorMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",
-    "SafetyMinion", "ScreenerMinion", "ToxMinion", "ValidationMinion",
+    "SafetyMinion", "ScreenerMinion", "SelectivityMinion", "ToxMinion", "ValidationMinion",
 ]

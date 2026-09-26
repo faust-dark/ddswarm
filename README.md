@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 18: orchestration + iteration + memory)
+# ddswarm — drug discovery multi-agent swarm (Increment 19: target-selectivity / sexual-ADR scoring)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -165,6 +165,26 @@ iteration, and memory as one linked loop:
 
 Single-generation runs are unchanged (backward compatible); orchestration +
 memory agents are injected only when `--iterations >= 2`.
+
+**Increment 19** adds mechanistic **target-selectivity / sexual-adverse-effect
+scoring** (`selectivity_minion`, opt-in). Each candidate is docked against SERT,
+5-HT2A and 5-HT2C (AutoDock Vina); the docking free energy is converted to a
+dissociation constant via the Gibbs identity (ΔG = RT·ln Ki), a fractional
+receptor occupancy is computed at a fixed reference concentration
+(C/(C+Ki), saturable and monotonic), and a selectivity index
+(Ki_5HT2C/Ki_SERT, Ki_5HT2A/Ki_SERT) plus a deterministic sexual-ADR risk label
+are derived. The classification encodes the SSRI mechanism — sexual dysfunction
+is an *indirect* effect driven by SERT occupancy (elevated synaptic 5-HT
+activating 5-HT2A/2C), so a candidate with negligible direct 5-HT2C binding
+keeps the class effect (`class_effect`); a drop in SERT occupancy gives a
+reduced ADR only via reduced efficacy (`efficacy_tradeoff`); and a candidate
+that gains direct 5-HT2C binding (`direct_5ht2c_engagement`) is flagged as of
+unknown sign because docking reports binding, not agonist/antagonist function.
+
+Two honesty constraints are built in: Vina scores are relative, so every
+Ki/occupancy is a *ranking* estimate (never an absolute affinity), and the
+reference concentration (default 10 nM) is a documented modeling assumption
+whose choice affects occupancy magnitude but not the monotonic ordering.
 
 ## Architecture
 

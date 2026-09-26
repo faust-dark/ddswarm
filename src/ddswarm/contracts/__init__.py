@@ -78,6 +78,12 @@ from .retrosynthesis_plan import (
     SynthesisRoute,
 )
 from .safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
+from .selectivity_assessment import (
+    MoleculeSelectivity,
+    ReceptorAffinity,
+    SelectivityAssessment,
+    SelectivitySummary,
+)
 from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
 from .tox_profile import MoleculeToxAssessment, ToxAlert, ToxProfile, ToxSummary
@@ -126,6 +132,7 @@ __all__ = [
     "MoleculeFormulation",
     "MoleculeProperties",
     "MoleculeScreenResult",
+    "MoleculeSelectivity",
     "MoleculeToxAssessment",
     "ModelSelectionMetrics",
     "PDParameters",
@@ -154,6 +161,8 @@ __all__ = [
     "ScreenSummary",
     "ScreenedBatch",
     "SearchBox",
+    "SelectivityAssessment",
+    "SelectivitySummary",
     "StageFinding",
     "SynthesisRoute",
     "ToxAlert",
@@ -164,6 +173,7 @@ __all__ = [
     "ProjectStatus",
     "ProvenanceEntry",
     "ReasoningConfig",
+    "ReceptorAffinity",
     "RegulatoryAssessment",
     "RegulatoryChecklist",
     "RegulatoryChecklistEntry",

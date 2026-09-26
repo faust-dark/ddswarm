@@ -29,6 +29,7 @@ from .run_request import RunRequest
 from .retrosynthesis_plan import RetrosynthesisPlan
 from .safety_assessment import SafetyAssessment
 from .screened_batch import ScreenedBatch
+from .selectivity_assessment import SelectivityAssessment
 from .task_spec import TaskSpec
 from .tox_profile import ToxProfile
 from .validation_report import ValidationReport
@@ -60,6 +61,7 @@ MODELS: dict[str, type] = {
     "RegulatoryAssessment": RegulatoryAssessment,
     "RegulatoryChecklist": RegulatoryChecklist,
     "SafetyAssessment": SafetyAssessment,
+    "SelectivityAssessment": SelectivityAssessment,
     "ValidationReport": ValidationReport,
 }
 

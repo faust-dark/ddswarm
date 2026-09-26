@@ -32,6 +32,7 @@ from ..contracts.regulatory_checklist import RegulatoryChecklist
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
+from ..contracts.selectivity_assessment import SelectivityAssessment
 from ..contracts.tox_profile import ToxProfile
 from ..logging.hashing import hash_jsonable
 from ..chemistry.iupac import fetch_iupac_name
@@ -58,6 +59,7 @@ _KIND_MODELS: dict[str, type] = {
     "regulatory_checklist": RegulatoryChecklist,
     "execution_plan": ExecutionPlan,
     "generation_memory": GenerationMemory,
+    "selectivity_assessment": SelectivityAssessment,
 }
 
 
@@ -227,6 +229,9 @@ class ReportMinion(Agent):
         for rc in by_kind.get("regulatory_checklist", []):
             for e in rc.entries:
                 c[e.evidence_level.value] += 1
+        for sel in by_kind.get("selectivity_assessment", []):
+            for m in sel.molecules:
+                c["calculated"] += len(m.affinities)  # docking + thermodynamics
         return c
 
     @staticmethod
@@ -314,6 +319,14 @@ class ReportMinion(Agent):
         if gms:
             parts.append(f"generation memory {len(gms[0].best_candidates)} best/"
                          f"{len(gms[0].avoided)} avoid")
+        sels = by_kind.get("selectivity_assessment", [])
+        if sels:
+            s = sels[0]
+            labels: dict[str, int] = {}
+            for m in s.molecules:
+                labels[m.sexual_adr_risk] = labels.get(m.sexual_adr_risk, 0) + 1
+            parts.append(f"selectivity {s.summary.assessed}/{s.summary.total_molecules} assessed; "
+                         f"sexual-ADR " + ", ".join(f"{k}:{v}" for k, v in sorted(labels.items())))
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."
@@ -343,6 +356,8 @@ class ReportMinion(Agent):
             gaps.append("no regulatory assessment (opt-in; needs reasoning.backend=hermes)")
         if "regulatory_checklist" not in by_kind:
             gaps.append("no 7D regulatory checklist (opt-in; needs reasoning.backend=hermes)")
+        if "selectivity_assessment" not in by_kind:
+            gaps.append("no target-selectivity / sexual-ADR scoring (opt-in; needs Vina + receptor PDBs)")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")
@@ -387,6 +402,7 @@ class ReportMinion(Agent):
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
             "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
             "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred parameters — not measured human pharmacokinetics.",
+            "Selectivity/sexual-ADR scoring converts Vina docking scores to Ki via the Gibbs identity; Vina is a relative scoring function, so Ki/occupancy are ranking estimates, not absolute affinities — and docking reports binding, not functional sign (agonist vs antagonist).",
         ]
 
     @staticmethod

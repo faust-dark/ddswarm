@@ -33,6 +33,7 @@ from .agents import (
     RetrosynthesisMinion,
     SafetyMinion,
     ScreenerMinion,
+    SelectivityMinion,
     ToxMinion,
     ValidationMinion,
 )
@@ -82,6 +83,7 @@ def build_agents(store: Store) -> dict:
         "tox_minion": ToxMinion(store),
         "formulation_minion": FormulationMinion(store),
         "safety_minion": SafetyMinion(store),
+        "selectivity_minion": SelectivityMinion(store),
         "validation_minion": ValidationMinion(store),
         "patent_minion": PatentMinion(store),
         "clinical_minion": ClinicalMinion(store),

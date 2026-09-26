@@ -32,6 +32,7 @@ from ..contracts.report import Report
 from ..contracts.report_document import ReportDocument
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
+from ..contracts.selectivity_assessment import SelectivityAssessment
 from ..contracts.provenance import InputRef, utcnow
 from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
@@ -59,6 +60,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "regulatory_assessment": RegulatoryAssessment,
     "regulatory_checklist": RegulatoryChecklist,
     "safety_assessment": SafetyAssessment,
+    "selectivity_assessment": SelectivityAssessment,
     "validation_report": ValidationReport,
     "execution_plan": ExecutionPlan,
     "generation_memory": GenerationMemory,

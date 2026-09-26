@@ -440,6 +440,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     sas = by_kind.get("safety_assessment", [])
     kps = by_kind.get("knowledge_pack", [])
     dbs = by_kind.get("design_batch", [])
+    sels = by_kind.get("selectivity_assessment", [])
 
     survivors = _survivors(by_kind)
     n_passed = sum(s.summary.passed for s in sbs)
@@ -522,6 +523,10 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if sas:
             sub("Safety", "safety_minion")
             _narrative_safety(sas, para)
+
+        if sels:
+            sub("Target selectivity & sexual-ADR risk", "selectivity_minion")
+            _narrative_selectivity(sels, para)
 
         _narrative_knowledge_agents(by_kind, para, sub)
 
@@ -998,6 +1003,32 @@ def _narrative_clinical_simulation(css, para) -> None:
     ins = sum(c.summary.insufficient_inputs for c in css)
     para(f"Simulated {sim} of {tot} molecule(s); {ins} lacked sufficient PK inputs "
          "(clearance + Vd, or t1/2 + one of them) and were not simulated.")
+
+
+def _narrative_selectivity(sels, para) -> None:
+    for sel in sels:
+        c_ref = sel.reference_concentration_molar
+        para(f"Each candidate was docked against SERT, 5-HT2A and 5-HT2C; the best docking "
+             f"affinity was converted to a dissociation constant via the Gibbs identity "
+             f"(ΔG = RT·ln Ki) and a fractional receptor occupancy computed at a fixed "
+             f"reference concentration of {c_ref:g} M. Ki and occupancy are relative "
+             f"ranking estimates (Vina scoring is not a calibrated absolute free energy), "
+             f"and docking reports binding, not functional sign (agonist vs antagonist).")
+        if sel.reference_molecule:
+            para(f"The parent molecule {sel.reference_molecule} is docked alongside the "
+                 f"candidates as the SERT-efficacy reference"
+                 + (f" (parent SERT occupancy {sel.reference_sert_occupancy:.0%} at the reference "
+                    f"concentration)" if sel.reference_sert_occupancy is not None else "") + ".")
+        for m in sel.molecules:
+            si_2c = (f"{m.selectivity_index_5ht2c_sert:.1f}"
+                     if m.selectivity_index_5ht2c_sert is not None else "n/a")
+            si_2a = (f"{m.selectivity_index_5ht2a_sert:.1f}"
+                     if m.selectivity_index_5ht2a_sert is not None else "n/a")
+            occ_s = f"{m.sert_occupancy:.0%}" if m.sert_occupancy is not None else "n/a"
+            occ_2c = f"{m.htr2c_occupancy:.0%}" if m.htr2c_occupancy is not None else "n/a"
+            para(f"{m.molecule_id}: SERT occupancy {occ_s}, direct 5-HT2C occupancy {occ_2c}, "
+                 f"selectivity Ki(5-HT2C)/Ki(SERT) = {si_2c}, Ki(5-HT2A)/Ki(SERT) = {si_2a}.")
+            para(f"Sexual-ADR risk: {m.sexual_adr_risk}. {m.sexual_adr_rationale}")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:
