@@ -9,6 +9,7 @@ from .admet_prediction import (
     Uncertainty,
 )
 from .agent_result import AgentResult
+from .clinical_assessment import ClinicalAssessment, ClinicalFinding, ClinicalSummary
 from .design_batch import DesignBatch, MoleculeDesign
 from .docking_result import (
     DockedPose,
@@ -34,7 +35,9 @@ from .enums import (
 from .event_log import EventLog
 from .knowledge_pack import KnowledgePack, KnowledgePackEntry
 from .memory import MemoryEntry, ProjectMemory
+from .patent_landscape import PatentEntry, PatentLandscape, PatentSummary
 from .project_spec import ProjectSpec
+from .regulatory_assessment import RegulatoryAssessment, RegulatoryFinding, RegulatorySummary
 from .provenance import (
     ArtifactRef,
     InputRef,
@@ -69,6 +72,9 @@ __all__ = [
     "AgentResultStatus",
     "ArtifactRef",
     "AttemptRecord",
+    "ClinicalAssessment",
+    "ClinicalFinding",
+    "ClinicalSummary",
     "DesignBatch",
     "DockedPose",
     "DockingProtocol",
@@ -91,6 +97,9 @@ __all__ = [
     "MoleculeProperties",
     "MoleculeScreenResult",
     "MoleculeToxAssessment",
+    "PatentEntry",
+    "PatentLandscape",
+    "PatentSummary",
     "ProjectMemory",
     "ReceptorInfo",
     "ReceptorQCCheck",
@@ -115,6 +124,9 @@ __all__ = [
     "ProjectStatus",
     "ProvenanceEntry",
     "ReasoningConfig",
+    "RegulatoryAssessment",
+    "RegulatoryFinding",
+    "RegulatorySummary",
     "RunManifest",
     "RunRequest",
     "RunTask",

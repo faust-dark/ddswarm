@@ -21,3 +21,12 @@ class NullReasoningBackend(ReasoningBackend):
 
     def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         return ReasoningResult(ok=True, note="no reasoning backend configured")
+
+    def patent_landscape(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        return ReasoningResult(ok=True, note="no reasoning backend configured")
+
+    def clinical_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        return ReasoningResult(ok=True, note="no reasoning backend configured")
+
+    def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        return ReasoningResult(ok=True, note="no reasoning backend configured")

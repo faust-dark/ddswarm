@@ -40,3 +40,15 @@ class ReasoningBackend(ABC):
     def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         """Return raw dicts ({molecule_id, steps, key_reagents, feasibility_note})
         for proposed synthesis routes (validated by the agent)."""
+
+    @abstractmethod
+    def patent_landscape(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts for PatentEntry (validated by the agent)."""
+
+    @abstractmethod
+    def clinical_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts for ClinicalFinding (validated by the agent)."""
+
+    @abstractmethod
+    def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts for RegulatoryFinding (validated by the agent)."""

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .admet_prediction import AdmetPrediction
 from .agent_result import AgentResult
+from .clinical_assessment import ClinicalAssessment
 from .design_batch import DesignBatch
 from .docking_result import DockingResult
 from .dynamics_result import DynamicsResult
@@ -14,7 +15,9 @@ from .event_log import EventLog
 from .formulation_assessment import FormulationAssessment
 from .knowledge_pack import KnowledgePack
 from .memory import ProjectMemory
+from .patent_landscape import PatentLandscape
 from .project_spec import ProjectSpec
+from .regulatory_assessment import RegulatoryAssessment
 from .report import Report
 from .run_manifest import RunManifest
 from .run_request import RunRequest
@@ -43,6 +46,9 @@ MODELS: dict[str, type] = {
     "ToxProfile": ToxProfile,
     "Report": Report,
     "ProjectMemory": ProjectMemory,
+    "PatentLandscape": PatentLandscape,
+    "ClinicalAssessment": ClinicalAssessment,
+    "RegulatoryAssessment": RegulatoryAssessment,
     "SafetyAssessment": SafetyAssessment,
     "ValidationReport": ValidationReport,
 }

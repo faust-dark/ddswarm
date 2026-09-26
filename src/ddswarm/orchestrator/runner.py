@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from ..agents.base import Agent, AgentContext
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
+from ..contracts.clinical_assessment import ClinicalAssessment
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -19,7 +20,9 @@ from ..contracts.enums import AgentResultStatus, ProjectStatus, RunStatus, TaskS
 from ..contracts.event_log import EventLog
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.knowledge_pack import KnowledgePack
+from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.project_spec import ProjectSpec
+from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
 from ..contracts.safety_assessment import SafetyAssessment
@@ -44,6 +47,9 @@ ARTIFACT_MODELS: dict[str, type] = {
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
     "report": Report,
+    "patent_landscape": PatentLandscape,
+    "clinical_assessment": ClinicalAssessment,
+    "regulatory_assessment": RegulatoryAssessment,
     "safety_assessment": SafetyAssessment,
     "validation_report": ValidationReport,
 }

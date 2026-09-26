@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
+from ..contracts.clinical_assessment import ClinicalAssessment
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -20,8 +21,10 @@ from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.memory import MemoryEntry
+from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.report import EvidenceBreakdown, Report, StageFinding
+from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
@@ -43,6 +46,9 @@ _KIND_MODELS: dict[str, type] = {
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
     "safety_assessment": SafetyAssessment,
+    "patent_landscape": PatentLandscape,
+    "clinical_assessment": ClinicalAssessment,
+    "regulatory_assessment": RegulatoryAssessment,
 }
 
 
@@ -178,6 +184,15 @@ class ReportMinion(Agent):
         for sa in by_kind.get("safety_assessment", []):
             for f in sa.flags:
                 c[f.evidence_level.value] += 1
+        for pl in by_kind.get("patent_landscape", []):
+            for e in pl.entries:
+                c[e.evidence_level.value] += 1
+        for ca in by_kind.get("clinical_assessment", []):
+            for e in ca.entries:
+                c[e.evidence_level.value] += 1
+        for ra in by_kind.get("regulatory_assessment", []):
+            for e in ra.entries:
+                c[e.evidence_level.value] += 1
         return c
 
     @staticmethod
@@ -225,6 +240,20 @@ class ReportMinion(Agent):
         sas = by_kind.get("safety_assessment", [])
         if sas:
             parts.append(f"safety {sas[0].verdict} ({sum(s.summary.total_flags for s in sas)} flags)")
+        pls = by_kind.get("patent_landscape", [])
+        if pls:
+            parts.append(f"patent {sum(p.summary.total_entries for p in pls)} entries "
+                         f"({sum(p.summary.flagged for p in pls)} covering)")
+        cas = by_kind.get("clinical_assessment", [])
+        if cas:
+            phases: dict[str, int] = {}
+            for ca in cas:
+                for e in ca.entries:
+                    phases[e.phase] = phases.get(e.phase, 0) + 1
+            parts.append("clinical " + ", ".join(f"{k}:{v}" for k, v in sorted(phases.items())))
+        ras = by_kind.get("regulatory_assessment", [])
+        if ras:
+            parts.append(f"regulatory {sum(r.summary.total_entries for r in ras)} findings")
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."
@@ -244,6 +273,12 @@ class ReportMinion(Agent):
             gaps.append("no receptor MD performed this run")
         if "formulation_assessment" not in by_kind:
             gaps.append("no formulation assessment performed this run")
+        if "patent_landscape" not in by_kind:
+            gaps.append("no patent/FTO landscape (opt-in; needs reasoning.backend=hermes)")
+        if "clinical_assessment" not in by_kind:
+            gaps.append("no clinical assessment (opt-in; needs reasoning.backend=hermes)")
+        if "regulatory_assessment" not in by_kind:
+            gaps.append("no regulatory assessment (opt-in; needs reasoning.backend=hermes)")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")
@@ -267,6 +302,8 @@ class ReportMinion(Agent):
             steps.append("reconsider screening filters or the starting scaffold")
         if any("routes" in g for g in gaps):
             steps.append("enable reasoning.backend=hermes to propose synthesis routes and analogs")
+        if any("patent" in g or "clinical" in g or "regulatory" in g for g in gaps):
+            steps.append("enable reasoning.backend=hermes and add patent/clinical/regulatory tasks for a knowledge landscape")
         if any("clean-toxicity" in g for g in gaps):
             steps.append("extend the toxicophore library with more sourced alerts")
         if not steps:
@@ -283,6 +320,7 @@ class ReportMinion(Agent):
             "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",
             "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
+            "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
         ]
 
     @staticmethod

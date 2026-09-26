@@ -74,6 +74,79 @@ code fences. Each object must have exactly these keys:
   "feasibility_note": one-sentence feasibility assessment.
 """
 
+_PATENT_PROMPT = """You are a patent analyst inside a reproducible drug-discovery pipeline.
+
+Project objective: {objective}
+Target(s): {targets}
+Candidate molecule(s) (id: SMILES):
+{molecules}
+
+Identify patents and published applications relevant to the candidate
+molecule(s) and/or the target: composition-of-matter, method-of-use, and
+scaffold patents. Classify each entry's relevance. Do NOT fabricate patent
+numbers: if unsure of an identifier, use null and say so in notes. This is a
+research aid, NOT a legal freedom-to-operate opinion.
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "molecule_id": the molecule id it concerns, or null,
+  "patent_id": the publication/patent number (e.g. "US1234567B2"),
+  "title": short title or null,
+  "assignee": assignee name or null,
+  "status": "granted" | "pending" | "expired" | "unknown",
+  "jurisdiction": e.g. "US" | "EP" | "WO" or null,
+  "relevance": "covers_candidate" | "related_scaffold" | "background",
+  "source": source name (e.g. "Google Patents", "USPTO", "Espacenet"),
+  "url": source URL or null,
+  "notes": any caveats or uncertainty.
+"""
+
+_CLINICAL_PROMPT = """You are a clinical-development analyst inside a reproducible drug-discovery pipeline.
+
+Project objective: {objective}
+Target(s): {targets}
+Candidate molecule(s) (id: SMILES):
+{molecules}
+
+Summarize clinical-stage knowledge for the target(s) and candidate(s): known
+drugs in development or approved for the target, their trial phase, indication,
+and status. Do NOT fabricate trial details: if unsure, use null and say so.
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "molecule_id": molecule id it concerns, or null,
+  "entity": the drug/candidate/target name,
+  "phase": "preclinical" | "phase_1" | "phase_2" | "phase_3" | "approved" | "unknown",
+  "indication": the indication or null,
+  "status": e.g. "ongoing" | "completed" | "terminated" or null,
+  "source": source name (e.g. "ClinicalTrials.gov", "DrugBank", "FDA"),
+  "url": source URL or null,
+  "notes": caveats or uncertainty.
+"""
+
+_REGULATORY_PROMPT = """You are a regulatory-affairs analyst inside a reproducible drug-discovery pipeline.
+
+Project objective: {objective}
+Target(s): {targets}
+Candidate molecule(s) (id: SMILES):
+{molecules}
+
+Summarize regulatory knowledge: agency designations and approval status
+relevant to the target(s) and candidate(s) (e.g. FDA/EMA approval, orphan drug,
+fast track, breakthrough therapy, scheduling/controlled-substance status). Do
+NOT fabricate: if unsure, use null and say so.
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "molecule_id": molecule id it concerns, or null,
+  "agency": the agency (e.g. "FDA", "EMA", "WHO", "DEA"),
+  "designation": e.g. "approved" | "orphan drug" | "fast track" | "schedule II" or null,
+  "status": current status or null,
+  "source": source name (e.g. "FDA Orange Book", "EMA", "DEA"),
+  "url": source URL or null,
+  "notes": caveats or uncertainty.
+"""
+
 
 def extract_json_list(text: str) -> list | None:
     """Parse a JSON array from a subagent's text output, tolerating surrounding
@@ -141,6 +214,36 @@ class HermesSubprocessBackend(ReasoningBackend):
     def synthesis_routes(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
         prompt = _SYNTHESIS_PROMPT.format(objective=spec.objective, molecules=mol_lines)
+        return self._run(prompt)
+
+    # ---- patent landscape ----
+    def patent_landscape(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _PATENT_PROMPT.format(
+            objective=spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            molecules=mol_lines,
+        )
+        return self._run(prompt)
+
+    # ---- clinical assessment ----
+    def clinical_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _CLINICAL_PROMPT.format(
+            objective=spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            molecules=mol_lines,
+        )
+        return self._run(prompt)
+
+    # ---- regulatory assessment ----
+    def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _REGULATORY_PROMPT.format(
+            objective=spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            molecules=mol_lines,
+        )
         return self._run(prompt)
 
     # ---- shared ----

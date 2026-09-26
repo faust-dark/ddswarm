@@ -1,15 +1,15 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 7: safety gate + validation)
+# ddswarm — drug discovery multi-agent swarm (Increment 8: knowledge agents)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 7** adds a **safety gate** (deterministic controlled-substance +
-dual-use/biosafety screening against a curated, non-exhaustive list) and a
-**validation_minion** that audits every finished run's reproducibility and
-cross-agent consistency (schema validity, provenance completeness, hash
-integrity, cross-agent consistency, evidence-level sanity, numeric sanity,
-report-breakdown consistency). On top of Increments 0-6 (contracts +
-orchestrator + logging + research/design/screen/predict/docking/dynamics/
-retrosynthesis/tox/formulation + memory + report + feedback loop + CLI + Hermes
-reasoning). patent/clinical/regulatory land next.
+**Increment 8** adds the three **knowledge agents** — `patent_minion` (patent /
+freedom-to-operate landscape), `clinical_minion` (clinical-stage knowledge),
+and `regulatory_minion` (agency designations / scheduling) — all delegated to
+the Hermes reasoning backend and opt-in. Without a reasoning backend they
+return insufficient_evidence (they never fabricate legal/clinical/regulatory
+data); every entry is LLM recall forced to `evidence_level='inferred'`. On top
+of Increments 0-7 (contracts + orchestrator + logging + research/design/screen/
+predict/docking/dynamics/retrosynthesis/tox/formulation + memory + report +
+feedback loop + safety gate + validation + CLI + Hermes reasoning).
 
 ## Architecture
 
@@ -47,6 +47,16 @@ reasoning). patent/clinical/regulatory land next.
     validity, provenance completeness, hash integrity (anti-tamper), cross-agent
     consistency, evidence-level sanity, numeric sanity, and report-breakdown
     consistency. Reports per-check pass/fail/warn; never a scientific judgment.
+  - `patent_minion` — patent / freedom-to-operate landscape for the candidates
+    and/or target, delegated to the Hermes reasoning backend; every entry is LLM
+    recall forced to `inferred` + "verify against primary source". A research
+    aid, NOT a legal freedom-to-operate opinion.
+  - `clinical_minion` — clinical-stage knowledge (known drugs, trial phase,
+    indication, status) for the target/candidates, delegated to the reasoning
+    backend; every entry `inferred`.
+  - `regulatory_minion` — regulatory knowledge (agency designations, approval
+    status, scheduling), delegated to the reasoning backend; every entry
+    `inferred`.
   - `report_minion` — aggregates a finished run into a structured Report
     (executive summary, per-stage findings, evidence-level breakdown, gaps,
     next steps, caveats) and writes `finding` + `feedback` to project memory.
@@ -87,6 +97,9 @@ reasoning). patent/clinical/regulatory land next.
 | `FormulationAssessment` | per-molecule solubility/permeability/BCS + salt/prodrug suggestions |
 | `SafetyAssessment` | safety gate: flags (controlled substance / dual-use) + verdict pass/flag/block |
 | `ValidationReport` | per-check reproducibility/consistency audit of one run |
+| `PatentLandscape` | patent/FTO entries (LLM-recalled, inferred) + relevance summary |
+| `ClinicalAssessment` | clinical findings (LLM-recalled, inferred) + phase counts |
+| `RegulatoryAssessment` | regulatory findings (LLM-recalled, inferred) + agency counts |
 | `Report` | structured run summary (exec summary, evidence breakdown, gaps, next steps) |
 | `ProjectMemory` | cross-run conclusions (finding/decision/lesson/constraint/feedback) |
 | `RunRequest` | project.json: ProjectSpec + task DAG + optional reasoning config |
@@ -242,6 +255,25 @@ A failed check means the run's own bookkeeping is inconsistent; the report
 status is `success` when no check fails, else `partial` (it never fabricates a
 green result, and it never blocks the run — it is an audit, not a gate).
 
+## Knowledge agents (Increment 8)
+
+`patent_minion`, `clinical_minion`, and `regulatory_minion` are *knowledge*
+agents with no deterministic offline source, so they are opt-in (not in the
+default pipeline) and run only when `reasoning.backend=hermes` is configured.
+Each delegates through three new `ReasoningBackend` methods
+(`patent_landscape`, `clinical_assessment`, `regulatory_assessment`) and
+validates the returned raw dicts against its contract. Without a backend they
+return `insufficient_evidence` — they never fabricate patent numbers, trial
+data, or designations.
+
+Every entry is forced to `evidence_level='inferred'` and tagged "verify against
+primary source": an LLM-recalled patent number is not an observed fact. The
+patent agent only counts relevance (how many entries the LLM labelled
+`covers_candidate`); it does NOT render a freedom-to-operate or infringement
+opinion. To run them, add the three tasks with `params.reasoning_backend =
+"hermes"` (plus `reasoning_command`), or set the top-level `reasoning.backend`,
+which the CLI propagates to every task.
+
 ## CLI & reasoning backend
 
 The `ddswarm` console script runs a whole pipeline from one versioned file:
@@ -262,14 +294,16 @@ docking and dynamics are opt-in (need the Vina binary / OpenMM + network).
 `report` writes `finding` + `feedback` to project memory, closing the loop: the
 next run's designer/researcher read it.
 
-`"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`
-and `retrosynthesis_minion` (routes only) delegate to one-shot Hermes subagents
+`"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`,
+`retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/
+`clinical_minion`/`regulatory_minion` delegate to one-shot Hermes subagents
 (`hermes chat -q`), merging the LLM output with the deterministic baseline.
-Without it (or when the backend is unavailable) they fall back to the
-deterministic baseline — seed assembly, transformation labels, SA score —
-never fabricating. LLM-contributed entries are forced to `evidence_level`
+Without it (or when the backend is unavailable) the deterministic agents fall
+back to their baseline — seed assembly, transformation labels, SA score — while
+the knowledge agents return `insufficient_evidence` (they have no offline
+baseline). LLM-contributed entries are forced to `evidence_level`
 `inferred`/`hypothetical` and tagged "verify against primary source", because a
-recalled PubChem ID is not experimental evidence.
+recalled PubChem ID or patent number is not experimental evidence.
 
 ## Run
 
@@ -309,14 +343,16 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 110 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 117 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the
 toxicophore matcher, project memory, report aggregation, the feedback loop,
 MD-engine metrics (real MD on a small peptide fixture), the formulation rules,
-the safety gate (controlled-substance + dual-use matching), and the validation
-audit (all checks + tamper detection) are tested offline. Real
+the safety gate (controlled-substance + dual-use matching), the validation
+audit (all checks + tamper detection), and the knowledge agents
+(patent/clinical/regulatory delegation via a fake `hermes` script +
+insufficient_evidence without a backend) are tested offline. Real
 Hermes-subagent delegation was verified once manually (researcher returned 24
 sourced entries, designer 8 analog SMILES); real receptor MD was verified on
 the 2ITY kinase domain (backbone RMSD ~0.19 A over a 0.4 ps bounded relaxation).

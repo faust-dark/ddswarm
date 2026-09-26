@@ -17,11 +17,14 @@ import sys
 from pathlib import Path
 
 from .agents import (
+    ClinicalMinion,
     DesignerMinion,
     DockingMinion,
     DynamicsMinion,
     FormulationMinion,
+    PatentMinion,
     PredictorMinion,
+    RegulatoryMinion,
     ReportMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
@@ -66,6 +69,9 @@ def build_agents(store: Store) -> dict:
         "formulation_minion": FormulationMinion(store),
         "safety_minion": SafetyMinion(store),
         "validation_minion": ValidationMinion(store),
+        "patent_minion": PatentMinion(store),
+        "clinical_minion": ClinicalMinion(store),
+        "regulatory_minion": RegulatoryMinion(store),
         "report_minion": ReportMinion(store),
     }
 
