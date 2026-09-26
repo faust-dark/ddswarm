@@ -146,6 +146,11 @@
           "title": "Seed",
           "type": "integer"
         },
+        "minimize_max_iterations": {
+          "default": 200,
+          "title": "Minimize Max Iterations",
+          "type": "integer"
+        },
         "note": {
           "default": "short relaxation trajectory; NOT production MD",
           "title": "Note",
