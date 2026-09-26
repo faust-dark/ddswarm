@@ -130,6 +130,11 @@ liability flags, not kill criteria — e.g. it flags the approved drug gefitinib
 as `Aliphatic_long_chain` on the OCCCN propyl-morpholine chain. Restore hard
 Brenk per-project with `params.filters.brenk_hard=true`.
 
+Screen is a soft gate: downstream agents consume screened_batch survivors
+(`passed=true`); when none pass they fall back to the starting material(s), so
+ADMET/tox/formulation/knowledge still run on the parent scaffold rather than
+the pipeline stalling on zero survivors.
+
 ## Prediction (Increment 2)
 
 `predictor_minion` runs ADMET/PK predictions through a pluggable provider
@@ -354,7 +359,7 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 130 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 131 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the

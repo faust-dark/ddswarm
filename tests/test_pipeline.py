@@ -81,3 +81,32 @@ def test_research_design_screen_predict(tmp_path):
     assert batch.summary.total_endpoints == 40
     assert batch.summary.not_available == 40
     assert batch.summary.predicted == 0
+
+
+def test_screen_soft_gate_falls_back_to_starting_material(tmp_path):
+    store = Store(tmp_path)
+    runner = Runner(store, _agents(store))
+    spec = ProjectSpec(
+        project_id="p1", input_type="mixed", objective="inhibit EGFR",
+        targets=["EGFR"], starting_materials=["c1ccccc1"], status="approved",
+    )
+    tasks = [
+        TaskDefinition(task_id="design", agent="designer_minion"),
+        # max_mw=1 rejects every molecule, so 0 pass screening (soft gate)
+        TaskDefinition(task_id="screen", agent="screener_minion", depends_on=["design"],
+                       params={"filters": {"max_mw": 1.0}}),
+        TaskDefinition(task_id="predict", agent="predictor_minion", depends_on=["screen"],
+                       params={"providers": ["null_admet"]}),
+    ]
+    manifest = runner.create_run(spec, tasks)
+    final = runner.run(manifest.run_id, project_id="p1")
+    assert final.status == RunStatus.completed
+
+    sres = store.load_latest_agent_result("p1", manifest.run_id, "screen")
+    sbatch = store.load_artifact(sres.artifacts[0].uri, ScreenedBatch)
+    assert sbatch.summary.passed == 0
+
+    # downstream is not blocked: it falls back to the starting material
+    pres = store.load_latest_agent_result("p1", manifest.run_id, "predict")
+    pbatch = store.load_artifact(pres.artifacts[0].uri, AdmetPrediction)
+    assert pbatch.summary.total_molecules == 1
