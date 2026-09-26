@@ -47,6 +47,7 @@ from .provenance import (
     utcnow,
 )
 from .report import EvidenceBreakdown, Report, StageFinding
+from .report_document import ReportDocument
 from .run_manifest import RunManifest
 from .run_request import ReasoningConfig, RunRequest, RunTask
 from .retrosynthesis_plan import (
@@ -105,6 +106,7 @@ __all__ = [
     "ReceptorQCCheck",
     "RedockingValidation",
     "Report",
+    "ReportDocument",
     "MdMetrics",
     "MdProtocol",
     "MdRun",

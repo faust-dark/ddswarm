@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 9: rule-based ADMET)
+# ddswarm — drug discovery multi-agent swarm (Increment 10: PDF report export)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -10,6 +10,14 @@ citation. No ML model, no torch/CUDA. On top of Increments 0-8 (contracts +
 orchestrator + logging + research/design/screen/predict/docking/dynamics/
 retrosynthesis/tox/formulation + memory + report + feedback loop + safety gate +
 validation + knowledge agents + CLI + Hermes reasoning).
+
+**Increment 10** adds a deterministic **PDF report export**: every run ends in a
+self-contained "scientific essay" PDF (reportlab + matplotlib, both deterministic
+and headless) — title/abstract, methodology, per-stage results with tables and
+charts, evidence-level breakdown, validation audit, discussion, conclusion, and
+provenance. The PDF is a binary artifact alongside the JSON artifacts; a
+`ReportDocument` metadata contract references it and is versioned/hashed like
+any other artifact. The `report_pdf_minion` renders it as the final pipeline task.
 
 ## Architecture
 
@@ -62,6 +70,10 @@ validation + knowledge agents + CLI + Hermes reasoning).
   - `report_minion` — aggregates a finished run into a structured Report
     (executive summary, per-stage findings, evidence-level breakdown, gaps,
     next steps, caveats) and writes `finding` + `feedback` to project memory.
+  - `report_pdf_minion` — renders the finished run into a self-contained PDF
+    ("scientific essay") with narrative text, tables, and matplotlib charts;
+    runs last and persists the PDF as a binary sidecar plus a `ReportDocument`
+    metadata artifact.
 - **Project memory** (`orchestrator/memory.py`): an append-only, cross-run log
   under `store/<project_id>/memory.json`. Conclusions are `inferred` (the
   swarm's reasoning), never observed data.
@@ -305,10 +317,12 @@ ddswarm memory project_id                       # cross-run conclusions
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
 If `tasks` is omitted a default pipeline runs (safety -> research -> design ->
-screen -> predict -> retrosynth -> tox -> formulation -> report -> validation);
+screen -> predict -> retrosynth -> tox -> formulation -> report -> validation ->
+report_pdf);
 docking and dynamics are opt-in (need the Vina binary / OpenMM + network).
 `report` writes `finding` + `feedback` to project memory, closing the loop: the
-next run's designer/researcher read it.
+next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
+`ddswarm run` prints its path as `PDF report : <path>`.
 
 `"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`,
 `retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/
@@ -359,7 +373,7 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 138 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 140 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the

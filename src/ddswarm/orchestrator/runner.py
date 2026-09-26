@@ -25,6 +25,7 @@ from ..contracts.project_spec import ProjectSpec
 from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
+from ..contracts.report_document import ReportDocument
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.provenance import InputRef, utcnow
@@ -47,6 +48,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "retrosynthesis_plan": RetrosynthesisPlan,
     "tox_profile": ToxProfile,
     "report": Report,
+    "report_document": ReportDocument,
     "patent_landscape": PatentLandscape,
     "clinical_assessment": ClinicalAssessment,
     "regulatory_assessment": RegulatoryAssessment,

@@ -10,6 +10,7 @@ from .patent import PatentMinion
 from .predictor import PredictorMinion
 from .regulatory import RegulatoryMinion
 from .report import ReportMinion
+from .report_pdf import ReportPdfMinion
 from .researcher import ResearcherMinion
 from .retrosynthesis import RetrosynthesisMinion
 from .safety import SafetyMinion
@@ -20,6 +21,7 @@ from .validation import ValidationMinion
 __all__ = [
     "Agent", "AgentContext", "ClinicalMinion", "DesignerMinion", "DockingMinion",
     "DynamicsMinion", "FormulationMinion", "PatentMinion", "PredictorMinion",
-    "RegulatoryMinion", "ReportMinion", "ResearcherMinion", "RetrosynthesisMinion",
+    "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
+    "RetrosynthesisMinion",
     "SafetyMinion", "ScreenerMinion", "ToxMinion", "ValidationMinion",
 ]

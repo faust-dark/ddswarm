@@ -73,7 +73,7 @@ def test_cli_run_bad_project_id(tmp_path, capsys):
 
 
 _NONDETERMINISTIC = {"timestamp", "run_id", "uri", "created_at", "completed_at",
-                     "started_at", "finished_at"}
+                     "started_at", "finished_at", "pdf_uri", "pdf_hash"}
 
 
 def _strip(obj):

@@ -26,6 +26,7 @@ from .agents import (
     PredictorMinion,
     RegulatoryMinion,
     ReportMinion,
+    ReportPdfMinion,
     ResearcherMinion,
     RetrosynthesisMinion,
     SafetyMinion,
@@ -33,7 +34,9 @@ from .agents import (
     ToxMinion,
     ValidationMinion,
 )
-from .contracts import ProjectSpec, RunRequest, ReasoningConfig, RunTask, export_schemas
+from .contracts import (
+    ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
+)
 from pydantic import ValidationError
 
 from .orchestrator import Runner, Store, TaskDefinition
@@ -52,6 +55,7 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
     RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "formulation"]),
     RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
+    RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation"]),
 ]
 
 
@@ -76,6 +80,7 @@ def build_agents(store: Store) -> dict:
         "clinical_minion": ClinicalMinion(store),
         "regulatory_minion": RegulatoryMinion(store),
         "report_minion": ReportMinion(store),
+        "report_pdf_minion": ReportPdfMinion(store),
     }
 
 
@@ -113,6 +118,12 @@ def _print_report(store: Store, project_id: str, run_id: str) -> None:
             print(f"    finding  : {f}")
         for w in res.warnings:
             print(f"    warning  : {w}")
+    adir = store.artifacts_dir(project_id, run_id)
+    if adir.exists():
+        docs = sorted(adir.glob("report_document_*.report_document.v*.json"))
+        if docs:
+            doc = ReportDocument.model_validate_json(docs[-1].read_text())
+            print(f"PDF report : {doc.pdf_uri}")
     print("=" * 70)
 
 

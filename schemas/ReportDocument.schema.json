@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "report_pdf_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "pdf_uri": {
+      "title": "Pdf Uri",
+      "type": "string"
+    },
+    "pdf_hash": {
+      "title": "Pdf Hash",
+      "type": "string"
+    },
+    "page_count": {
+      "default": 0,
+      "title": "Page Count",
+      "type": "integer"
+    },
+    "figure_count": {
+      "default": 0,
+      "title": "Figure Count",
+      "type": "integer"
+    },
+    "sections": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Sections",
+      "type": "array"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "run_id",
+    "status",
+    "pdf_uri",
+    "pdf_hash"
+  ],
+  "title": "ReportDocument",
+  "type": "object"
+}

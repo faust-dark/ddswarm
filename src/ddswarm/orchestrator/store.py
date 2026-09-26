@@ -130,3 +130,20 @@ class Store:
 
     def load_artifact(self, uri: str, model: type[BaseModel]) -> BaseModel:
         return model.model_validate_json(Path(uri).read_text())
+
+    def save_binary_artifact(
+        self, project_id: str, run_id: str, artifact_id: str, kind: str, suffix: str, data: bytes
+    ) -> tuple[Path, int, str]:
+        """Persist a non-JSON artifact (e.g. a PDF) next to the JSON artifacts,
+        versioned the same way and never overwritten. `suffix` is the file
+        extension without a leading dot (e.g. 'pdf')."""
+        _check_id(artifact_id, "artifact_id")
+        _check_id(kind, "kind")
+        d = self.artifacts_dir(project_id, run_id)
+        d.mkdir(parents=True, exist_ok=True)
+        existing = list(d.glob(f"{artifact_id}.{kind}.v*.{suffix}"))
+        version = len(existing) + 1
+        p = d / f"{artifact_id}.{kind}.v{version}.{suffix}"
+        p.write_bytes(data)
+        h = hash_content(data)
+        return p, version, h

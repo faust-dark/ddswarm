@@ -19,6 +19,7 @@ from .patent_landscape import PatentLandscape
 from .project_spec import ProjectSpec
 from .regulatory_assessment import RegulatoryAssessment
 from .report import Report
+from .report_document import ReportDocument
 from .run_manifest import RunManifest
 from .run_request import RunRequest
 from .retrosynthesis_plan import RetrosynthesisPlan
@@ -45,6 +46,7 @@ MODELS: dict[str, type] = {
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "ToxProfile": ToxProfile,
     "Report": Report,
+    "ReportDocument": ReportDocument,
     "ProjectMemory": ProjectMemory,
     "PatentLandscape": PatentLandscape,
     "ClinicalAssessment": ClinicalAssessment,
