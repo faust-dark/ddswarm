@@ -23,12 +23,20 @@ def _by_endpoint(smiles):
 def test_all_endpoints_present_and_cited():
     preds = PROVIDER.predict(ASPIRIN)
     assert {p.endpoint for p in preds} == set(PROVIDER.supported_endpoints)
-    assert len(preds) == 5
+    assert len(preds) == 10
+    predicted_eps = {"LogS_ESOL", "QED", "Lipinski_Violations",
+                     "Veber_Bioavailability", "Egan_Absorption", "BBB_Permeability"}
+    not_available_eps = {"Clearance_ml_min_kg", "Volume_of_Distribution_l_kg",
+                         "Half_Life_hours", "Plasma_Protein_Binding"}
     for p in preds:
         assert p.model == "rule_admet"
-        assert p.prediction_status == "predicted"
         assert p.evidence_level.value == "predicted"
         assert p.citation  # every rule carries a literature source
+        if p.endpoint in predicted_eps:
+            assert p.prediction_status == "predicted"
+        else:
+            assert p.endpoint in not_available_eps
+            assert p.prediction_status == "not_available"
 
 
 def test_esol_aspirin():
@@ -56,6 +64,18 @@ def test_good_permeability_rules_aspirin():
     assert _by_endpoint(ASPIRIN)["Egan_Absorption"].predicted_label == "good"
 
 
+def test_bbb_aspirin():
+    # aspirin MW ~180, TPSA ~64, HBD 1 -> within the CNS drug property envelope
+    assert _by_endpoint(ASPIRIN)["BBB_Permeability"].predicted_label == "CNS penetrant likely"
+
+
+def test_not_available_pk_endpoints():
+    p = _by_endpoint(ASPIRIN)
+    for ep in ("Clearance_ml_min_kg", "Volume_of_Distribution_l_kg",
+               "Half_Life_hours", "Plasma_Protein_Binding"):
+        assert p[ep].prediction_status == "not_available"
+
+
 def test_poor_rules_hexadecane():
     p = _by_endpoint(HEXADECANE)
     assert p["Veber_Bioavailability"].predicted_label == "poor"  # 13 rotatable bonds
@@ -72,7 +92,7 @@ def test_polar_molecule_sucrose():
 
 def test_out_of_domain_invalid_smiles():
     preds = PROVIDER.predict("not_a_smiles")
-    assert len(preds) == 5
+    assert len(preds) == 10
     assert all(p.prediction_status == "out_of_domain" for p in preds)
     assert all(p.applicability_domain.status == "out_of_domain" for p in preds)
 
@@ -93,6 +113,6 @@ def test_predictor_minion_integration(tmp_path):
     assert result.status.value == "success"
     batch = store.load_artifact(result.artifacts[0].uri, AdmetPrediction)
     assert batch.summary.total_molecules == 1
-    assert batch.summary.total_endpoints == 5
-    assert batch.summary.predicted == 5
-    assert batch.summary.not_available == 0
+    assert batch.summary.total_endpoints == 10
+    assert batch.summary.predicted == 6
+    assert batch.summary.not_available == 4

@@ -155,8 +155,11 @@ def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
 
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
+    # Hermes reasoning is the project standard: default ON unless the JSON sets
+    # an explicit backend or the user passes --reasoning none.
+    if req.reasoning is None:
+        req.reasoning = ReasoningConfig()  # backend default "hermes"
     if args.reasoning is not None:
-        req.reasoning = req.reasoning or ReasoningConfig()
         req.reasoning.backend = args.reasoning
 
     tasks = req.tasks or list(DEFAULT_PIPELINE)

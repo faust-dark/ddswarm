@@ -27,6 +27,11 @@ _CITATIONS: dict[str, str] = {
     "Lipinski_Violations": "Lipinski CA et al. (1997). Experimental and computational approaches to estimate solubility and permeability. Adv Drug Deliv Rev 23:3-25.",
     "Veber_Bioavailability": "Veber DF et al. (2002). Molecular properties that influence oral bioavailability. J Med Chem 45:2615-2623.",
     "Egan_Absorption": "Egan WJ et al. (2000). Prediction of drug absorption using multivariate statistics. J Med Chem 43:3867-3877.",
+    "BBB_Permeability": "Pajouhesh H, Lenz GR (2005). Medicinal chemical properties of successful central nervous system drugs. NeuroRx 2(4):541-553.",
+    "Clearance_ml_min_kg": "Lombardo F et al. (2002). Prediction of volume of distribution values in humans... J Med Chem 45:2867-2876. (QSPR — no precise structure-only rule)",
+    "Volume_of_Distribution_l_kg": "Lombardo F et al. (2004). Prediction of human volume of distribution... J Med Chem 47:1242-1250. (QSPR — no precise structure-only rule)",
+    "Half_Life_hours": "Obach RS et al. (2008). Trend analysis of a database of intravenous pharmacokinetic parameters... Drug Metab Dispos 36:1385-1405. (derived from CL and Vd)",
+    "Plasma_Protein_Binding": "Requires pKa + logD QSPR (no precise structure-only rule).",
 }
 
 _RULE_NOTES: dict[str, str] = {
@@ -47,6 +52,11 @@ class RuleBasedAdmetProvider(AdmetProvider):
         "Lipinski_Violations",
         "Veber_Bioavailability",
         "Egan_Absorption",
+        "BBB_Permeability",
+        "Clearance_ml_min_kg",
+        "Volume_of_Distribution_l_kg",
+        "Half_Life_hours",
+        "Plasma_Protein_Binding",
     ]
 
     def predict(self, canonical_smiles: str) -> list[EndpointPrediction]:
@@ -116,7 +126,41 @@ class RuleBasedAdmetProvider(AdmetProvider):
                                     note="box approximation of the Egan ellipse; no calibrated uncertainty"),
         ))
 
+        # ---- BBB permeability (Pajouhesh & Lenz 2005) ----
+        bbb_ok = (mw <= 400) and (tpsa <= 90) and (hbd <= 3)
+        out.append(self._ep(
+            "BBB_Permeability", label="CNS penetrant likely" if bbb_ok else "not likely", ad=ad,
+            uncertainty=Uncertainty(type="not_available",
+                                    note="threshold rule (MW<=400, TPSA<=90, HBD<=3); not a calibrated model"),
+        ))
+
+        # ---- PK endpoints that need a QSPR model (honest not_available) ----
+        out.append(self._na_ep(
+            "Clearance_ml_min_kg",
+            "no precise structure-only rule; supply a value for known analogs (literature or reasoning recall)"))
+        out.append(self._na_ep(
+            "Volume_of_Distribution_l_kg",
+            "no precise structure-only rule; supply a value for known analogs (literature or reasoning recall)"))
+        out.append(self._na_ep(
+            "Half_Life_hours",
+            "derived as ln2*Vd/CL; supply clearance and volume of distribution (or a recalled value)"))
+        out.append(self._na_ep(
+            "Plasma_Protein_Binding",
+            "requires pKa + logD QSPR; no precise structure-only rule"))
+
         return out
+
+    def _na_ep(self, endpoint: str, note: str) -> EndpointPrediction:
+        """An endpoint that is in scope but has no precise deterministic rule."""
+        return EndpointPrediction(
+            endpoint=endpoint,
+            model=self.name,
+            model_version=self.model_version,
+            prediction_status="not_available",
+            applicability_domain=ApplicabilityDomain(status="unknown", method="QSPR required", note=note),
+            uncertainty=Uncertainty(type="not_available", note=note),
+            citation=_CITATIONS.get(endpoint),
+        )
 
     def _ep(self, endpoint: str, *, value: float | None = None, units: str | None = None,
             label: str | None = None, ad: ApplicabilityDomain | None = None,

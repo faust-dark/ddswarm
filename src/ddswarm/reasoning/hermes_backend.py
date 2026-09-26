@@ -149,6 +149,29 @@ code fences. Each object must have exactly these keys:
   "notes": caveats or uncertainty.
 """
 
+_PK_PROMPT = """You are a clinical pharmacologist providing human PK parameters.
+
+Project objective: {objective}
+Target(s): {targets}
+Molecule(s) (id: SMILES):
+{molecules}
+
+For each molecule, provide human pharmacokinetic parameters. For KNOWN drugs or
+close analogs, recall literature label values and mark the source. For novel
+molecules, extrapolate from the closest known analog and say so in notes. Do
+NOT fabricate: if you are unsure of a value, use null for that field.
+
+Respond with ONLY a single JSON array of objects — no markdown, no prose, no
+code fences. Each object must have exactly these keys:
+  "molecule_id": the id from the list above,
+  "clearance_ml_min_kg": number or null,
+  "volume_of_distribution_l_kg": number or null,
+  "bioavailability": number in [0,1] or null,
+  "half_life_hours": number or null,
+  "source": source name (e.g. "DrugBank", "FDA label") or null,
+  "notes": caveats or uncertainty.
+"""
+
 
 def extract_json_list(text: str) -> list | None:
     """Parse a JSON array from a subagent's text output, tolerating surrounding
@@ -264,6 +287,16 @@ class HermesSubprocessBackend(ReasoningBackend):
     def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
         prompt = _REGULATORY_PROMPT.format(
+            objective=spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            molecules=mol_lines,
+        )
+        return self._run(prompt)
+
+    # ---- PK parameters ----
+    def pk_parameters(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
+        prompt = _PK_PROMPT.format(
             objective=spec.objective,
             targets="; ".join(spec.targets) or "(none)",
             molecules=mol_lines,

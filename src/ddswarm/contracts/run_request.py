@@ -20,7 +20,7 @@ class RunTask(BaseModel):
 
 
 class ReasoningConfig(BaseModel):
-    backend: str = "none"          # "none" | "hermes"
+    backend: str = "hermes"         # "hermes" (standard) | "none"
     command: str | None = None     # override the hermes binary / script (default "hermes")
     max_turns: int = 30
     run_budget: int = 300          # seconds

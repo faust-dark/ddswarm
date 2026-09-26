@@ -10,6 +10,13 @@ from .admet_prediction import (
 )
 from .agent_result import AgentResult
 from .clinical_assessment import ClinicalAssessment, ClinicalFinding, ClinicalSummary
+from .clinical_simulation import (
+    ClinicalSimulation,
+    ClinicalSimulationSummary,
+    ConcentrationPoint,
+    PKParameters,
+    PKSimulation,
+)
 from .design_batch import DesignBatch, MoleculeDesign
 from .docking_result import (
     DockedPose,
@@ -75,7 +82,10 @@ __all__ = [
     "AttemptRecord",
     "ClinicalAssessment",
     "ClinicalFinding",
+    "ClinicalSimulation",
+    "ClinicalSimulationSummary",
     "ClinicalSummary",
+    "ConcentrationPoint",
     "DesignBatch",
     "DockedPose",
     "DockingProtocol",
@@ -98,6 +108,8 @@ __all__ = [
     "MoleculeProperties",
     "MoleculeScreenResult",
     "MoleculeToxAssessment",
+    "PKParameters",
+    "PKSimulation",
     "PatentEntry",
     "PatentLandscape",
     "PatentSummary",

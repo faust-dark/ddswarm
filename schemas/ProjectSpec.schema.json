@@ -56,6 +56,78 @@
       "title": "Starting Materials",
       "type": "array"
     },
+    "mechanism_of_action": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mechanism Of Action"
+    },
+    "indication": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Indication"
+    },
+    "existing_drugs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Existing Drugs",
+      "type": "array"
+    },
+    "chemical_scaffold": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chemical Scaffold"
+    },
+    "adme_issue": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Adme Issue"
+    },
+    "dose_mg": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dose Mg"
+    },
+    "route_of_administration": {
+      "default": "oral",
+      "title": "Route Of Administration",
+      "type": "string"
+    },
     "constraints": {
       "items": {
         "type": "string"

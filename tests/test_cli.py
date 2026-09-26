@@ -21,7 +21,8 @@ def test_run_default_pipeline(tmp_path):
     f = _write_project(tmp_path)
     store = tmp_path / "store"
     reports = tmp_path / "reports"
-    rc = cli.main(["run", str(f), "--store", str(store), "--reports-dir", str(reports)])
+    rc = cli.main(["run", str(f), "--reasoning", "none", "--store", str(store),
+                   "--reports-dir", str(reports)])
     assert rc == 0
     runs = list((store / "p1" / "runs").iterdir())
     assert len(runs) == 1
@@ -50,7 +51,8 @@ def test_runs_and_report(tmp_path):
     f = _write_project(tmp_path, project_id="p2")
     store = tmp_path / "store"
     reports = tmp_path / "reports"
-    assert cli.main(["run", str(f), "--store", str(store), "--reports-dir", str(reports)]) == 0
+    assert cli.main(["run", str(f), "--reasoning", "none", "--store", str(store),
+                     "--reports-dir", str(reports)]) == 0
     assert cli.main(["runs", "p2", "--store", str(store)]) == 0
     assert cli.main(["report", "p2", "--store", str(store), "--reports-dir", str(reports)]) == 0
     assert cli.main(["memory", "p2", "--store", str(store)]) == 0

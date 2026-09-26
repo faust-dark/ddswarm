@@ -1,0 +1,435 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "ClinicalSimulationSummary": {
+      "properties": {
+        "total_molecules": {
+          "default": 0,
+          "title": "Total Molecules",
+          "type": "integer"
+        },
+        "simulated": {
+          "default": 0,
+          "title": "Simulated",
+          "type": "integer"
+        },
+        "insufficient_inputs": {
+          "default": 0,
+          "title": "Insufficient Inputs",
+          "type": "integer"
+        }
+      },
+      "title": "ClinicalSimulationSummary",
+      "type": "object"
+    },
+    "ConcentrationPoint": {
+      "properties": {
+        "time_hours": {
+          "title": "Time Hours",
+          "type": "number"
+        },
+        "concentration_mg_l": {
+          "title": "Concentration Mg L",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_hours",
+        "concentration_mg_l"
+      ],
+      "title": "ConcentrationPoint",
+      "type": "object"
+    },
+    "PKParameters": {
+      "properties": {
+        "clearance_ml_min_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clearance Ml Min Kg"
+        },
+        "volume_of_distribution_l_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Of Distribution L Kg"
+        },
+        "bioavailability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bioavailability"
+        },
+        "half_life_hours": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Half Life Hours"
+        },
+        "source": {
+          "default": "not_available",
+          "enum": [
+            "predicted",
+            "inferred",
+            "user",
+            "derived",
+            "not_available"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Ref"
+        }
+      },
+      "title": "PKParameters",
+      "type": "object"
+    },
+    "PKSimulation": {
+      "properties": {
+        "molecule_id": {
+          "title": "Molecule Id",
+          "type": "string"
+        },
+        "canonical_smiles": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Smiles"
+        },
+        "dose_mg": {
+          "title": "Dose Mg",
+          "type": "number"
+        },
+        "route": {
+          "default": "oral",
+          "title": "Route",
+          "type": "string"
+        },
+        "parameters": {
+          "$ref": "#/$defs/PKParameters"
+        },
+        "elimination_rate_per_hour": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elimination Rate Per Hour"
+        },
+        "half_life_hours": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Half Life Hours"
+        },
+        "cmax_mg_l": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cmax Mg L"
+        },
+        "auc_mg_h_l": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Auc Mg H L"
+        },
+        "concentration_curve": {
+          "items": {
+            "$ref": "#/$defs/ConcentrationPoint"
+          },
+          "title": "Concentration Curve",
+          "type": "array"
+        },
+        "model": {
+          "default": "one-compartment, instant absorption",
+          "title": "Model",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "molecule_id",
+        "dose_mg"
+      ],
+      "title": "PKSimulation",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "clinical_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "simulations": {
+      "items": {
+        "$ref": "#/$defs/PKSimulation"
+      },
+      "title": "Simulations",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/ClinicalSimulationSummary"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "ClinicalSimulation",
+  "type": "object"
+}

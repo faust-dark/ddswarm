@@ -528,6 +528,10 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
 
         _narrative_knowledge_agents(by_kind, para, sub)
 
+        if by_kind.get("clinical_simulation"):
+            sub("PK/PD simulation", "clinical_minion")
+            _narrative_clinical_simulation(by_kind["clinical_simulation"], para)
+
         # ---- identified candidate (the discovery outcome) ----
         section("Identified candidate")
         cand = report.identified_candidate
@@ -831,6 +835,27 @@ def _narrative_knowledge_agents(by_kind, para, sub) -> None:
             para(f"The {stage.lower()} contributed {n} entr{'y' if n == 1 else 'ies'} "
                  "(LLM-recalled, evidence level: inferred). These are research aids, not legal "
                  "or regulatory determinations.")
+
+
+def _narrative_clinical_simulation(css, para) -> None:
+    src_txt = {"user": "user-supplied", "inferred": "LLM-recalled (inferred)",
+               "derived": "derived", "predicted": "predicted"}
+    for cs in css:
+        for s in cs.simulations:
+            para(
+                f"{s.molecule_id}: one-compartment PK model at {s.dose_mg:g} mg {s.route} "
+                f"({src_txt.get(s.parameters.source, s.parameters.source)} clearance "
+                f"{s.parameters.clearance_ml_min_kg:g} mL/min/kg, Vd "
+                f"{s.parameters.volume_of_distribution_l_kg:g} L/kg, F "
+                f"{s.parameters.bioavailability:g}) gives half-life t1/2 = "
+                f"{s.half_life_hours:g} h, Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = "
+                f"{s.auc_mg_h_l:.3f} mg*h/L. This is a model, not measured human PK."
+            )
+    tot = sum(c.summary.total_molecules for c in css)
+    sim = sum(c.summary.simulated for c in css)
+    ins = sum(c.summary.insufficient_inputs for c in css)
+    para(f"Simulated {sim} of {tot} molecule(s); {ins} lacked sufficient PK inputs "
+         "(clearance + Vd, or t1/2 + one of them) and were not simulated.")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:

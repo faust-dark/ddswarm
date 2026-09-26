@@ -14,6 +14,7 @@ from pathlib import Path
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.clinical_assessment import ClinicalAssessment
+from ..contracts.clinical_simulation import ClinicalSimulation
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -49,6 +50,7 @@ _KIND_MODELS: dict[str, type] = {
     "safety_assessment": SafetyAssessment,
     "patent_landscape": PatentLandscape,
     "clinical_assessment": ClinicalAssessment,
+    "clinical_simulation": ClinicalSimulation,
     "regulatory_assessment": RegulatoryAssessment,
 }
 
@@ -210,6 +212,8 @@ class ReportMinion(Agent):
         for ca in by_kind.get("clinical_assessment", []):
             for e in ca.entries:
                 c[e.evidence_level.value] += 1
+        for cs in by_kind.get("clinical_simulation", []):
+            c["calculated"] += len(cs.simulations)  # one-compartment model is deterministic math
         for ra in by_kind.get("regulatory_assessment", []):
             for e in ra.entries:
                 c[e.evidence_level.value] += 1
@@ -274,6 +278,14 @@ class ReportMinion(Agent):
                 for e in ca.entries:
                     phases[e.phase] = phases.get(e.phase, 0) + 1
             parts.append("clinical " + ", ".join(f"{k}:{v}" for k, v in sorted(phases.items())))
+        css = by_kind.get("clinical_simulation", [])
+        if css:
+            sim = sum(c.summary.simulated for c in css)
+            tot = sum(c.summary.total_molecules for c in css)
+            t12s = [f"{s.molecule_id}: t1/2 {s.half_life_hours}h"
+                    for c in css for s in c.simulations[:2]]
+            parts.append(f"PK/PD {sim}/{tot} simulated (one-compartment"
+                         + (f"; {', '.join(t12s)})" if t12s else ")"))
         ras = by_kind.get("regulatory_assessment", [])
         if ras:
             parts.append(f"regulatory {sum(r.summary.total_entries for r in ras)} findings")
@@ -300,6 +312,8 @@ class ReportMinion(Agent):
             gaps.append("no patent/FTO landscape (opt-in; needs reasoning.backend=hermes)")
         if "clinical_assessment" not in by_kind:
             gaps.append("no clinical assessment (opt-in; needs reasoning.backend=hermes)")
+        if "clinical_simulation" not in by_kind:
+            gaps.append("no PK/PD simulation (insufficient PK inputs: clearance+Vd via params or reasoning recall)")
         if "regulatory_assessment" not in by_kind:
             gaps.append("no regulatory assessment (opt-in; needs reasoning.backend=hermes)")
         rps = by_kind.get("retrosynthesis_plan", [])
@@ -345,6 +359,7 @@ class ReportMinion(Agent):
             "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
             "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
+            "PK/PD simulations are a one-compartment model on predicted/inferred parameters — not measured human pharmacokinetics.",
         ]
 
     @staticmethod

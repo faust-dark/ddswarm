@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 13: IUPAC readability labels)
+# ddswarm — drug discovery multi-agent swarm (Increment 14: deterministic PK/PD + Hermes reasoning by default)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -45,6 +45,21 @@ backbone (every compute step consumes SMILES); the IUPAC name is fetched only
 when asked for, from the NIH CACTUS web service (`--iupac`), and is clearly
 marked non-deterministic + non-authoritative — it is excluded from the report's
 reproducibility hash.
+
+**Increment 14** adds deterministic **PK/PD** and turns Hermes reasoning on by
+default. `clinical_minion` now emits a `ClinicalSimulation` artifact alongside
+its clinical knowledge: a deterministic one-compartment PK model (t1/2, Cmax,
+AUC, concentration-time curve) computed from clearance + volume of distribution
+(or t1/2 + one of them), supplied explicitly or recalled by the reasoning
+backend. It runs only when sufficient inputs exist — otherwise it reports
+`insufficient_inputs`. The `predictor_minion` gained a `BBB_Permeability` rule
+(Pajouhesh & Lenz 2005) and honestly reports the PK endpoints that need a QSPR
+model (clearance, Vd, t1/2, protein binding) as `not_available`. The project
+input now carries `mechanism_of_action`, `indication`, `existing_drugs`,
+`chemical_scaffold`, `adme_issue`, `dose_mg`, `route_of_administration` — the
+swarm workflow schema's primary-input fields. **Hermes reasoning is now the
+default** (`reasoning.backend` defaults to `hermes`); `--reasoning none` opts
+out.
 
 ## Architecture
 
@@ -364,7 +379,10 @@ next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
 `retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/
 `clinical_minion`/`regulatory_minion` delegate to one-shot Hermes subagents
 (`hermes chat -q`), merging the LLM output with the deterministic baseline.
-Without it (or when the backend is unavailable) the deterministic agents fall
+This is now the **default**: `reasoning.backend` defaults to `hermes`, so
+`ddswarm run` delegates by default; pass `--reasoning none` (or
+`"reasoning": {"backend": "none"}`) to run the deterministic baseline only.
+When the backend is unavailable the deterministic agents fall
 back to their baseline — seed assembly, transformation labels, SA score — while
 the knowledge agents return `insufficient_evidence` (they have no offline
 baseline). LLM-contributed entries are forced to `evidence_level`

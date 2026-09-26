@@ -8,6 +8,7 @@ from pathlib import Path
 from .admet_prediction import AdmetPrediction
 from .agent_result import AgentResult
 from .clinical_assessment import ClinicalAssessment
+from .clinical_simulation import ClinicalSimulation
 from .design_batch import DesignBatch
 from .docking_result import DockingResult
 from .dynamics_result import DynamicsResult
@@ -50,6 +51,7 @@ MODELS: dict[str, type] = {
     "ProjectMemory": ProjectMemory,
     "PatentLandscape": PatentLandscape,
     "ClinicalAssessment": ClinicalAssessment,
+    "ClinicalSimulation": ClinicalSimulation,
     "RegulatoryAssessment": RegulatoryAssessment,
     "SafetyAssessment": SafetyAssessment,
     "ValidationReport": ValidationReport,

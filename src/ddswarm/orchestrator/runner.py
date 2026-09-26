@@ -13,6 +13,7 @@ from ..agents.base import Agent, AgentContext
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.clinical_assessment import ClinicalAssessment
+from ..contracts.clinical_simulation import ClinicalSimulation
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -51,6 +52,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "report_document": ReportDocument,
     "patent_landscape": PatentLandscape,
     "clinical_assessment": ClinicalAssessment,
+    "clinical_simulation": ClinicalSimulation,
     "regulatory_assessment": RegulatoryAssessment,
     "safety_assessment": SafetyAssessment,
     "validation_report": ValidationReport,

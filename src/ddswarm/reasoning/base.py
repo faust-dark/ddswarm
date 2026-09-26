@@ -52,3 +52,9 @@ class ReasoningBackend(ABC):
     @abstractmethod
     def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
         """Return raw dicts for RegulatoryFinding (validated by the agent)."""
+
+    @abstractmethod
+    def pk_parameters(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        """Return raw dicts ({molecule_id, clearance_ml_min_kg, volume_of_distribution_l_kg,
+        bioavailability, half_life_hours, source, notes}) of human PK parameters for
+        known drugs / close analogs (validated by the agent). LLM recall — not measured data."""

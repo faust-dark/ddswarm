@@ -16,6 +16,15 @@ class ProjectSpec(BaseModel):
     objective: str = Field(min_length=1)
     targets: list[str] = Field(default_factory=list)
     starting_materials: list[str] = Field(default_factory=list)
+    # ---- primary input, per the swarm workflow schema ----
+    mechanism_of_action: str | None = None
+    indication: str | None = None
+    existing_drugs: list[str] = Field(default_factory=list)
+    chemical_scaffold: str | None = None
+    adme_issue: str | None = None
+    # ---- PK/PD simulation inputs (optional; used by clinical_minion) ----
+    dose_mg: float | None = None
+    route_of_administration: str = "oral"
     constraints: list[str] = Field(default_factory=list)
     exclusions: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
