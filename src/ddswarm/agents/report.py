@@ -214,6 +214,7 @@ class ReportMinion(Agent):
                 c[e.evidence_level.value] += 1
         for cs in by_kind.get("clinical_simulation", []):
             c["calculated"] += len(cs.simulations) + len(cs.pd_simulations)  # deterministic math
+            c["calculated"] += sum(1 for s in cs.simulations if s.tissue is not None)
         for ra in by_kind.get("regulatory_assessment", []):
             for e in ra.entries:
                 c[e.evidence_level.value] += 1

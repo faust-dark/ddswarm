@@ -854,6 +854,15 @@ def _narrative_clinical_simulation(css, para) -> None:
                     f"{s.half_life_hours:g} h, Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = "
                     f"{s.auc_mg_h_l:.3f} mg*h/L."
                 )
+            elif s.model == "multi_compartment":
+                np_ = len(s.parameters.peripheral_compartments)
+                para(
+                    f"{s.molecule_id}: multi-compartment PK model at {s.dose_mg:g} mg {s.route} "
+                    f"({src} clearance {s.parameters.clearance_ml_min_kg:g} mL/min/kg, "
+                    f"V1 {s.parameters.central_volume_l_kg:g} L/kg, {np_} peripheral "
+                    f"compartment(s)) gives terminal t1/2 = {s.half_life_hours:g} h, "
+                    f"Cmax = {s.cmax_mg_l:.3f} mg/L, AUC = {s.auc_mg_h_l:.3f} mg*h/L."
+                )
             else:
                 para(
                     f"{s.molecule_id}: one-compartment PK model at {s.dose_mg:g} mg {s.route} "
@@ -872,6 +881,22 @@ def _narrative_clinical_simulation(css, para) -> None:
                     f"{s.selection_metrics.identifiability_note})"
                 para(f"Model complexity selected by {reason}{extra}.")
             para("This is a model, not measured human PK.")
+            if s.tissue is not None:
+                tp = s.tissue.parameters
+                if s.tissue.model == "well_stirred":
+                    para(f"{s.molecule_id}: well-stirred tissue model (Kp "
+                         f"{tp.tissue_partition_coefficient:g}) — tissue concentration equals "
+                         f"Kp times plasma.")
+                elif s.tissue.model == "blood_flow_limited":
+                    para(f"{s.molecule_id}: blood-flow-limited tissue model (Kp "
+                         f"{tp.tissue_partition_coefficient:g}, Qt "
+                         f"{tp.tissue_blood_flow_ml_min_kg:g} mL/min/kg, Vt "
+                         f"{tp.tissue_volume_l_kg:g} L/kg) — perfusion-limited uptake.")
+                elif s.tissue.model == "permeability_limited":
+                    para(f"{s.molecule_id}: permeability-limited tissue model (Kp "
+                         f"{tp.tissue_partition_coefficient:g}, PS "
+                         f"{tp.permeability_surface_product_ml_min_kg:g} mL/min/kg, Vt "
+                         f"{tp.tissue_volume_l_kg:g} L/kg) — membrane-barrier uptake.")
         for pd in cs.pd_simulations:
             if pd.model in ("emax", "hill"):
                 hill = f", Hill n {pd.parameters.hill_coefficient:g}" if pd.model == "hill" else ""

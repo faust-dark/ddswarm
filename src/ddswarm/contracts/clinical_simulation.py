@@ -27,8 +27,8 @@ from .enums import AgentResultStatus
 from .provenance import ProvenanceEntry
 
 PKSource = Literal["predicted", "inferred", "user", "derived", "not_available"]
-PKModelKind = Literal["one_compartment", "two_compartment", "multi_compartment",
-                      "well_stirred", "blood_flow_limited", "permeability_limited"]
+PKModelKind = Literal["one_compartment", "two_compartment", "multi_compartment"]
+TissueModelKind = Literal["well_stirred", "blood_flow_limited", "permeability_limited"]
 PDModelKind = Literal["emax", "hill", "indirect_response", "effect_compartment",
                       "receptor_occupancy"]
 SelectionReason = Literal["mechanism_hint", "data_driven", "default"]
@@ -43,6 +43,11 @@ class ModelSelectionMetrics(BaseModel):
     identifiability_note: str | None = None
 
 
+class PeripheralCompartment(BaseModel):
+    volume_l_kg: float
+    intercompartmental_clearance_ml_min_kg: float
+
+
 class PKParameters(BaseModel):
     clearance_ml_min_kg: float | None = None
     volume_of_distribution_l_kg: float | None = None
@@ -52,6 +57,17 @@ class PKParameters(BaseModel):
     central_volume_l_kg: float | None = None                     # V1
     intercompartmental_clearance_ml_min_kg: float | None = None  # Q
     peripheral_volume_l_kg: float | None = None                  # V2
+    # multi-compartment (N peripheral compartments beyond the central one)
+    peripheral_compartments: list[PeripheralCompartment] = Field(default_factory=list)
+    source: PKSource = "not_available"
+    source_ref: str | None = None
+
+
+class TissueParameters(BaseModel):
+    tissue_partition_coefficient: float | None = None                # Kp (tissue:plasma)
+    tissue_blood_flow_ml_min_kg: float | None = None                 # Qt
+    tissue_volume_l_kg: float | None = None                          # Vt
+    permeability_surface_product_ml_min_kg: float | None = None      # PS
     source: PKSource = "not_available"
     source_ref: str | None = None
 
@@ -64,6 +80,14 @@ class ConcentrationPoint(BaseModel):
 class EffectPoint(BaseModel):
     time_hours: float
     effect: float
+
+
+class TissueSimulation(BaseModel):
+    model: TissueModelKind
+    parameters: TissueParameters = Field(default_factory=TissueParameters)
+    tissue_curve: list[ConcentrationPoint] = Field(default_factory=list)
+    selection_reason: SelectionReason = "default"
+    note: str | None = None
 
 
 class PKSimulation(BaseModel):
@@ -82,6 +106,7 @@ class PKSimulation(BaseModel):
     cmax_mg_l: float | None = None
     auc_mg_h_l: float | None = None
     concentration_curve: list[ConcentrationPoint] = Field(default_factory=list)
+    tissue: TissueSimulation | None = None   # optional organ/tissue-level model
     selection_reason: SelectionReason = "default"
     selection_metrics: ModelSelectionMetrics | None = None
     note: str | None = None

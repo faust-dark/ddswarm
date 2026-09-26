@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 16: mechanism-based PD models)
+# ddswarm — drug discovery multi-agent swarm (Increment 17: multi-compartment + organ models)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 **Increment 9** replaces the no-op ADMET provider with a **deterministic
@@ -96,6 +96,25 @@ mechanism (explicit `params.pd_model` or a keyword match on
 selected by mechanism — the goodness-of-fit/AIC-BIC data-driven comparison
 remains within the direct-effect family (emax vs hill) only, since the other
 families have incommensurate output scales.
+
+**Increment 17** completes the PK/PD complexity axis with multi-compartment and
+tissue-level (organ) models:
+
+- `multi_compartment` — mammillary N-compartment model (central + N peripheral
+  compartments, explicit `peripheral_compartments` list of {V, Q}), integrated
+  with a vector fixed-step RK4; AUC via the mass-balance identity D/CL_total,
+  terminal t1/2 from a log-linear least-squares tail fit.
+- Organ/tissue models (single target tissue, opt-in via `params.tissue_model`
+  or a keyword match; layered on the systemic PK curve):
+  - `well_stirred` — Ct = Kp·C_plasma (algebraic).
+  - `blood_flow_limited` — dCt/dt = (Qt/Vt)·(C − Ct/Kp) (perfusion-limited, RK4).
+  - `permeability_limited` — dCt/dt = (PS/Vt)·(C − Ct/Kp) (membrane barrier, RK4).
+
+`PKModelKind` now covers systemic models only (one/two/multi-compartment);
+`TissueSimulation`/`TissueParameters` hold the optional tissue-level model. The
+data-driven model selection compares ALL feasible systemic models (1 vs 2 vs N)
+via a total-order fit key (perfect fit < BIC < RSS); whole-body multi-organ PBPK
+is deliberately out of scope (no deterministic parameter source).
 
 ## Architecture
 

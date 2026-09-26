@@ -287,3 +287,79 @@ def test_pd_per_molecule_override(tmp_path):
     assert cs.summary.pd_simulated == 2
     models = {pd.molecule_id: pd.model for pd in cs.pd_simulations}
     assert models == {"a": "emax", "b": "receptor_occupancy"}
+
+
+# ---- multi-compartment + tissue (organ) models ----
+
+def test_pk_multi_compartment_explicit(tmp_path):
+    store = Store(tmp_path)
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "central_volume_l_kg": 3.0,
+                                 "peripheral_compartments": [
+                                     {"volume_l_kg": 7.0, "intercompartmental_clearance_ml_min_kg": 10.0},
+                                     {"volume_l_kg": 5.0, "intercompartmental_clearance_ml_min_kg": 4.0}],
+                                 "bioavailability": 1.0}],
+              "pk_model": "multi_compartment"}
+    result = _run(store, _spec(), params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.model == "multi_compartment"
+    assert s.selection_reason == "mechanism_hint"
+    assert len(s.parameters.peripheral_compartments) == 2
+    assert s.half_life_hours == pytest.approx(21.4, abs=0.5)
+    assert s.cmax_mg_l == pytest.approx(10.0 / (3.0 * 70.0), abs=1e-4)
+    assert s.tissue is None  # no tissue hint
+
+
+def test_tissue_well_stirred_hint(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(adme_issue="rapid well-stirred tissue equilibrium")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9,
+                                 "tissue_partition_coefficient": 3.0}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.model == "one_compartment"  # systemic model unchanged
+    assert s.tissue is not None
+    assert s.tissue.model == "well_stirred"
+    assert s.tissue.parameters.tissue_partition_coefficient == 3.0
+    # Ct(t) = Kp * C_plasma(t) (both rounded independently -> tolerance for rounding)
+    assert s.tissue.tissue_curve[0].concentration_mg_l == pytest.approx(
+        3.0 * s.concentration_curve[0].concentration_mg_l, abs=2e-4)
+
+
+def test_tissue_blood_flow_limited_hint(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(adme_issue="perfusion-limited tissue uptake")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9,
+                                 "tissue_partition_coefficient": 3.0,
+                                 "tissue_blood_flow_ml_min_kg": 20.0,
+                                 "tissue_volume_l_kg": 1.0}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.tissue is not None
+    assert s.tissue.model == "blood_flow_limited"
+    assert s.tissue.parameters.tissue_blood_flow_ml_min_kg == 20.0
+
+
+def test_tissue_permeability_limited_hint(tmp_path):
+    store = Store(tmp_path)
+    spec = _spec(adme_issue="membrane permeability barrier")
+    params = {"molecules": [{"id": "m1", "smiles": "c1ccccc1"}],
+              "pk_parameters": [{"molecule_id": "m1", "clearance_ml_min_kg": 12.0,
+                                 "volume_of_distribution_l_kg": 4.5, "bioavailability": 0.9,
+                                 "tissue_partition_coefficient": 3.0,
+                                 "tissue_volume_l_kg": 1.0,
+                                 "permeability_surface_product_ml_min_kg": 5.0}]}
+    result = _run(store, spec, params)
+    cs = _load(store, result, ClinicalSimulation, "clinical_simulation")
+    s = cs.simulations[0]
+    assert s.tissue is not None
+    assert s.tissue.model == "permeability_limited"
+    assert s.tissue.parameters.permeability_surface_product_ml_min_kg == 5.0

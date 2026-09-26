@@ -27,15 +27,20 @@ from __future__ import annotations
 import math
 
 from ..chemistry.pkpd import (
+    _sample,
     emax_effect,
     fit_metrics,
     hill_effect,
     receptor_occupancy,
     resolve_cl_vd,
+    simulate_blood_flow_limited,
     simulate_effect_compartment,
     simulate_indirect_response,
+    simulate_multi_compartment,
     simulate_one_compartment,
+    simulate_permeability_limited,
     simulate_two_compartment,
+    simulate_well_stirred,
 )
 from ..contracts.agent_result import AgentResult
 from ..contracts.clinical_assessment import ClinicalAssessment, ClinicalFinding, ClinicalSummary
@@ -47,8 +52,11 @@ from ..contracts.clinical_simulation import (
     ModelSelectionMetrics,
     PDParameters,
     PDSimulation,
+    PeripheralCompartment,
     PKParameters,
     PKSimulation,
+    TissueParameters,
+    TissueSimulation,
 )
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -82,6 +90,21 @@ _PD_NOTE = {
     "indirect_response": "indirect-response (turnover) model — drug inhibits response synthesis",
     "effect_compartment": "effect-compartment (link) model — delayed effect vs plasma",
     "receptor_occupancy": "receptor-occupancy (target-engagement) model",
+}
+
+# documented keyword -> tissue model-kind hints (tissue-level representation)
+_TISSUE_HINTS = {
+    "well_stirred": ("well-stirred", "well stirred", "instant equilibrium", "rapid equilibrium"),
+    "blood_flow_limited": ("blood-flow-limited", "blood flow limited", "perfusion-limited",
+                           "perfusion limited"),
+    "permeability_limited": ("permeability-limited", "permeability limited",
+                             "membrane barrier", "permeability barrier"),
+}
+
+_TISSUE_NOTE = {
+    "well_stirred": "well-stirred tissue model (Ct = Kp*C_plasma)",
+    "blood_flow_limited": "blood-flow-limited tissue model (perfusion-limited uptake)",
+    "permeability_limited": "permeability-limited tissue model (membrane PS barrier)",
 }
 
 
@@ -187,8 +210,8 @@ class ClinicalMinion(Agent):
             if kind is None:
                 insufficient += 1
                 continue
-            sim = self._build_pk_simulation(mid, smi, kind, reason, metrics, sim_info, p,
-                                            dose_mg, route, explicit_ids)
+            sim = self._build_pk_simulation(ctx, mid, smi, kind, reason, metrics, sim_info, p,
+                                            dose_mg, route, explicit_ids, warnings)
             simulations.append(sim)
 
             pd_sim = self._build_pd_simulation(
@@ -284,29 +307,32 @@ class ClinicalMinion(Agent):
         requested = explicit or hint
         one = self._one_compartment_result(p, dose_mg, route)
         two = self._two_compartment_result(p, dose_mg, route)
+        multi = self._multi_compartment_result(p, dose_mg, route)
+        candidates: dict[str, dict] = {}
+        if one is not None:
+            candidates["one_compartment"] = one
+        if two is not None:
+            candidates["two_compartment"] = two
+        if multi is not None:
+            candidates["multi_compartment"] = multi
 
-        if requested == "two_compartment":
-            if two is None:
-                warnings.append(f"{mid}: pk_model=two_compartment but V1/Q/V2 unavailable; "
-                                "using available model")
-            else:
-                return "two_compartment", "mechanism_hint", None, two
-        elif requested == "one_compartment":
-            if one is not None:
-                return "one_compartment", "mechanism_hint", None, one
+        if requested is not None:
+            if requested in candidates:
+                return requested, "mechanism_hint", None, candidates[requested]
+            warnings.append(f"{mid}: pk_model={requested} but parameters unavailable; "
+                            "using available model")
 
         # data-driven: goodness-of-fit / identifiability / predictive-performance
-        if observed and one is not None and two is not None:
-            m1 = fit_metrics(observed, one["fn"], one["n_params"])
-            m2 = fit_metrics(observed, two["fn"], two["n_params"])
-            if self._better_fit(m2, m1):
-                return "two_compartment", "data_driven", m2, two
-            return "one_compartment", "data_driven", m1, one
+        if observed and len(candidates) >= 2:
+            fitted = {k: fit_metrics(observed, c["fn"], c["n_params"])
+                      for k, c in candidates.items()}
+            best = min(fitted, key=lambda k: self._fit_key(fitted[k]))
+            return best, "data_driven", fitted[best], candidates[best]
 
-        if one is not None:
-            return "one_compartment", "default", None, one
-        if two is not None:
-            return "two_compartment", "default", None, two
+        # default: simplest feasible model, labelled (not claimed validated)
+        for kind in ("one_compartment", "two_compartment", "multi_compartment"):
+            if kind in candidates:
+                return kind, "default", None, candidates[kind]
         return None, None, None, None
 
     @staticmethod
@@ -354,6 +380,36 @@ class ClinicalMinion(Agent):
                 "fn": fn, "n_params": 4}
 
     @staticmethod
+    def _multi_compartment_result(p, dose_mg, route):
+        v1 = p.get("central_volume_l_kg")
+        cl = p.get("clearance_ml_min_kg")
+        raw = p.get("peripheral_compartments", []) or []
+        if v1 is None or cl is None or not raw:
+            return None
+        peripherals: list[tuple[float, float]] = []
+        for pc in raw:
+            if isinstance(pc, dict):
+                vi, qi = pc.get("volume_l_kg"), pc.get("intercompartmental_clearance_ml_min_kg")
+            else:
+                vi, qi = pc[0], pc[1]
+            if vi is None or qi is None:
+                return None
+            peripherals.append((float(vi), float(qi)))
+        if not peripherals:
+            return None
+        f = float(p.get("bioavailability")) if p.get("bioavailability") is not None else 1.0
+        try:
+            r = simulate_multi_compartment(dose_mg=dose_mg, v1_l_kg=v1,
+                                           clearance_ml_min_kg=cl,
+                                           peripherals=peripherals,
+                                           bioavailability=f, route=route)
+        except ValueError:
+            return None
+        fn = lambda t: _sample(r.ts, r.central, [t])[0]  # noqa: E731
+        return {"result": r, "cl": cl, "v1": v1, "peripherals": peripherals, "f": f,
+                "fn": fn, "n_params": 2 + 2 * len(peripherals)}
+
+    @staticmethod
     def _keyword_hint(spec, hints) -> str | None:
         text = " ".join(filter(None, [spec.mechanism_of_action, spec.adme_issue])).lower()
         for kind, keywords in hints.items():
@@ -391,13 +447,24 @@ class ClinicalMinion(Agent):
             return b1 < b2
         return r1 < r2
 
-    def _build_pk_simulation(self, mid, smi, kind, reason, metrics, sim_info, p,
-                             dose_mg, route, explicit_ids):
+    @staticmethod
+    def _fit_key(m: dict) -> tuple:
+        """Total-order sort key for model fit: perfect fit < (BIC, RSS) < unassessable."""
+        rss = m.get("residual_sum_of_squares")
+        if rss is None:
+            return (2, 0.0, float("inf"))
+        if rss == 0.0:
+            return (0, float(m["n_parameters"]), 0.0)
+        bic = m.get("bic")
+        return (1, bic if bic is not None else float("inf"), float(rss))
+
+    def _build_pk_simulation(self, ctx, mid, smi, kind, reason, metrics, sim_info, p,
+                             dose_mg, route, explicit_ids, warnings):
         source = "user" if mid in explicit_ids else "inferred"
         sel_metrics = self._metrics(metrics)
         r = sim_info["result"]
         if kind == "two_compartment":
-            return PKSimulation(
+            sim = PKSimulation(
                 molecule_id=mid, canonical_smiles=smi, dose_mg=dose_mg, route=route,
                 model="two_compartment",
                 parameters=PKParameters(
@@ -417,22 +484,103 @@ class ClinicalMinion(Agent):
                 note=("two-compartment (biexponential) model; parameters "
                       + ("user-supplied" if source == "user" else "LLM-recalled (inferred)")),
             )
-        return PKSimulation(
-            molecule_id=mid, canonical_smiles=smi, dose_mg=dose_mg, route=route,
-            model="one_compartment",
-            parameters=PKParameters(
-                clearance_ml_min_kg=sim_info["cl"], volume_of_distribution_l_kg=sim_info["vd"],
-                bioavailability=sim_info["f"], half_life_hours=round(r.half_life_hours, 3),
-                source=source, source_ref=p.get("source")),
-            elimination_rate_per_hour=round(r.elimination_rate_per_hour, 5),
-            half_life_hours=round(r.half_life_hours, 3),
-            cmax_mg_l=round(r.cmax_mg_l, 4), auc_mg_h_l=round(r.auc_mg_h_l, 4),
-            concentration_curve=[ConcentrationPoint(time_hours=t, concentration_mg_l=round(c, 4))
-                                 for t, c in r.curve],
-            selection_reason=reason, selection_metrics=sel_metrics,
-            note=("one-compartment model; parameters "
-                  + ("user-supplied" if source == "user" else "LLM-recalled (inferred)")),
-        )
+        elif kind == "multi_compartment":
+            sim = PKSimulation(
+                molecule_id=mid, canonical_smiles=smi, dose_mg=dose_mg, route=route,
+                model="multi_compartment",
+                parameters=PKParameters(
+                    clearance_ml_min_kg=sim_info["cl"], central_volume_l_kg=sim_info["v1"],
+                    peripheral_compartments=[
+                        PeripheralCompartment(volume_l_kg=v,
+                                              intercompartmental_clearance_ml_min_kg=q)
+                        for v, q in sim_info["peripherals"]],
+                    bioavailability=sim_info["f"],
+                    half_life_hours=round(r.terminal_half_life_hours, 3),
+                    source=source, source_ref=p.get("source")),
+                half_life_hours=round(r.terminal_half_life_hours, 3),
+                cmax_mg_l=round(r.cmax_mg_l, 4), auc_mg_h_l=round(r.auc_mg_h_l, 4),
+                concentration_curve=[ConcentrationPoint(time_hours=t, concentration_mg_l=round(c, 4))
+                                     for t, c in r.curve],
+                selection_reason=reason, selection_metrics=sel_metrics,
+                note=(f"multi-compartment model ({len(sim_info['peripherals'])} peripheral "
+                      "compartment(s)); parameters "
+                      + ("user-supplied" if source == "user" else "LLM-recalled (inferred)")),
+            )
+        else:
+            sim = PKSimulation(
+                molecule_id=mid, canonical_smiles=smi, dose_mg=dose_mg, route=route,
+                model="one_compartment",
+                parameters=PKParameters(
+                    clearance_ml_min_kg=sim_info["cl"], volume_of_distribution_l_kg=sim_info["vd"],
+                    bioavailability=sim_info["f"], half_life_hours=round(r.half_life_hours, 3),
+                    source=source, source_ref=p.get("source")),
+                elimination_rate_per_hour=round(r.elimination_rate_per_hour, 5),
+                half_life_hours=round(r.half_life_hours, 3),
+                cmax_mg_l=round(r.cmax_mg_l, 4), auc_mg_h_l=round(r.auc_mg_h_l, 4),
+                concentration_curve=[ConcentrationPoint(time_hours=t, concentration_mg_l=round(c, 4))
+                                     for t, c in r.curve],
+                selection_reason=reason, selection_metrics=sel_metrics,
+                note=("one-compartment model; parameters "
+                      + ("user-supplied" if source == "user" else "LLM-recalled (inferred)")),
+            )
+        tissue = self._build_tissue(ctx, mid, p, sim_info["fn"], [t for t, _ in r.curve],
+                                    explicit_ids, warnings)
+        if tissue is not None:
+            sim.tissue = tissue
+        return sim
+
+    def _build_tissue(self, ctx, mid, p, pk_fn, times, explicit_ids, warnings):
+        """Optional tissue-level (organ) model, layered on the systemic PK curve."""
+        explicit = self._resolve_override(ctx, "tissue_model", mid)
+        hint = self._keyword_hint(ctx.spec, _TISSUE_HINTS)
+        requested = explicit or hint
+        if requested is None:
+            return None
+        reason = "mechanism_hint" if requested else "default"
+        kp = p.get("tissue_partition_coefficient")
+        vt = p.get("tissue_volume_l_kg")
+        qt = p.get("tissue_blood_flow_ml_min_kg")
+        ps = p.get("permeability_surface_product_ml_min_kg")
+        source = "user" if mid in explicit_ids else "inferred"
+        try:
+            if requested == "well_stirred":
+                if kp is None or kp <= 0:
+                    warnings.append(f"{mid}: tissue_model=well_stirred requires Kp")
+                    return None
+                vals = simulate_well_stirred(pk_fn, times, kp=float(kp))
+                params = TissueParameters(tissue_partition_coefficient=float(kp),
+                                          source=source, source_ref=p.get("source"))
+            elif requested == "blood_flow_limited":
+                if kp is None or vt is None or qt is None or kp <= 0 or vt <= 0 or qt <= 0:
+                    warnings.append(f"{mid}: tissue_model=blood_flow_limited requires Kp, Vt, Qt")
+                    return None
+                vals = simulate_blood_flow_limited(pk_fn, times, qt_ml_min_kg=float(qt),
+                                                   vt_l_kg=float(vt), kp=float(kp))
+                params = TissueParameters(tissue_partition_coefficient=float(kp),
+                                          tissue_blood_flow_ml_min_kg=float(qt),
+                                          tissue_volume_l_kg=float(vt),
+                                          source=source, source_ref=p.get("source"))
+            elif requested == "permeability_limited":
+                if kp is None or vt is None or ps is None or kp <= 0 or vt <= 0 or ps <= 0:
+                    warnings.append(f"{mid}: tissue_model=permeability_limited requires Kp, Vt, PS")
+                    return None
+                vals = simulate_permeability_limited(pk_fn, times, ps_ml_min_kg=float(ps),
+                                                     vt_l_kg=float(vt), kp=float(kp))
+                params = TissueParameters(tissue_partition_coefficient=float(kp),
+                                          tissue_volume_l_kg=float(vt),
+                                          permeability_surface_product_ml_min_kg=float(ps),
+                                          source=source, source_ref=p.get("source"))
+            else:
+                warnings.append(f"{mid}: tissue_model={requested} not implemented")
+                return None
+        except ValueError as exc:
+            warnings.append(f"tissue simulation skipped for {mid}: {exc}")
+            return None
+        curve = [ConcentrationPoint(time_hours=t, concentration_mg_l=round(v, 4))
+                 for t, v in zip(times, vals)]
+        return TissueSimulation(model=requested, parameters=params, tissue_curve=curve,
+                                selection_reason=reason,
+                                note=_TISSUE_NOTE.get(requested, "tissue model"))
 
     def _build_pd_simulation(self, ctx, mid, smi, pk_curve, pk_fn, p, observed_eff,
                              pd_explicit_ids, warnings):

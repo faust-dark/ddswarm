@@ -18,8 +18,11 @@ from .clinical_simulation import (
     ModelSelectionMetrics,
     PDParameters,
     PDSimulation,
+    PeripheralCompartment,
     PKParameters,
     PKSimulation,
+    TissueParameters,
+    TissueSimulation,
 )
 from .design_batch import DesignBatch, MoleculeDesign
 from .docking_result import (
@@ -116,8 +119,11 @@ __all__ = [
     "ModelSelectionMetrics",
     "PDParameters",
     "PDSimulation",
+    "PeripheralCompartment",
     "PKParameters",
     "PKSimulation",
+    "TissueParameters",
+    "TissueSimulation",
     "PatentEntry",
     "PatentLandscape",
     "PatentSummary",

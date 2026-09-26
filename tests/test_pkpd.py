@@ -11,10 +11,14 @@ from ddswarm.chemistry.pkpd import (
     hill_effect,
     receptor_occupancy,
     resolve_cl_vd,
+    simulate_blood_flow_limited,
     simulate_effect_compartment,
     simulate_indirect_response,
+    simulate_multi_compartment,
     simulate_one_compartment,
+    simulate_permeability_limited,
     simulate_two_compartment,
+    simulate_well_stirred,
 )
 
 
@@ -198,3 +202,45 @@ def test_effect_compartment_delay():
     assert vals[1] == pytest.approx(emax * ce_half / (ec50 + ce_half), abs=0.5)
     ce_ss = Cp * (1.0 - math.exp(-ke0 * 10.0))
     assert vals[2] == pytest.approx(emax * ce_ss / (ec50 + ce_ss), abs=0.5)
+
+
+def test_well_stirred_scaling():
+    vals = simulate_well_stirred(lambda t: 10.0, [0.0, 1.0, 5.0], kp=3.0)
+    assert vals == pytest.approx([30.0, 30.0, 30.0], abs=1e-9)
+    with pytest.raises(ValueError):
+        simulate_well_stirred(lambda t: 10.0, [0.0], kp=0.0)
+
+
+def test_blood_flow_limited_steady_state():
+    # constant plasma C=10, Kp=3 -> Ct_ss = Kp*C = 30; time constant = Kp*Vt/(Qt*0.06)
+    vals = simulate_blood_flow_limited(lambda t: 10.0, [0.0, 20.0], qt_ml_min_kg=20.0,
+                                       vt_l_kg=1.0, kp=3.0)
+    assert vals[0] == pytest.approx(0.0, abs=1e-9)
+    assert vals[-1] == pytest.approx(30.0, abs=0.1)
+
+
+def test_permeability_limited_steady_state():
+    # PS=5 -> rate=0.3/h, time constant Kp/rate=10h; at t=60 -> Ct ~ Kp*C
+    vals = simulate_permeability_limited(lambda t: 10.0, [0.0, 60.0], ps_ml_min_kg=5.0,
+                                         vt_l_kg=1.0, kp=3.0)
+    assert vals[-1] == pytest.approx(30.0, abs=0.1)
+
+
+def test_multi_compartment_one_peripheral_matches_two_compartment():
+    mc = simulate_multi_compartment(dose_mg=10.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                    peripherals=[(7.0, 10.0)], bioavailability=1.0)
+    # mass-balance AUC = D/CL_total, Cmax = F*D/(V1*W)
+    assert mc.cmax_mg_l == pytest.approx(10.0 / (3.0 * 70.0), abs=1e-6)
+    assert mc.auc_mg_h_l == pytest.approx(10.0 / (12.0 * 70.0 * 0.06), abs=1e-3)
+    # terminal t1/2 approx the 2-comp beta half-life (16.28 h)
+    assert mc.terminal_half_life_hours == pytest.approx(16.28, abs=0.5)
+    # central curve is monotonically decreasing
+    concs = [c for _, c in mc.curve]
+    assert all(concs[i] >= concs[i + 1] for i in range(len(concs) - 1))
+
+
+def test_multi_compartment_requires_peripheral():
+    import pytest as _pytest
+    with _pytest.raises(ValueError):
+        simulate_multi_compartment(dose_mg=10.0, v1_l_kg=3.0, clearance_ml_min_kg=12.0,
+                                   peripherals=[])

@@ -455,6 +455,13 @@
           "default": null,
           "title": "Peripheral Volume L Kg"
         },
+        "peripheral_compartments": {
+          "items": {
+            "$ref": "#/$defs/PeripheralCompartment"
+          },
+          "title": "Peripheral Compartments",
+          "type": "array"
+        },
         "source": {
           "default": "not_available",
           "enum": [
@@ -515,10 +522,7 @@
           "enum": [
             "one_compartment",
             "two_compartment",
-            "multi_compartment",
-            "well_stirred",
-            "blood_flow_limited",
-            "permeability_limited"
+            "multi_compartment"
           ],
           "title": "Model",
           "type": "string"
@@ -605,6 +609,17 @@
           "title": "Concentration Curve",
           "type": "array"
         },
+        "tissue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TissueSimulation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "selection_reason": {
           "default": "default",
           "enum": [
@@ -644,6 +659,24 @@
         "dose_mg"
       ],
       "title": "PKSimulation",
+      "type": "object"
+    },
+    "PeripheralCompartment": {
+      "properties": {
+        "volume_l_kg": {
+          "title": "Volume L Kg",
+          "type": "number"
+        },
+        "intercompartmental_clearance_ml_min_kg": {
+          "title": "Intercompartmental Clearance Ml Min Kg",
+          "type": "number"
+        }
+      },
+      "required": [
+        "volume_l_kg",
+        "intercompartmental_clearance_ml_min_kg"
+      ],
+      "title": "PeripheralCompartment",
       "type": "object"
     },
     "ProvenanceEntry": {
@@ -745,6 +778,134 @@
         "source"
       ],
       "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "TissueParameters": {
+      "properties": {
+        "tissue_partition_coefficient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tissue Partition Coefficient"
+        },
+        "tissue_blood_flow_ml_min_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tissue Blood Flow Ml Min Kg"
+        },
+        "tissue_volume_l_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tissue Volume L Kg"
+        },
+        "permeability_surface_product_ml_min_kg": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Permeability Surface Product Ml Min Kg"
+        },
+        "source": {
+          "default": "not_available",
+          "enum": [
+            "predicted",
+            "inferred",
+            "user",
+            "derived",
+            "not_available"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Ref"
+        }
+      },
+      "title": "TissueParameters",
+      "type": "object"
+    },
+    "TissueSimulation": {
+      "properties": {
+        "model": {
+          "enum": [
+            "well_stirred",
+            "blood_flow_limited",
+            "permeability_limited"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "parameters": {
+          "$ref": "#/$defs/TissueParameters"
+        },
+        "tissue_curve": {
+          "items": {
+            "$ref": "#/$defs/ConcentrationPoint"
+          },
+          "title": "Tissue Curve",
+          "type": "array"
+        },
+        "selection_reason": {
+          "default": "default",
+          "enum": [
+            "mechanism_hint",
+            "data_driven",
+            "default"
+          ],
+          "title": "Selection Reason",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "TissueSimulation",
       "type": "object"
     },
     "ToolVersion": {

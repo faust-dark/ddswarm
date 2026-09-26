@@ -354,3 +354,160 @@ def simulate_effect_compartment(concentration_fn, times, *, ke0_per_hour: float,
     ts, ys = _rk4_solve(deriv, 0.0, float(times[-1]), dt=dt)
     ces = _sample(ts, ys, times)
     return [e0 + emax * ce / (ec50 + ce) for ce in ces]
+
+
+def _rk4_solve_system(deriv_fn, y0, t_end: float, dt: float = 0.1):
+    """Vector (system) fixed-step RK4. deriv_fn(t, y) -> list[float] (same length as y).
+
+    Returns (ts, ys) where ys is a list of state-vectors, including t=0.
+    """
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    if t_end < 0:
+        raise ValueError("t_end must be non-negative")
+    n = len(y0)
+    ts: list[float] = [0.0]
+    ys: list[list[float]] = [list(y0)]
+    y = list(y0)
+    t = 0.0
+    while t < t_end - 1e-12:
+        h = min(dt, t_end - t)
+        k1 = deriv_fn(t, y)
+        k2 = deriv_fn(t + h / 2.0, [y[j] + h / 2.0 * k1[j] for j in range(n)])
+        k3 = deriv_fn(t + h / 2.0, [y[j] + h / 2.0 * k2[j] for j in range(n)])
+        k4 = deriv_fn(t + h, [y[j] + h * k3[j] for j in range(n)])
+        y = [y[j] + (h / 6.0) * (k1[j] + 2.0 * k2[j] + 2.0 * k3[j] + k4[j]) for j in range(n)]
+        t += h
+        ts.append(t)
+        ys.append(list(y))
+    return ts, ys
+
+
+def simulate_well_stirred(concentration_fn, times, *, kp: float) -> list[float]:
+    """Well-stirred tissue model: Ct(t) = Kp * C_plasma(t) (instant equilibrium)."""
+    if kp <= 0:
+        raise ValueError("Kp must be positive")
+    return [kp * concentration_fn(t) for t in times]
+
+
+def simulate_blood_flow_limited(concentration_fn, times, *, qt_ml_min_kg: float,
+                                vt_l_kg: float, kp: float, dt: float = 0.1) -> list[float]:
+    """Blood-flow-limited (perfusion-limited) tissue model.
+
+    dCt/dt = (Qt/Vt) * (C_art(t) - Ct/Kp); rate constant = Qt/Vt. Returns Ct(t).
+    """
+    if qt_ml_min_kg <= 0 or vt_l_kg <= 0 or kp <= 0:
+        raise ValueError("Qt, Vt, Kp must be positive")
+    if not times:
+        return []
+    rate = qt_ml_min_kg * 0.06 / vt_l_kg  # 1/h
+
+    def deriv(t, Ct):
+        return rate * (concentration_fn(t) - Ct / kp)
+
+    ts, ys = _rk4_solve(deriv, 0.0, float(times[-1]), dt=dt)
+    return _sample(ts, ys, times)
+
+
+def simulate_permeability_limited(concentration_fn, times, *, ps_ml_min_kg: float,
+                                  vt_l_kg: float, kp: float, dt: float = 0.1) -> list[float]:
+    """Permeability-limited tissue model (membrane barrier, permeability-surface PS).
+
+    dCt/dt = (PS/Vt) * (C_plasma(t) - Ct/Kp); rate constant = PS/Vt. Returns Ct(t).
+    """
+    if ps_ml_min_kg <= 0 or vt_l_kg <= 0 or kp <= 0:
+        raise ValueError("PS, Vt, Kp must be positive")
+    if not times:
+        return []
+    rate = ps_ml_min_kg * 0.06 / vt_l_kg  # 1/h
+
+    def deriv(t, Ct):
+        return rate * (concentration_fn(t) - Ct / kp)
+
+    ts, ys = _rk4_solve(deriv, 0.0, float(times[-1]), dt=dt)
+    return _sample(ts, ys, times)
+
+
+@dataclass
+class MultiCompartmentResult:
+    dose_mg: float
+    route: str
+    v1_l_kg: float
+    clearance_ml_min_kg: float
+    peripherals: list[tuple[float, float]]  # (volume_l_kg, intercompartmental clearance)
+    bioavailability: float
+    weight_kg: float
+    cmax_mg_l: float
+    auc_mg_h_l: float
+    terminal_half_life_hours: float
+    curve: list[tuple[float, float]]  # central C(t) at the requested times
+    ts: list[float]                    # fine integration grid
+    central: list[float]               # central C(t) on the fine grid
+
+
+def _terminal_half_life(ts: list[float], ys: list[float]) -> float:
+    """Estimate terminal t1/2 by log-linear least squares on the last 3 positive points."""
+    pts = [(t, math.log(y)) for t, y in zip(ts, ys) if y > 0]
+    if len(pts) < 2:
+        raise ValueError("need >=2 positive concentrations to estimate terminal half-life")
+    pts = pts[-3:]
+    n = len(pts)
+    mean_t = sum(t for t, _ in pts) / n
+    mean_l = sum(l for _, l in pts) / n
+    num = sum((t - mean_t) * (l - mean_l) for t, l in pts)
+    den = sum((t - mean_t) ** 2 for t, _ in pts)
+    if den == 0 or num >= 0:
+        raise ValueError("concentration is not decaying; cannot estimate terminal half-life")
+    slope = num / den  # negative
+    return LN2 / (-slope)
+
+
+def simulate_multi_compartment(dose_mg: float, v1_l_kg: float, clearance_ml_min_kg: float,
+                               peripherals: list[tuple[float, float]],
+                               bioavailability: float = 1.0, weight_kg: float = 70.0,
+                               route: str = "oral", times=None, dt: float = 0.1):
+    """Mammillary N-compartment model (central + N peripheral compartments).
+
+    Elimination only from the central compartment; instant absorption (bolus).
+    `peripherals` is a list of (volume_l_kg, intercompartmental_clearance_ml_min_kg).
+    AUC uses the mass-balance identity AUC = F*D/CL_total (holds for any linear
+    model with central-only elimination).
+    """
+    if dose_mg <= 0 or v1_l_kg <= 0 or clearance_ml_min_kg <= 0:
+        raise ValueError("dose, V1, CL must be positive")
+    if not peripherals:
+        raise ValueError("multi-compartment requires at least one peripheral compartment")
+    k10 = clearance_ml_min_kg * 0.06 / v1_l_kg
+    k1i: list[float] = []
+    ki1: list[float] = []
+    for vi, qi in peripherals:
+        if vi <= 0 or qi <= 0:
+            raise ValueError("peripheral volume and intercompartmental clearance must be positive")
+        k1i.append(qi * 0.06 / v1_l_kg)
+        ki1.append(qi * 0.06 / vi)
+
+    c0 = bioavailability * dose_mg / (v1_l_kg * weight_kg)
+
+    def deriv(t, y):
+        c1 = y[0]
+        out = [-(k10 + sum(k1i)) * c1 + sum(ki1[j] * y[j + 1] for j in range(len(ki1)))]
+        out.extend(k1i[j] * c1 - ki1[j] * y[j + 1] for j in range(len(ki1)))
+        return out
+
+    y0 = [c0] + [0.0] * len(peripherals)
+    ts_out = times if times is not None else DEFAULT_TIMES
+    t_end = float(max(ts_out))
+    fts, fys = _rk4_solve_system(deriv, y0, t_end, dt=dt)
+    central = [y[0] for y in fys]
+    sampled = _sample(fts, central, ts_out)
+    curve = [(float(t), float(c)) for t, c in zip(ts_out, sampled)]
+    auc = bioavailability * dose_mg / (clearance_ml_min_kg * weight_kg * 0.06)
+    t1_2 = _terminal_half_life(fts, central)
+    return MultiCompartmentResult(
+        dose_mg=float(dose_mg), route=route, v1_l_kg=float(v1_l_kg),
+        clearance_ml_min_kg=float(clearance_ml_min_kg),
+        peripherals=[(float(v), float(q)) for v, q in peripherals],
+        bioavailability=float(bioavailability), weight_kg=float(weight_kg),
+        cmax_mg_l=c0, auc_mg_h_l=auc, terminal_half_life_hours=t1_2,
+        curve=curve, ts=fts, central=central,
+    )
