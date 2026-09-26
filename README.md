@@ -1,15 +1,15 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 8: knowledge agents)
+# ddswarm — drug discovery multi-agent swarm (Increment 9: rule-based ADMET)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
-**Increment 8** adds the three **knowledge agents** — `patent_minion` (patent /
-freedom-to-operate landscape), `clinical_minion` (clinical-stage knowledge),
-and `regulatory_minion` (agency designations / scheduling) — all delegated to
-the Hermes reasoning backend and opt-in. Without a reasoning backend they
-return insufficient_evidence (they never fabricate legal/clinical/regulatory
-data); every entry is LLM recall forced to `evidence_level='inferred'`. On top
-of Increments 0-7 (contracts + orchestrator + logging + research/design/screen/
-predict/docking/dynamics/retrosynthesis/tox/formulation + memory + report +
-feedback loop + safety gate + validation + CLI + Hermes reasoning).
+**Increment 9** replaces the no-op ADMET provider with a **deterministic
+rule-based provider** (`rule_admet`): five published QSAR rules computed from
+RDKit descriptors — ESOL aqueous solubility (Delaney 2004), QED drug-likeness
+(Bickerton 2012), Lipinski rule-of-5 violations, Veber bioavailability, and
+Egan passive absorption — each with an exact formula/threshold and a literature
+citation. No ML model, no torch/CUDA. On top of Increments 0-8 (contracts +
+orchestrator + logging + research/design/screen/predict/docking/dynamics/
+retrosynthesis/tox/formulation + memory + report + feedback loop + safety gate +
+validation + knowledge agents + CLI + Hermes reasoning).
 
 ## Architecture
 
@@ -23,7 +23,9 @@ feedback loop + safety gate + validation + CLI + Hermes reasoning).
   - `designer_minion` — DesignBatch; deterministic labels, or real analog SMILES
     from a reasoning backend when configured.
   - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
-  - `predictor_minion` — ADMET/PK predictions through pluggable providers.
+  - `predictor_minion` — ADMET/PK predictions through pluggable providers
+    (default: deterministic `rule_admet` rules; `null_admet` for an explicit
+    no-model run).
   - `docking_minion` — receptor prep + QC, docking (AutoDock Vina), redocking RMSD.
   - `retrosynthesis_minion` — RDKit synthetic-accessibility score per candidate
     (calculated) + easy/moderate/hard classification; optional LLM-proposed
@@ -134,19 +136,28 @@ liability flag, not a kill criterion; disable per-project with
 interface (`predictors/`). Each endpoint prediction carries:
 
 - `model` + `model_version` (documented)
-- `predicted_value` + `units`
+- `predicted_value` + `units` (continuous) and/or `predicted_label` (categorical)
+- `citation` (literature source for the rule/model)
 - `prediction_status` (`predicted|not_available|out_of_domain|error`)
 - `evidence_level` = `predicted` (a computational score is never experimental evidence)
 - `applicability_domain` (status/method/note)
 - `uncertainty` (type/value/note)
 
-Providers are registered in `predictors/registry.py`. This increment ships
-`NullAdmetProvider` — a deterministic offline provider with NO model, which
-returns `not_available` for a canonical endpoint set (solubility, Caco-2, BBB,
-hERG, CYP3A4/2D6, Ames, PPB, half-life, clearance). It exercises the contract
-end-to-end without fabricating any value. A real model (e.g. `admet_ai`, which
-needs a heavy torch+CUDA install) can be dropped in later without touching the
-contract or orchestrator.
+Providers are registered in `predictors/registry.py`. The default is
+`RuleBasedAdmetProvider` (`rule_admet`), a deterministic RDKit-descriptor
+provider with five cited rules — every output `evidence_level = predicted`:
+
+- `LogS_ESOL` (Delaney 2004): LogS = 0.16 - 0.63·clogP - 0.0062·MW + 0.066·RB - 0.74·AP (continuous, std 0.75)
+- `QED` (Bickerton 2012): RDKit `QED.default()`, 0-1
+- `Lipinski_Violations` (Lipinski 1997): rule-of-5 violation count
+- `Veber_Bioavailability` (Veber 2002): good/poor (RB <= 10 and TPSA <= 140 A^2)
+- `Egan_Absorption` (Egan 2000): good/poor (box approximation, TPSA < 131.6 and 0.4 < clogP < 5.88)
+
+`NullAdmetProvider` (`null_admet`) stays registered for tests and explicit
+no-model runs, returning `not_available` for the admet_ai-style canonical set.
+A heavier ML model (e.g. `admet_ai`, torch+CUDA) can still be dropped in later
+behind the same interface. BBB / hERG / CYP / Ames / half-life / clearance are
+deferred — they need trained models, not precise RDKit rules.
 
 No provider configured, or no molecules => `insufficient_evidence`.
 
@@ -343,13 +354,14 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
 
 ## Verification status
 
-Run `pytest -q` — 117 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 127 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the
 toxicophore matcher, project memory, report aggregation, the feedback loop,
 MD-engine metrics (real MD on a small peptide fixture), the formulation rules,
-the safety gate (controlled-substance + dual-use matching), the validation
+the rule-based ADMET provider (exact ESOL/QED/Ro5/Veber/Egan values on aspirin,
+hexadecane and sucrose + out-of-domain + determinism), the safety gate (controlled-substance + dual-use matching), the validation
 audit (all checks + tamper detection), and the knowledge agents
 (patent/clinical/regulatory delegation via a fake `hermes` script +
 insufficient_evidence without a backend) are tested offline. Real

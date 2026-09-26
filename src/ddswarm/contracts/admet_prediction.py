@@ -36,10 +36,12 @@ class EndpointPrediction(BaseModel):
     model_version: str
     predicted_value: float | None = None
     units: str | None = None
+    predicted_label: str | None = None   # categorical rule output (e.g. "good"/"poor")
     prediction_status: PredictionStatus = "not_available"
     evidence_level: EvidenceLevel = EvidenceLevel.predicted
     applicability_domain: ApplicabilityDomain = Field(default_factory=ApplicabilityDomain)
     uncertainty: Uncertainty = Field(default_factory=Uncertainty)
+    citation: str | None = None          # literature source for the rule/model
 
 
 class MoleculeAdmetResult(BaseModel):

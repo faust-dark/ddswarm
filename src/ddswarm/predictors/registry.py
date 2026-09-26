@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from .base import AdmetProvider
 from .null_provider import NullAdmetProvider
+from .rule_provider import RuleBasedAdmetProvider
 
 REGISTRY: dict[str, AdmetProvider] = {
     "null_admet": NullAdmetProvider(),
+    "rule_admet": RuleBasedAdmetProvider(),
 }
 
 

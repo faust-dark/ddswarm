@@ -82,7 +82,7 @@ def main() -> None:
         ),
         TaskDefinition(
             task_id="predict", agent="predictor_minion", depends_on=["screen"],
-            params={"providers": ["null_admet"]},
+            params={"providers": ["rule_admet"]},
         ),
         TaskDefinition(
             task_id="dock", agent="docking_minion", depends_on=["screen"],

@@ -43,7 +43,7 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="design", agent="designer_minion", depends_on=["research", "safety"]),
     RunTask(task_id="screen", agent="screener_minion", depends_on=["design"]),
     RunTask(task_id="predict", agent="predictor_minion", depends_on=["screen"],
-            params={"providers": ["null_admet"]}),
+            params={"providers": ["rule_admet"]}),
     RunTask(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
     RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),

@@ -125,6 +125,18 @@
           "default": null,
           "title": "Units"
         },
+        "predicted_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predicted Label"
+        },
         "prediction_status": {
           "default": "not_available",
           "enum": [
@@ -145,6 +157,18 @@
         },
         "uncertainty": {
           "$ref": "#/$defs/Uncertainty"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citation"
         }
       },
       "required": [
