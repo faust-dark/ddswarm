@@ -1,19 +1,22 @@
-"""Content-addressed compute checkpoint / resume (Increment 27).
+"""Content-addressed compute checkpoint / resume (Increments 27 + 28).
 
-A deterministic, opt-in result cache for expensive deterministic computations
-(molecular docking, receptor MD). The cache key is a content hash of the
-computation's inputs (receptor id, ligand SMILES, search box, protocol, engine),
-so a cache hit reproduces the exact same result — reusing it introduces no new
-non-determinism and is safe to share across runs.
+Two complementary, opt-in mechanisms, both deterministic by construction (the
+key is a content hash of the inputs, so a hit reproduces the exact result and
+introduces no new non-determinism):
 
-Honesty contract: this is a "don't redo completed work" cache, NOT a trajectory
-resumption mechanism — it skips a computation whose result is already cached; it
-does not extend a partially-run simulation (OpenMM CheckpointReporter is the
-right tool for that and is deliberately out of scope here).
+- Docking result cache (Increment 27): `cached_dock` / `ComputeCache` reuse a
+  completed `engine.dock` result keyed by (receptor, ligand SMILES, box,
+  protocol, engine) — "don't redo completed work".
+- MD trajectory checkpoint (Increment 28): `save_md_state` / `load_md_state` /
+  `md_state_key` persist the OpenMM State XML so a later run can CONTINUE the
+  simulation (extend to more steps) instead of restarting — "extend a partial
+  simulation". The state XML is binary and not byte-stable across OpenMM builds,
+  so it is stored as a sidecar with a recorded sha256, never folded into a
+  reproducibility hash of the JSON artifacts.
 
-Disabled by default (recompute clean); enable via params['resume']=true. The
-cache lives at store/checkpoints/<kind>/<key>.json, outside any run dir, so it
-survives across runs and is never swept by run cleanup.
+Both are disabled by default (recompute clean); enable via params['resume']=true.
+The cache lives at store/checkpoints/, outside any run dir, so it survives
+across runs.
 """
 
 from __future__ import annotations
@@ -22,9 +25,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..contracts.dynamics_result import MdRun
 from ..docking.base import DockPose, DockProtocol, DockingEngine, PreparedLigand, PreparedReceptor
-from ..logging.hashing import hash_jsonable
+from ..logging.hashing import hash_content, hash_jsonable
 
 
 class ComputeCache:
@@ -119,20 +121,55 @@ def cached_dock(engine: DockingEngine, cache: ComputeCache, receptor_id: str,
     return poses
 
 
-def cached_run_md(engine, cache: ComputeCache, pdb_path: Path, receptor_id: str,
-                  protocol) -> MdRun:
-    """engine.run_md with opt-in content-addressed resume."""
-    if not cache.enabled:
-        return engine.run_md(pdb_path, receptor_id, protocol)
-    key = hash_jsonable({
+# ---- MD trajectory checkpoint (Increment 28) ----
+
+_MD_STATE_IGNORE = ("steps", "note")
+
+
+def md_state_key(receptor_id: str, protocol, engine_name: str,
+                 engine_version: str | None) -> str:
+    return hash_jsonable({
         "receptor": receptor_id,
-        "protocol": protocol.model_dump(),
-        "engine": engine.name,
-        "engine_version": getattr(engine, "version", None),
+        "protocol": {k: v for k, v in protocol.model_dump().items()
+                     if k not in _MD_STATE_IGNORE},
+        "engine": engine_name,
+        "engine_version": engine_version,
     })
-    hit = cache.get("md", key)
-    if hit is not None:
-        return MdRun.model_validate(hit)
-    run = engine.run_md(pdb_path, receptor_id, protocol)
-    cache.put("md", key, run.model_dump())
-    return run
+
+
+def md_state_path(store, key: str) -> Path:
+    """Path to the OpenMM State XML for a checkpoint key. The engine writes the
+    State (+ its `.reference.npy` minimization-reference sidecar) here directly;
+    the agent only manages `meta.json` alongside it."""
+    return Path(store.root) / "checkpoints" / "md_state" / key / "state.xml"
+
+
+def write_md_meta(store, key: str, state_xml: bytes, total_steps: int) -> dict:
+    """Write meta.json for an already-saved State; returns {total_steps, state_hash}.
+
+    `total_steps` is the cumulative number of steps simulated (used as the next
+    resume's prior_steps)."""
+    d = Path(store.root) / "checkpoints" / "md_state" / key
+    d.mkdir(parents=True, exist_ok=True)
+    meta = {"total_steps": total_steps, "state_hash": hash_content(state_xml)}
+    (d / "meta.json").write_text(json.dumps(meta))
+    return meta
+
+
+def load_md_state(store, key: str) -> dict | None:
+    """Return {state_path, total_steps, state_hash} or None."""
+    state_path = md_state_path(store, key)
+    if not state_path.exists():
+        return None
+    meta: dict = {}
+    meta_path = state_path.with_name("meta.json")
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+        except json.JSONDecodeError:
+            meta = {}
+    return {
+        "state_path": state_path,
+        "total_steps": int(meta.get("total_steps", 0)),
+        "state_hash": meta.get("state_hash"),
+    }

@@ -13,12 +13,12 @@ import subprocess
 from pathlib import Path
 
 from ..contracts.agent_result import AgentResult
-from ..contracts.dynamics_result import DynamicsResult, DynamicsSummary, MdProtocol
+from ..contracts.dynamics_result import DynamicsResult, DynamicsSummary, MdProtocol, MdRun
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..dynamics import make_engine
 from ..logging.hashing import hash_jsonable
-from ..orchestrator.checkpoint import ComputeCache, cached_run_md
+from ..orchestrator.checkpoint import load_md_state, md_state_key, md_state_path, write_md_meta
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -75,8 +75,7 @@ class DynamicsMinion(Agent):
             seed=int(ctx.params.get("seed", 42)),
             minimize_max_iterations=int(ctx.params.get("minimize_max_iterations", 200)),
         )
-        run = cached_run_md(engine, ComputeCache(self.store, bool(ctx.params.get("resume"))),
-                            pdb_path, identifier, protocol)
+        run = self._run_with_checkpoint(engine, pdb_path, identifier, protocol, ctx)
 
         summary = DynamicsSummary(
             total_runs=1,
@@ -96,7 +95,9 @@ class DynamicsMinion(Agent):
                 source="receptor molecular dynamics (OpenMM)",
                 identifier=identifier,
                 tool_versions=[TOOL, ToolVersion(name=engine_name, version=getattr(engine, "version", None))],
-                params={"engine": engine_name, "steps": protocol.steps, "seed": protocol.seed},
+                params={"engine": engine_name, "steps": protocol.steps, "seed": protocol.seed,
+                        "resumed": run.prior_steps > 0, "prior_steps": run.prior_steps,
+                        "total_steps": run.total_steps},
                 input_hash=input_hash,
                 output_hash=output_hash,
             )],
@@ -112,6 +113,11 @@ class DynamicsMinion(Agent):
                 f"E {run.metrics.potential_energy_mean_kj_per_mol:.0f} +/- "
                 f"{run.metrics.potential_energy_std_kj_per_mol:.0f} kJ/mol"
             )
+            if run.prior_steps > 0:
+                findings.append(
+                    f"receptor MD resumed from a {run.prior_steps}-step checkpoint "
+                    f"(cumulative {run.total_steps} steps); metrics over the continued segment"
+                )
         elif run.status == "not_run":
             warnings.append("receptor MD not run (no MD engine configured)")
         elif run.status == "failed":
@@ -123,8 +129,38 @@ class DynamicsMinion(Agent):
             AgentResultStatus.success if run.status != "failed" else AgentResultStatus.failed,
             input_refs=ctx.input_refs, artifacts=[art], findings=findings, warnings=warnings,
             provenance=[ProvenanceEntry(source="receptor MD", output_hash=art.hash, tool_versions=[TOOL])],
-            reproducibility={"input_hash": input_hash, "engine": engine_name, "receptor": identifier},
+            reproducibility={"input_hash": input_hash, "engine": engine_name, "receptor": identifier,
+                             "resumed": run.prior_steps > 0, "prior_steps": run.prior_steps,
+                             "total_steps": run.total_steps},
         )
+
+    def _run_with_checkpoint(self, engine, pdb_path: Path, identifier: str,
+                             protocol: MdProtocol, ctx: AgentContext) -> MdRun:
+        """Run (or resume) receptor MD, persisting the OpenMM State (written by
+        the engine directly into the store checkpoint dir) for a future
+        continuation. With params['resume']=true and a prior state for the same
+        (receptor, protocol-minus-steps, engine), the trajectory is CONTINUED by
+        `protocol.steps` more steps instead of restarting; metrics are reported
+        over the continued segment, with prior_steps/total_steps tracking the
+        cumulative simulation length."""
+        state_key = md_state_key(identifier, protocol, engine.name, getattr(engine, "version", None))
+        state_path = md_state_path(self.store, state_key)
+        resume_state: Path | None = None
+        prior_steps = 0
+        if ctx.params.get("resume"):
+            prior = load_md_state(self.store, state_key)
+            if prior is not None:
+                resume_state = prior["state_path"]
+                prior_steps = prior["total_steps"]
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        run = engine.run_md(pdb_path, identifier, protocol,
+                            resume_state=resume_state, prior_steps=prior_steps,
+                            checkpoint_path=state_path)
+        if run.status == "success" and state_path.exists():
+            meta = write_md_meta(self.store, state_key, state_path.read_bytes(), run.total_steps)
+            run.checkpoint_uri = str(state_path)
+            run.checkpoint_hash = meta["state_hash"]
+        return run
 
     def _branch_gate(self, ctx: AgentContext) -> tuple[bool, str, set[str]]:
         """Opt-in gate: receptor MD runs only when predictor + docking + tox +

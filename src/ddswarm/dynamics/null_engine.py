@@ -12,7 +12,9 @@ from .base import MdEngine
 class NullMdEngine(MdEngine):
     name = "null"
 
-    def run_md(self, pdb_path: Path, receptor_id: str, protocol: MdProtocol) -> MdRun:
+    def run_md(self, pdb_path: Path, receptor_id: str, protocol: MdProtocol,
+               resume_state: Path | None = None, prior_steps: int = 0,
+               checkpoint_path: Path | None = None) -> MdRun:
         return MdRun(
             receptor_id=receptor_id,
             status="not_run",

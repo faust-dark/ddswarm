@@ -43,6 +43,10 @@ class MdRun(BaseModel):
     error: str | None = None
     metrics: MdMetrics = Field(default_factory=MdMetrics)
     stability_note: str | None = None
+    prior_steps: int = 0          # steps simulated in prior runs (loaded from a checkpoint)
+    total_steps: int = 0          # prior_steps + this run's steps (cumulative simulation length)
+    checkpoint_uri: str | None = None   # store URI of the saved final state (for a future resume)
+    checkpoint_hash: str | None = None  # anti-tamper hash of the saved state XML
     evidence_level: EvidenceLevel = EvidenceLevel.calculated
 
 

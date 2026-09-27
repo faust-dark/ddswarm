@@ -243,8 +243,9 @@ def _inject_grounding(tasks: list[RunTask]) -> list[RunTask]:
 
 def _inject_resume(tasks: list[RunTask]) -> list[RunTask]:
     """Opt-in content-addressed resume: mark every task to reuse cached
-    docking/MD results instead of recomputing (deterministic; only the docking/
-    dynamics/selectivity agents read the flag)."""
+    docking results, or — for dynamics — to extend the receptor MD trajectory
+    from its last checkpoint instead of restarting (deterministic; only the
+    docking/dynamics/selectivity agents read the flag)."""
     base = [t.model_copy(deep=True) for t in tasks]
     for t in base:
         t.params["resume"] = True
@@ -395,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--iterations", type=int, default=1,
                     help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
     pr.add_argument("--resume", action="store_true",
-                    help="reuse cached docking/MD results (content-addressed, deterministic) instead of recomputing")
+                    help="reuse cached docking results, and extend receptor MD from its last checkpoint (content-addressed, deterministic) instead of recomputing")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
                     help="directory to copy the exported PDF into (default: <repo>/reports)")

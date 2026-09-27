@@ -911,9 +911,14 @@ def _narrative_md(mds, para, fig) -> None:
                 continue
             rmsd = r.metrics.backbone_rmsd_mean_angstrom
             if rmsd is not None:
+                seg = ""
+                if r.prior_steps:
+                    seg = (f" This continued a prior {r.prior_steps}-step checkpoint to a "
+                           f"cumulative {r.total_steps} steps; the metrics above cover the "
+                           "continued segment only.")
                 para(f"A short receptor molecular-dynamics relaxation of {r.receptor_id} showed a "
                      f"mean backbone RMSD of {rmsd:.2f} Å ({_interpret_rmsd(rmsd)}). This is a "
-                     "picosecond-scale snapshot, not a converged stability assessment.")
+                     f"picosecond-scale snapshot, not a converged stability assessment.{seg}")
     if any(r.status == "success" and r.metrics.backbone_rmsd_mean_angstrom is not None
            for md in mds for r in md.runs):
         fig(_chart_md(mds), "Auxiliary view: backbone RMSD per receptor.")

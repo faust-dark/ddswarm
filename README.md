@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 27: checkpoint/resume)
+# ddswarm — drug discovery multi-agent swarm (Increment 28: MD trajectory checkpoint/resume)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -250,13 +250,23 @@ targets), one designated *primary* (on-target) with general selectivity indices
 a pluggable profile that fires only for the SERT+5-HT2C panel; any other panel
 reports pure affinity + selectivity with no invented ADR label.
 
-**Increment 27** adds **content-addressed checkpoint/resume** for the expensive
-opt-in computations (docking, receptor MD): an opt-in `--resume` flag that
-reuses results cached under `store/checkpoints/<kind>/<key>.json`, keyed by a
-content hash of the inputs (receptor, ligand SMILES, search box, protocol,
-engine). Deterministic by construction — a cache hit reproduces the exact result
-and introduces no new non-determinism. This skips completed work; it is not
-trajectory resumption (extending an OpenMM run is out of scope).
+**Increment 27** adds a **content-addressed result cache** for docking (and
+selectivity re-docking): an opt-in `--resume` flag that reuses results cached
+under `store/checkpoints/<kind>/<key>.json`, keyed by a content hash of the
+inputs (receptor, ligand SMILES, search box, protocol, engine). Deterministic by
+construction — a cache hit reproduces the exact result and introduces no new
+non-determinism.
+
+**Increment 28** adds **MD trajectory checkpoint/resume**: at the end of a
+successful receptor MD run the OpenMM State (positions/velocities/integrator RNG)
+is written to `store/checkpoints/md_state/<key>/state.xml`, keyed by the physics
+inputs (excluding `steps`), so a later `--resume` run CONTINUES the simulation by
+`steps` more steps instead of restarting. `loadState` restores the integrator
+RNG, so the continuation is deterministic *given the checkpoint*; the
+minimization reference is saved alongside the State so the RMSD is always
+measured against the same minimized structure. Honest caveat: the base MD is
+chaotic and not bit-reproducible across *fresh* runs, and resumed metrics cover
+the continued segment only (prior/total steps are tracked for audit).
 
 ## Architecture
 

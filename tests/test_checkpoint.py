@@ -14,9 +14,12 @@ from ddswarm.orchestrator import Store
 from ddswarm.orchestrator.checkpoint import (
     ComputeCache,
     cached_dock,
-    cached_run_md,
+    load_md_state,
+    md_state_key,
+    md_state_path,
     poses_from_cache,
     poses_to_cache,
+    write_md_meta,
 )
 
 
@@ -49,15 +52,30 @@ class FakeMdEngine:
 
     def __init__(self):
         self.calls = 0
+        self.last_resume_state = None
+        self.last_prior_steps = 0
 
-    def run_md(self, pdb_path, receptor_id, protocol):
+    def run_md(self, pdb_path, receptor_id, protocol, resume_state=None,
+               prior_steps=0, checkpoint_path=None):
         self.calls += 1
-        return MdRun(receptor_id=receptor_id, status="success")
+        self.last_resume_state = resume_state
+        self.last_prior_steps = prior_steps
+        if checkpoint_path is not None:
+            Path(checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(checkpoint_path).write_text("<State/>")
+        return MdRun(receptor_id=receptor_id, status="success",
+                     prior_steps=prior_steps, total_steps=prior_steps + protocol.steps)
 
 
 def _protocol():
     return DockProtocol(box_center=(0.0, 0.0, 0.0), box_size=(20.0, 20.0, 20.0),
                         exhaustiveness=8, num_modes=9, seed=42)
+
+
+def _md_protocol(steps=100):
+    return MdProtocol(engine="openmm", engine_version="8.6.1", temperature_kelvin=300.0,
+                      timestep_femtoseconds=2.0, steps=steps, seed=42,
+                      minimize_max_iterations=200)
 
 
 def test_cache_roundtrip_and_disable(tmp_path):
@@ -116,18 +134,61 @@ def test_cached_dock_keyed_on_inputs(tmp_path):
     assert engine.calls == 3  # three distinct (receptor, ligand) pairs
 
 
-def test_cached_run_md_reuses(tmp_path):
-    cache = ComputeCache(Store(tmp_path), enabled=True)
+def test_md_state_roundtrip(tmp_path):
+    store = Store(tmp_path)
+    key = md_state_key("5I73", _md_protocol(), "openmm", "8.6.1")
+    state_path = md_state_path(store, key)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_bytes(b"<State/>")
+    meta = write_md_meta(store, key, b"<State/>", total_steps=500)
+    assert meta["state_hash"]
+    loaded = load_md_state(store, key)
+    assert loaded is not None
+    assert loaded["total_steps"] == 500
+    assert loaded["state_path"].read_bytes() == b"<State/>"
+    assert loaded["state_hash"] == meta["state_hash"]
+
+
+def test_md_state_key_ignores_steps_and_note():
+    k1 = md_state_key("5I73", _md_protocol(steps=100), "openmm", "8.6.1")
+    k2 = md_state_key("5I73", _md_protocol(steps=1000), "openmm", "8.6.1")
+    assert k1 == k2  # steps is ignored, so a longer run resumes the same simulation
+    k3 = md_state_key("6A93", _md_protocol(steps=100), "openmm", "8.6.1")
+    assert k1 != k3  # different receptor
+
+
+def test_md_state_key_sensitive_to_physics():
+    hot = _md_protocol()
+    hot.temperature_kelvin = 310.0
+    assert md_state_key("5I73", _md_protocol(), "openmm", "8.6.1") != \
+        md_state_key("5I73", hot, "openmm", "8.6.1")
+
+
+def test_load_md_state_missing(tmp_path):
+    store = Store(tmp_path)
+    assert load_md_state(store, "nonexistent") is None
+
+
+def test_load_md_state_corrupt_meta(tmp_path):
+    store = Store(tmp_path)
+    state_path = md_state_path(store, "corrupt")
+    state_path.parent.mkdir(parents=True)
+    state_path.write_bytes(b"<State/>")
+    state_path.with_name("meta.json").write_text("{not json")
+    loaded = load_md_state(store, "corrupt")
+    assert loaded is not None
+    assert loaded["total_steps"] == 0  # corrupt meta -> defaults, not a crash
+
+
+def test_md_engine_continuation_tracks_cumulative_steps(tmp_path):
     engine = FakeMdEngine()
-    proto = MdProtocol(engine="fake", engine_version="1.0", temperature_kelvin=300.0,
-                       timestep_femtoseconds=2.0, steps=100, seed=42,
-                       minimize_max_iterations=200)
-    pdb = Path(tmp_path) / "r.pdb"
-    pdb.write_text("END")
-    r1 = cached_run_md(engine, cache, pdb, "5I73", proto)
-    r2 = cached_run_md(engine, cache, pdb, "5I73", proto)
-    assert engine.calls == 1
-    assert r1.receptor_id == r2.receptor_id == "5I73"
+    run = engine.run_md(Path(tmp_path) / "r.pdb", "5I73", _md_protocol(steps=100),
+                        resume_state=Path(tmp_path) / "prior.xml", prior_steps=400,
+                        checkpoint_path=Path(tmp_path) / "out" / "final_state.xml")
+    assert run.prior_steps == 400
+    assert run.total_steps == 500  # 400 prior + 100 this run
+    assert engine.last_resume_state is not None
+    assert (Path(tmp_path) / "out" / "final_state.xml").exists()
 
 
 def test_inject_resume_marks_all_tasks():

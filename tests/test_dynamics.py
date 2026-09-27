@@ -106,6 +106,28 @@ def test_agent_openmm_real(tmp_path):
     assert r.protocol.note == "short relaxation trajectory; NOT production MD"
 
 
+@requires_openmm
+def test_agent_openmm_resume_extends(tmp_path):
+    store = Store(tmp_path)
+    params = {"engine": "openmm", "steps": 100, "seed": 1,
+              "receptor": {"kind": "file", "identifier": "trp_cage",
+                           "path": str(FIXTURE)}}
+    # fresh run: 100 steps, checkpoint persisted
+    res1 = _run(store, dict(params))
+    assert res1.status.value == "success"
+    r1 = _loaded(store, res1)
+    assert r1.runs[0].total_steps == 100 and r1.runs[0].prior_steps == 0
+    assert r1.runs[0].checkpoint_uri is not None
+    assert r1.runs[0].checkpoint_hash is not None
+    # resume: same store + key -> extends by another 100 steps
+    res2 = _run(store, dict(params, resume=True))
+    assert res2.status.value == "success"
+    r2 = _loaded(store, res2)
+    assert r2.runs[0].prior_steps == 100
+    assert r2.runs[0].total_steps == 200
+    assert any("resumed from" in f for f in res2.findings)
+
+
 # ---- four-branch gate (predictor + docking + tox + formulation) ----
 def _branch_inputs():
     from ddswarm.contracts import (

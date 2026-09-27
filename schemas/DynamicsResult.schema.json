@@ -203,6 +203,40 @@
           "default": null,
           "title": "Stability Note"
         },
+        "prior_steps": {
+          "default": 0,
+          "title": "Prior Steps",
+          "type": "integer"
+        },
+        "total_steps": {
+          "default": 0,
+          "title": "Total Steps",
+          "type": "integer"
+        },
+        "checkpoint_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkpoint Uri"
+        },
+        "checkpoint_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkpoint Hash"
+        },
         "evidence_level": {
           "$ref": "#/$defs/EvidenceLevel",
           "default": "calculated"
