@@ -38,6 +38,7 @@ from .docking_result import (
 from .dynamics_result import DynamicsResult, DynamicsSummary, MdMetrics, MdProtocol, MdRun
 from .execution_plan import ConvergenceConfig, ExecutionPlan, PlanStage
 from .formulation_assessment import FormulationAssessment, FormulationSummary, MoleculeFormulation
+from .grounding_report import GroundedEntry, GroundingReport, GroundingSummary, MoleculeGrounding
 from .generation_memory import GenerationCandidate, GenerationMemory
 from .screened_batch import MoleculeProperties, MoleculeScreenResult, ScreenSummary, ScreenedBatch
 from .enums import (
@@ -129,6 +130,9 @@ __all__ = [
     "FormulationSummary",
     "GenerationCandidate",
     "GenerationMemory",
+    "GroundedEntry",
+    "GroundingReport",
+    "GroundingSummary",
     "HergAssessment",
     "HergSummary",
     "InputRef",
@@ -139,6 +143,7 @@ __all__ = [
     "MoleculeDesign",
     "MoleculeCypProfile",
     "MoleculeFormulation",
+    "MoleculeGrounding",
     "MoleculeHergProfile",
     "MoleculeProperties",
     "MoleculeScreenResult",

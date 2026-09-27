@@ -7,6 +7,7 @@ from .designer import DesignerMinion
 from .docking import DockingMinion
 from .dynamics import DynamicsMinion
 from .formulation import FormulationMinion
+from .grounding import GroundingMinion
 from .herg import HergMinion
 from .memory_minion import MemoryMinion
 from .orchestrator import OrchestratorMinion
@@ -25,7 +26,7 @@ from .validation import ValidationMinion
 
 __all__ = [
     "Agent", "AgentContext", "ClinicalMinion", "CypMinion", "DesignerMinion",
-    "DockingMinion", "DynamicsMinion", "FormulationMinion", "HergMinion", "PatentMinion",
+    "DockingMinion", "DynamicsMinion", "FormulationMinion", "GroundingMinion", "HergMinion", "PatentMinion",
     "PredictorMinion", "MemoryMinion", "OrchestratorMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",

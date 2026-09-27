@@ -32,6 +32,7 @@ from ..contracts.regulatory_checklist import RegulatoryChecklist
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.cyp_assessment import CypAssessment
 from ..contracts.herg_assessment import HergAssessment
+from ..contracts.grounding_report import GroundingReport
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.selectivity_assessment import SelectivityAssessment
@@ -54,6 +55,7 @@ _KIND_MODELS: dict[str, type] = {
     "retrosynthesis_plan": RetrosynthesisPlan,
     "cyp_assessment": CypAssessment,
     "herg_assessment": HergAssessment,
+    "grounding_report": GroundingReport,
     "tox_profile": ToxProfile,
     "safety_assessment": SafetyAssessment,
     "patent_landscape": PatentLandscape,
@@ -223,6 +225,10 @@ class ReportMinion(Agent):
             for m in ha.molecules:
                 if m.flagged:
                     c[m.evidence_level.value] += 1
+        for gr in by_kind.get("grounding_report", []):
+            for m in gr.molecules:
+                for e in m.entries:
+                    c[e.evidence_level.value] += 1
         for sa in by_kind.get("safety_assessment", []):
             for f in sa.flags:
                 c[f.evidence_level.value] += 1
@@ -287,6 +293,9 @@ class ReportMinion(Agent):
         has = by_kind.get("herg_assessment", [])
         if has:
             parts.append(f"hERG {sum(h.summary.flagged for h in has)} flagged")
+        grs = by_kind.get("grounding_report", [])
+        if grs:
+            parts.append(f"grounding {sum(g.summary.total_entries for g in grs)} observed records")
         fas = by_kind.get("formulation_assessment", [])
         if fas:
             bcs: dict[str, int] = {}
@@ -389,6 +398,8 @@ class ReportMinion(Agent):
         has = by_kind.get("herg_assessment", [])
         if has and sum(h.summary.flagged for h in has) == 0:
             gaps.append("no hERG pharmacophore flags (coarse 2D screen; not a clean-hERG declaration)")
+        if "grounding_report" not in by_kind:
+            gaps.append("external-database grounding not run (opt-in --grounding)")
         if "knowledge_pack" not in by_kind:
             gaps.append("no research performed")
         return gaps
@@ -422,6 +433,7 @@ class ReportMinion(Agent):
             "Structural tox alerts are predicted liabilities from literature rules, not observed toxicity.",
             "CYP inhibition/induction flags are structural alerts (predicted), not a functional enzyme assay; induction is a weak 2D-structure signal (PXR/CAR/AhR-driven) and may miss or over-call.",
             "hERG flags are predicted pharmacophore + lipophilicity matches, not a patch-clamp assay; IC50 potency is not estimated, so a flag does not rank cardiotoxic potency.",
+            "Grounding entries are observed external records (URL + identifier + retrieval timestamp); network failures are reported as failed/not_found, never fabricated.",
             "Brenk 'unwanted functionality' alerts are advisory, not eliminating (PAINS stays hard); set filters.brenk_hard=true to make Brenk eliminate.",
             "LLM-contributed entries are inferred/hypothetical; verify against primary sources.",
             "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",

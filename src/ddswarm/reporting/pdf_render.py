@@ -436,6 +436,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     tps = by_kind.get("tox_profile", [])
     cyps = by_kind.get("cyp_assessment", [])
     has = by_kind.get("herg_assessment", [])
+    grs = by_kind.get("grounding_report", [])
     fas = by_kind.get("formulation_assessment", [])
     drs = by_kind.get("docking_result", [])
     mds = by_kind.get("dynamics_result", [])
@@ -519,6 +520,9 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if has:
             sub("hERG", "herg_minion")
             _narrative_herg(has, para)
+        if grs:
+            sub("Grounding", "grounding_minion")
+            _narrative_grounding(grs, para)
         if fas:
             sub("Formulation", "formulation_minion")
             _narrative_formulation(fas, para)
@@ -830,6 +834,27 @@ def _narrative_herg(has, para) -> None:
     para("A hERG flag does not rank potency — IC50 is not estimated from a 2D pharmacophore, "
          "and many flagged molecules (e.g. SSRIs) are weak rather than potent hERG blockers. "
          "Confirm any flag with a functional hERG (patch-clamp) assay before acting.")
+
+
+def _narrative_grounding(grs, para) -> None:
+    total = sum(g.summary.total_molecules for g in grs)
+    grounded = sum(g.summary.grounded for g in grs)
+    entries = sum(g.summary.total_entries for g in grs)
+    para(f"External-database grounding resolved {grounded} of {total} molecule(s) to "
+         f"{entries} observed record(s) (ChEMBL, PubChem, PubMed; DrugBank identifiers via "
+         f"PubChem cross-reference).")
+    for g in grs:
+        for m in g.molecules:
+            if not m.entries:
+                if m.status == "failed":
+                    para(f"{m.molecule_id}: grounding failed ({'; '.join(m.errors) if m.errors else 'no response'}).")
+                else:
+                    para(f"{m.molecule_id}: no external record found.")
+                continue
+            for e in m.entries:
+                para(f"{m.molecule_id} -> {e.source.upper()} {e.external_id} ({e.title}): {e.url}")
+    para("Grounded entries are observed and carry a retrieval timestamp; they are excluded "
+         "from the reproducibility hash because live databases change over time.")
 
 
 def _narrative_formulation(fas, para) -> None:

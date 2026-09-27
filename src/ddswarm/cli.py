@@ -38,6 +38,7 @@ from .agents import (
     ValidationMinion,
     CypMinion,
     HergMinion,
+    GroundingMinion,
 )
 from .contracts import (
     GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
@@ -87,6 +88,7 @@ def build_agents(store: Store) -> dict:
         "tox_minion": ToxMinion(store),
         "cyp_minion": CypMinion(store),
         "herg_minion": HergMinion(store),
+        "grounding_minion": GroundingMinion(store),
         "formulation_minion": FormulationMinion(store),
         "safety_minion": SafetyMinion(store),
         "selectivity_minion": SelectivityMinion(store),
@@ -196,6 +198,23 @@ def _read_generation_memory(store: Store, project_id: str, run_id: str) -> Gener
     return None
 
 
+def _inject_grounding(tasks: list[RunTask]) -> list[RunTask]:
+    """Insert an opt-in grounding task before the report task and make report
+    depend on it. Grounding is network-dependent and non-deterministic, so it is
+    NOT part of DEFAULT_PIPELINE; it is added only when --grounding is passed."""
+    base = [t.model_copy(deep=True) for t in tasks]
+    ids = {t.task_id for t in base}
+    gdep = ["screen"] if "screen" in ids else []
+    gt = RunTask(task_id="grounding", agent="grounding_minion", depends_on=gdep)
+    report_idx = next((i for i, t in enumerate(base) if t.task_id == "report"), None)
+    if report_idx is not None:
+        base[report_idx].depends_on = list(base[report_idx].depends_on) + ["grounding"]
+        base.insert(report_idx, gt)
+    else:
+        base.append(gt)
+    return base
+
+
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
     # Hermes reasoning is the project standard: default ON unless the JSON sets
@@ -207,6 +226,8 @@ def cmd_run(args) -> int:
 
     tasks = req.tasks or list(DEFAULT_PIPELINE)
     tasks = _inject_reasoning(list(tasks), req.reasoning)
+    if args.grounding:
+        tasks = _inject_grounding(tasks)
     if args.iupac:
         for t in tasks:
             if t.agent == "report_minion":
@@ -329,6 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
     pr.add_argument("--iupac", action="store_true",
                     help="fetch IUPAC names (NIH CACTUS web service) for the ranked candidates as a readability label (non-deterministic)")
+    pr.add_argument("--grounding", action="store_true",
+                    help="resolve molecules against ChEMBL/PubChem/PubMed and record observed external records (URL + identifier; network-dependent, non-deterministic)")
     pr.add_argument("--iterations", type=int, default=1,
                     help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
     pr.add_argument("--store", type=Path, default=_default_store())
