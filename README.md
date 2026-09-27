@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 21: hybrid Vina-score calibration)
+# ddswarm — drug discovery multi-agent swarm (Increment 22: CYP DDI flags)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -210,6 +210,15 @@ The calibrated Ki is a *calculated estimate* (residual RMSE carried on the
 artifact), not an experimental affinity, and the selectivity index
 (Ki_off/Ki_on) is approximately calibration-invariant because the per-receptor
 offsets cancel in the ratio.
+
+**Increment 22** adds **CYP450 drug-drug-interaction flags** (`cyp_minion`, in
+the default pipeline). `chemistry/cyp_alerts.py` matches candidates against a
+curated, cited chemotype library — CYP inhibition (azole→3A4, sulfonamide→2C9,
+aryloxy-alkylamine→2D6, benzimidazole→2C19, purine→1A2) and CYP3A4 induction
+(barbiturate, hydantoin, dibenzoazepine). Same honesty standard as tox: a SMARTS
+match is a deterministic fact, but the label is "potential inhibitor/inducer"
+(predicted), never a functional enzyme assay; induction is explicitly flagged as
+a weak 2D-structure signal (PXR/CAR/AhR-driven).
 
 ## Architecture
 
