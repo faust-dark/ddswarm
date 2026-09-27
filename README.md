@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 25: machine-readable export)
+# ddswarm — drug discovery multi-agent swarm (Increment 27: checkpoint/resume)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -241,6 +241,22 @@ every computed/predicted score plus a deterministic go/no-go verdict — no-go
 (screening reject or safety block), review (advisory liability: tox/CYP/hERG/
 Brenk/BCS IV), go (clean) — written as CSV + JSON + SDF sidecars into the store
 and copied into `reports/`.
+
+**Increment 26** generalizes `selectivity_minion` from the hard-coded
+SERT/5-HT2A/5-HT2C triad to a **configurable target panel**: any receptor list
+(`{name, pdb_id}`, expanded from a curated registry of SERT/5-HT*/DRD/CHRM/COX
+targets), one designated *primary* (on-target) with general selectivity indices
+`Ki(off)/Ki(primary)` for every off-target. The sexual-ADR interpretation is now
+a pluggable profile that fires only for the SERT+5-HT2C panel; any other panel
+reports pure affinity + selectivity with no invented ADR label.
+
+**Increment 27** adds **content-addressed checkpoint/resume** for the expensive
+opt-in computations (docking, receptor MD): an opt-in `--resume` flag that
+reuses results cached under `store/checkpoints/<kind>/<key>.json`, keyed by a
+content hash of the inputs (receptor, ligand SMILES, search box, protocol,
+engine). Deterministic by construction — a cache hit reproduces the exact result
+and introduces no new non-determinism. This skips completed work; it is not
+trajectory resumption (extending an OpenMM run is out of scope).
 
 ## Architecture
 
