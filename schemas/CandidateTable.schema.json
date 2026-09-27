@@ -1,0 +1,435 @@
+{
+  "$defs": {
+    "AgentResultStatus": {
+      "enum": [
+        "success",
+        "partial",
+        "failed",
+        "blocked",
+        "insufficient_evidence"
+      ],
+      "title": "AgentResultStatus",
+      "type": "string"
+    },
+    "CandidateRow": {
+      "properties": {
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
+        "molecule_id": {
+          "title": "Molecule Id",
+          "type": "string"
+        },
+        "input_smiles": {
+          "title": "Input Smiles",
+          "type": "string"
+        },
+        "canonical_smiles": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Smiles"
+        },
+        "screening_status": {
+          "enum": [
+            "passed",
+            "rejected",
+            "invalid"
+          ],
+          "title": "Screening Status",
+          "type": "string"
+        },
+        "molecular_weight": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Molecular Weight"
+        },
+        "logp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Logp"
+        },
+        "hbd": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hbd"
+        },
+        "hba": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hba"
+        },
+        "tpsa": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tpsa"
+        },
+        "qed": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Qed"
+        },
+        "ro5_violations": {
+          "default": 0,
+          "title": "Ro5 Violations",
+          "type": "integer"
+        },
+        "bcs_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bcs Class"
+        },
+        "sa_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sa Score"
+        },
+        "pains_alerts": {
+          "default": 0,
+          "title": "Pains Alerts",
+          "type": "integer"
+        },
+        "brenk_alerts": {
+          "default": 0,
+          "title": "Brenk Alerts",
+          "type": "integer"
+        },
+        "tox_alerts": {
+          "default": 0,
+          "title": "Tox Alerts",
+          "type": "integer"
+        },
+        "cyp_flags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Cyp Flags",
+          "type": "array"
+        },
+        "herg_flag": {
+          "default": false,
+          "title": "Herg Flag",
+          "type": "boolean"
+        },
+        "safety_flags": {
+          "default": 0,
+          "title": "Safety Flags",
+          "type": "integer"
+        },
+        "verdict": {
+          "enum": [
+            "go",
+            "review",
+            "no-go"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "molecule_id",
+        "input_smiles",
+        "screening_status",
+        "verdict"
+      ],
+      "title": "CandidateRow",
+      "type": "object"
+    },
+    "ExportSummary": {
+      "properties": {
+        "total_molecules": {
+          "default": 0,
+          "title": "Total Molecules",
+          "type": "integer"
+        },
+        "go": {
+          "default": 0,
+          "title": "Go",
+          "type": "integer"
+        },
+        "review": {
+          "default": 0,
+          "title": "Review",
+          "type": "integer"
+        },
+        "no_go": {
+          "default": 0,
+          "title": "No Go",
+          "type": "integer"
+        }
+      },
+      "title": "ExportSummary",
+      "type": "object"
+    },
+    "ProvenanceEntry": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "tool_versions": {
+          "items": {
+            "$ref": "#/$defs/ToolVersion"
+          },
+          "title": "Tool Versions",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "input_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Hash"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "input_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Exact"
+        },
+        "output_exact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Exact"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ProvenanceEntry",
+      "type": "object"
+    },
+    "ToolVersion": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "ToolVersion",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "project_id": {
+      "title": "Project Id",
+      "type": "string"
+    },
+    "agent": {
+      "default": "export_minion",
+      "title": "Agent",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentResultStatus"
+    },
+    "rows": {
+      "items": {
+        "$ref": "#/$defs/CandidateRow"
+      },
+      "title": "Rows",
+      "type": "array"
+    },
+    "summary": {
+      "$ref": "#/$defs/ExportSummary"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/ProvenanceEntry"
+      },
+      "title": "Provenance",
+      "type": "array"
+    }
+  },
+  "required": [
+    "project_id",
+    "status"
+  ],
+  "title": "CandidateTable",
+  "type": "object"
+}

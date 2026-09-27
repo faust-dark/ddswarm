@@ -6,6 +6,7 @@ from .cyp import CypMinion
 from .designer import DesignerMinion
 from .docking import DockingMinion
 from .dynamics import DynamicsMinion
+from .export import ExportMinion
 from .formulation import FormulationMinion
 from .grounding import GroundingMinion
 from .herg import HergMinion
@@ -26,7 +27,7 @@ from .validation import ValidationMinion
 
 __all__ = [
     "Agent", "AgentContext", "ClinicalMinion", "CypMinion", "DesignerMinion",
-    "DockingMinion", "DynamicsMinion", "FormulationMinion", "GroundingMinion", "HergMinion", "PatentMinion",
+    "DockingMinion", "DynamicsMinion", "ExportMinion", "FormulationMinion", "GroundingMinion", "HergMinion", "PatentMinion",
     "PredictorMinion", "MemoryMinion", "OrchestratorMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",

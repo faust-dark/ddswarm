@@ -28,6 +28,7 @@ from .run_manifest import RunManifest
 from .run_request import RunRequest
 from .retrosynthesis_plan import RetrosynthesisPlan
 from .cyp_assessment import CypAssessment
+from .candidate_table import CandidateTable
 from .herg_assessment import HergAssessment
 from .grounding_report import GroundingReport
 from .safety_assessment import SafetyAssessment
@@ -55,6 +56,7 @@ MODELS: dict[str, type] = {
     "RunRequest": RunRequest,
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "CypAssessment": CypAssessment,
+    "CandidateTable": CandidateTable,
     "HergAssessment": HergAssessment,
     "GroundingReport": GroundingReport,
     "ToxProfile": ToxProfile,

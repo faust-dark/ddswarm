@@ -39,6 +39,7 @@ from .agents import (
     CypMinion,
     HergMinion,
     GroundingMinion,
+    ExportMinion,
 )
 from .contracts import (
     GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
@@ -62,8 +63,9 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="herg", agent="herg_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
     RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "cyp", "herg", "formulation"]),
+    RunTask(task_id="export", agent="export_minion", depends_on=["report"]),
     RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
-    RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation"]),
+    RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation", "export"]),
 ]
 
 
@@ -89,6 +91,7 @@ def build_agents(store: Store) -> dict:
         "cyp_minion": CypMinion(store),
         "herg_minion": HergMinion(store),
         "grounding_minion": GroundingMinion(store),
+        "export_minion": ExportMinion(store),
         "formulation_minion": FormulationMinion(store),
         "safety_minion": SafetyMinion(store),
         "selectivity_minion": SelectivityMinion(store),
@@ -165,6 +168,29 @@ def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
     dest = reports_dir / f"{project_id}.pdf"
     dest.write_bytes(src.read_bytes())
     return dest
+
+
+def _copy_exports_to_reports(store: Store, project_id: str, run_id: str, reports_dir: Path) -> list[Path]:
+    """Copy the machine-readable export sidecars (CSV/SDF) + candidate-table JSON
+    into <reports_dir> with a project_id prefix, so they are easy to find outside
+    the versioned store. Returns the list of destinations written."""
+    adir = store.artifacts_dir(project_id, run_id)
+    if not adir.exists():
+        return []
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    out: list[Path] = []
+    for pattern, suffix in [
+        ("candidates_*.candidate_table.v*.json", "candidates.json"),
+        ("candidates_*.candidate_csv.v*.csv", "candidates.csv"),
+        ("candidates_*.candidate_sdf.v*.sdf", "candidates.sdf"),
+    ]:
+        files = sorted(adir.glob(pattern))
+        if not files:
+            continue
+        dest = reports_dir / f"{project_id}_{suffix}"
+        dest.write_bytes(files[-1].read_bytes())
+        out.append(dest)
+    return out
 
 
 def _with_orchestration(tasks: list[RunTask], iterations: int) -> list[RunTask]:
@@ -265,6 +291,8 @@ def cmd_run(args) -> int:
     dest = _copy_pdf_to_reports(store, req.project.project_id, last_manifest.run_id, args.reports_dir)
     if dest:
         print(f"PDF saved to : {dest}")
+    for exp in _copy_exports_to_reports(store, req.project.project_id, last_manifest.run_id, args.reports_dir):
+        print(f"export saved to : {exp}")
     return 0 if final.status.value == "completed" else 1
 
 

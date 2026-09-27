@@ -80,6 +80,7 @@ from .retrosynthesis_plan import (
     SynthesisRoute,
 )
 from .cyp_assessment import CypAssessment, CypLiability, CypSummary, MoleculeCypProfile
+from .candidate_table import CandidateRow, CandidateTable, ExportSummary
 from .safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
 from .selectivity_assessment import (
     MoleculeSelectivity,
@@ -109,6 +110,8 @@ __all__ = [
     "ClinicalSimulation",
     "ClinicalSimulationSummary",
     "ClinicalSummary",
+    "CandidateRow",
+    "CandidateTable",
     "ConcentrationPoint",
     "ConvergenceConfig",
     "CypAssessment",
@@ -126,6 +129,7 @@ __all__ = [
     "EvidenceBreakdown",
     "EvidenceLevel",
     "ExecutionPlan",
+    "ExportSummary",
     "FormulationAssessment",
     "FormulationSummary",
     "GenerationCandidate",

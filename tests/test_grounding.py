@@ -83,4 +83,4 @@ def test_inject_grounding_inserts_task_and_wires_report():
 def test_default_pipeline_has_no_grounding():
     ids = [t.task_id for t in cli.DEFAULT_PIPELINE]
     assert "grounding" not in ids
-    assert len(ids) == 13
+    assert len(ids) == 14

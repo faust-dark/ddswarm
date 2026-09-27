@@ -437,6 +437,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     cyps = by_kind.get("cyp_assessment", [])
     has = by_kind.get("herg_assessment", [])
     grs = by_kind.get("grounding_report", [])
+    cts = by_kind.get("candidate_table", [])
     fas = by_kind.get("formulation_assessment", [])
     drs = by_kind.get("docking_result", [])
     mds = by_kind.get("dynamics_result", [])
@@ -539,6 +540,10 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if sels:
             sub("Target selectivity & sexual-ADR risk", "selectivity_minion")
             _narrative_selectivity(sels, para)
+
+        if cts:
+            sub("Export", "export_minion")
+            _narrative_export(cts, para)
 
         _narrative_knowledge_agents(by_kind, para, sub)
 
@@ -855,6 +860,20 @@ def _narrative_grounding(grs, para) -> None:
                 para(f"{m.molecule_id} -> {e.source.upper()} {e.external_id} ({e.title}): {e.url}")
     para("Grounded entries are observed and carry a retrieval timestamp; they are excluded "
          "from the reproducibility hash because live databases change over time.")
+
+
+def _narrative_export(cts, para) -> None:
+    for ct in cts:
+        s = ct.summary
+        para(f"Machine-readable export: {s.total_molecules} molecule(s) — {s.go} go, "
+             f"{s.review} review, {s.no_go} no-go (CSV + JSON + SDF sidecars in the store).")
+        for r in ct.rows:
+            if r.verdict != "go":
+                why = "; ".join(r.reasons) if r.reasons else r.verdict
+                para(f"{r.molecule_id} [{r.verdict}]: {why}.")
+    para("The go/no-go verdict reuses the pipeline's existing gates (screening, safety, "
+         "tox/CYP/hERG/Brenk/BCS advisories) — it invents no new thresholds and is a "
+         "ranking/decision aid, not an experimental claim.")
 
 
 def _narrative_formulation(fas, para) -> None:
