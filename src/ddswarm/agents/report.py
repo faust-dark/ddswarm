@@ -402,7 +402,7 @@ class ReportMinion(Agent):
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
             "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
             "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred parameters — not measured human pharmacokinetics.",
-            "Selectivity/sexual-ADR scoring converts Vina docking scores to Ki via the Gibbs identity; Vina is a relative scoring function, so Ki/occupancy are ranking estimates, not absolute affinities — and docking reports binding, not function, so the functional sign of a direct 5-HT2C engagement is refined only by documented-chemotype matching (antagonist-like / agonist-like), never by a functional assay.",
+            "Selectivity/sexual-ADR scoring converts Vina docking scores to Ki via the Gibbs identity, hybrid-calibrated against a fixed literature-Ki set (per-receptor offset, slope fixed at 1); the calibrated Ki remains a calculated estimate, not an absolute affinity — and docking reports binding, not function, so the functional sign of a direct 5-HT2C engagement is refined only by documented-chemotype matching (antagonist-like / agonist-like), never by a functional assay.",
         ]
 
     @staticmethod

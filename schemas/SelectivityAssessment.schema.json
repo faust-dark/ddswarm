@@ -412,6 +412,75 @@
       ],
       "title": "ToolVersion",
       "type": "object"
+    },
+    "VinaCalibration": {
+      "description": "Hybrid Vina-score calibration (offset-only, per-receptor intercept).",
+      "properties": {
+        "method": {
+          "default": "offset-only per-receptor calibration: slope a = 1 (fixed), intercept b_r = mean(\u0394G_literature \u2212 Vina_score)",
+          "title": "Method",
+          "type": "string"
+        },
+        "slope": {
+          "default": 1.0,
+          "title": "Slope",
+          "type": "number"
+        },
+        "intercepts": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Intercepts",
+          "type": "object"
+        },
+        "n_points": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "N Points",
+          "type": "object"
+        },
+        "rmsd_kcal_per_mol": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rmsd Kcal Per Mol",
+          "type": "object"
+        },
+        "calibration_source": {
+          "default": "NIMH PDSP Ki Database (https://pdsp.unc.edu/databases/pdsp.php); literature Ki values \u2014 verify against the primary source",
+          "title": "Calibration Source",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "title": "VinaCalibration",
+      "type": "object"
     }
   },
   "properties": {
@@ -471,6 +540,17 @@
       ],
       "default": null,
       "title": "Reference Sert Occupancy"
+    },
+    "calibration": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VinaCalibration"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "note": {
       "anyOf": [

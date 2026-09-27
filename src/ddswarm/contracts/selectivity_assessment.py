@@ -29,6 +29,9 @@ SexualAdrRisk = Literal["class_effect", "efficacy_tradeoff", "direct_5ht2c_engag
                         "insufficient_data"]
 Ht2Function = Literal["antagonist_like", "agonist_like", "unknown"]
 
+CALIBRATION_SOURCE = ("NIMH PDSP Ki Database (https://pdsp.unc.edu/databases/pdsp.php); "
+                      "literature Ki values — verify against the primary source")
+
 
 class ReceptorAffinity(BaseModel):
     receptor: ReceptorKind
@@ -65,6 +68,18 @@ class SelectivitySummary(BaseModel):
     insufficient_data: int = 0
 
 
+class VinaCalibration(BaseModel):
+    """Hybrid Vina-score calibration (offset-only, per-receptor intercept)."""
+    method: str = ("offset-only per-receptor calibration: slope a = 1 (fixed), "
+                   "intercept b_r = mean(ΔG_literature − Vina_score)")
+    slope: float = 1.0
+    intercepts: dict[str, float | None] = Field(default_factory=dict)  # receptor -> b
+    n_points: dict[str, int] = Field(default_factory=dict)             # receptor -> N
+    rmsd_kcal_per_mol: dict[str, float | None] = Field(default_factory=dict)
+    calibration_source: str = CALIBRATION_SOURCE
+    note: str | None = None
+
+
 class SelectivityAssessment(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
     project_id: str
@@ -75,5 +90,6 @@ class SelectivityAssessment(BaseModel):
     reference_concentration_molar: float = 1e-8
     reference_molecule: str | None = None          # parent SMILES (efficacy reference)
     reference_sert_occupancy: float | None = None  # parent SERT occupancy at C_ref
+    calibration: VinaCalibration | None = None     # hybrid Vina->Ki offset fit
     note: str | None = None
     provenance: list[ProvenanceEntry] = Field(default_factory=list)

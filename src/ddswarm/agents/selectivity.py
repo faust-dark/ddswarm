@@ -29,6 +29,12 @@ from ..chemistry.selectivity import (
     occupancy_at,
     selectivity_index,
 )
+from ..chemistry.vina_calibration import (
+    CALIBRATION_SET,
+    calibrated_ki,
+    delta_g_from_ki,
+    fit_offset,
+)
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -37,6 +43,7 @@ from ..contracts.selectivity_assessment import (
     ReceptorAffinity,
     SelectivityAssessment,
     SelectivitySummary,
+    VinaCalibration,
 )
 from ..docking import make_engine
 from ..docking.base import DockProtocol, ReceptorSource, box_from_reference_mol
@@ -99,11 +106,13 @@ class SelectivityMinion(Agent):
         exhaustiveness = int(ctx.params.get("exhaustiveness", 8))
         num_modes = int(ctx.params.get("num_modes", 9))
         seed = int(ctx.params.get("seed", 42))
+        calibrate = bool(ctx.params.get("calibrate", True))
         work_root = Path(self.store.run_dir(ctx.project_id, ctx.run_id)) / "selectivity" / ctx.task_id
 
         # best affinity per (receptor_name, molecule_id)
         best: dict[tuple[str, str], float] = {}
         pdb_by_receptor: dict[str, str] = {}
+        calib_pairs: dict[str, list[tuple[float, float]]] = {}  # receptor -> (vina, ΔG_lit)
         notes: list[str] = []
 
         for rc in receptors:
@@ -137,13 +146,35 @@ class SelectivityMinion(Agent):
                 if poses:
                     best[(rname, mid)] = min(p.affinity_kcal_per_mol for p in poses
                                              if p.affinity_kcal_per_mol is not None)
+            if calibrate:
+                for ci, (cal_smi, ki_exp, _cit) in enumerate(CALIBRATION_SET.get(rname, [])):
+                    ligand = engine.prepare_ligand(cal_smi, work_root / rname / f"cal_{ci}")
+                    if not ligand.pdbqt_path:
+                        continue
+                    poses = engine.dock(receptor, ligand, protocol,
+                                        work_root / rname / f"caldock_{ci}")
+                    if poses:
+                        vina = min(p.affinity_kcal_per_mol for p in poses
+                                   if p.affinity_kcal_per_mol is not None)
+                        calib_pairs.setdefault(rname, []).append((vina, delta_g_from_ki(ki_exp)))
+
+        # fit the hybrid Vina->Ki offset calibration (per receptor)
+        calib: dict[str, tuple[float | None, int, float | None]] = {}
+        if calibrate:
+            for rname in ("SERT", "HTR2A", "HTR2C"):
+                calib[rname] = fit_offset(calib_pairs.get(rname, []))
+
+        def ki_of(rname: str, dg: float | None) -> float | None:
+            if calibrate:
+                return calibrated_ki(dg, calib.get(rname, (None, 0, None))[0])
+            return docking_ki(dg)
 
         # assemble per-molecule selectivity
         assessed: list[MoleculeSelectivity] = []
         # parent SERT occupancy = efficacy reference (from docking the parent)
         parent_sert_occ = None
         if parent is not None:
-            parent_sert_occ = occupancy_at(c_ref, docking_ki(best.get(("SERT", "parent"))))
+            parent_sert_occ = occupancy_at(c_ref, ki_of("SERT", best.get(("SERT", "parent"))))
 
         for mid, smi in molecules:
             if mid == "parent":
@@ -153,7 +184,7 @@ class SelectivityMinion(Agent):
             occ: dict[str, float | None] = {}
             for rname in ("SERT", "HTR2A", "HTR2C"):
                 dg = best.get((rname, mid))
-                k = docking_ki(dg)
+                k = ki_of(rname, dg)
                 o = occupancy_at(c_ref, k)
                 ki[rname] = k
                 occ[rname] = o
@@ -163,7 +194,9 @@ class SelectivityMinion(Agent):
                     best_affinity_kcal_per_mol=dg,
                     ki_molar=k,
                     occupancy=o,
-                    note="relative estimate (Vina scoring is not calibrated absolute free energy)"
+                    note=("hybrid-calibrated Ki (offset from literature Ki, slope a=1)"
+                          if calibrate
+                          else "relative estimate (Vina scoring is not calibrated absolute free energy)")
                     if dg is not None else None,
                 ))
             si_2c = selectivity_index(ki.get("HTR2C"), ki.get("SERT"))
@@ -211,15 +244,34 @@ class SelectivityMinion(Agent):
             assessed=len(assessed) - insufficient,
             insufficient_data=insufficient,
         )
-        note = ("Ki/occupancy are relative estimates (Vina scoring is not calibrated absolute "
-                "free energy); docking reports binding, not function — the functional sign of a "
-                "direct 5-HT2C engagement is refined by documented-chemotype matching "
-                "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype matches.")
+        if calibrate:
+            note = ("Ki/occupancy are hybrid-calibrated estimates (per-receptor offset from a "
+                    "fixed literature-Ki set, slope a = 1 so monotonicity is exact); docking "
+                    "reports binding, not function — the functional sign of a direct 5-HT2C "
+                    "engagement is refined by documented-chemotype matching "
+                    "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype "
+                    "matches.")
+        else:
+            note = ("Ki/occupancy are relative estimates (Vina scoring is not calibrated absolute "
+                    "free energy); docking reports binding, not function — the functional sign of a "
+                    "direct 5-HT2C engagement is refined by documented-chemotype matching "
+                    "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype matches.")
         if notes:
             note += " Receptor notes: " + "; ".join(notes)
 
+        calibration = None
+        if calibrate:
+            calibration = VinaCalibration(
+                intercepts={r: calib[r][0] for r in ("SERT", "HTR2A", "HTR2C")},
+                n_points={r: calib[r][1] for r in ("SERT", "HTR2A", "HTR2C")},
+                rmsd_kcal_per_mol={r: calib[r][2] for r in ("SERT", "HTR2A", "HTR2C")},
+                note="per-receptor offset fit on a fixed, committed literature-Ki set; slope "
+                     "fixed at 1 (no rescaling) so the Vina->Ki mapping is monotonic. The "
+                     "calibrated Ki is a calculated estimate, not an experimental affinity.",
+            )
+
         input_hash = hash_jsonable({"receptors": receptors, "molecules": molecules,
-                                    "c_ref": c_ref, "seed": seed})
+                                    "c_ref": c_ref, "seed": seed, "calibrate": calibrate})
         output_hash = hash_jsonable([m.model_dump() for m in assessed])
         assessment = SelectivityAssessment(
             project_id=ctx.project_id,
@@ -229,6 +281,7 @@ class SelectivityMinion(Agent):
             reference_concentration_molar=c_ref,
             reference_molecule=parent,
             reference_sert_occupancy=parent_sert_occ,
+            calibration=calibration,
             note=note,
             provenance=[ProvenanceEntry(
                 source="target-selectivity scoring (AutoDock Vina + Gibbs/occupancy)",

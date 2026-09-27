@@ -1011,11 +1011,23 @@ def _narrative_selectivity(sels, para) -> None:
         para(f"Each candidate was docked against SERT, 5-HT2A and 5-HT2C; the best docking "
              f"affinity was converted to a dissociation constant via the Gibbs identity "
              f"(ΔG = RT·ln Ki) and a fractional receptor occupancy computed at a fixed "
-             f"reference concentration of {c_ref:g} M. Ki and occupancy are relative "
-             f"ranking estimates (Vina scoring is not a calibrated absolute free energy). "
-             f"Docking reports binding, not function, so a direct 5-HT2C engagement is "
-             f"classified by documented-chemotype matching (antagonist-like / agonist-like); "
-             f"a chemotype that matches neither stays of unknown sign.")
+             f"reference concentration of {c_ref:g} M. Docking reports binding, not function, "
+             f"so a direct 5-HT2C engagement is classified by documented-chemotype matching "
+             f"(antagonist-like / agonist-like); a chemotype that matches neither stays of "
+             f"unknown sign.")
+        if sel.calibration is not None:
+            cal = sel.calibration
+            fits = ", ".join(
+                f"{r} offset {cal.intercepts.get(r):+.2f} kcal/mol "
+                f"(n={cal.n_points.get(r)}, RMSE {cal.rmsd_kcal_per_mol.get(r):.2f})"
+                if cal.intercepts.get(r) is not None else f"{r} uncalibrated"
+                for r in ("SERT", "HTR2A", "HTR2C"))
+            para(f"Vina scores were hybrid-calibrated against a fixed literature-Ki set: "
+                 f"{fits}. The slope is fixed at 1 (no rescaling), so the mapping to Ki is "
+                 f"monotonic; the calibrated Ki remains a calculated estimate.")
+        else:
+            para("Ki and occupancy are relative ranking estimates (Vina scoring is not a "
+                 "calibrated absolute free energy).")
         if sel.reference_molecule:
             para(f"The parent molecule {sel.reference_molecule} is docked alongside the "
                  f"candidates as the SERT-efficacy reference"

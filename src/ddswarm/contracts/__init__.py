@@ -83,6 +83,7 @@ from .selectivity_assessment import (
     ReceptorAffinity,
     SelectivityAssessment,
     SelectivitySummary,
+    VinaCalibration,
 )
 from .schema_export import MODELS, export_schemas
 from .task_spec import AttemptRecord, TaskSpec
@@ -163,6 +164,7 @@ __all__ = [
     "SearchBox",
     "SelectivityAssessment",
     "SelectivitySummary",
+    "VinaCalibration",
     "StageFinding",
     "SynthesisRoute",
     "ToxAlert",
