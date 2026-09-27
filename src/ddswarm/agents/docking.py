@@ -29,6 +29,7 @@ from ..docking import make_engine
 from ..docking.base import DockProtocol, box_from_reference_mol
 from ..docking.rmsd import heavy_atom_rmsd, pose_mol_from_coords
 from ..logging.hashing import hash_jsonable
+from ..orchestrator.checkpoint import ComputeCache, cached_dock
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -101,13 +102,15 @@ class DockingMinion(Agent):
         failed = 0
         redocking: RedockingValidation | None = None
         redocking_threshold = float(ctx.params.get("redocking_threshold", 2.0))
+        cache = ComputeCache(self.store, bool(ctx.params.get("resume")))
 
         for mid, smi in molecules:
             ligand = engine.prepare_ligand(smi, work_dir / f"lig_{mid}")
             if not ligand.pdbqt_path:
                 failed += 1
                 continue
-            engine_poses = engine.dock(receptor, ligand, protocol, work_dir / f"dock_{mid}")
+            engine_poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
+                                       protocol, work_dir / f"dock_{mid}")
             if not engine_poses:
                 failed += 1
                 continue

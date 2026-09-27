@@ -55,6 +55,7 @@ from ..contracts.selectivity_assessment import (
 from ..docking import make_engine
 from ..docking.base import DockProtocol, ReceptorSource, box_from_reference_mol
 from ..logging.hashing import hash_jsonable
+from ..orchestrator.checkpoint import ComputeCache, cached_dock
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -129,6 +130,7 @@ class SelectivityMinion(Agent):
         seed = int(ctx.params.get("seed", 42))
         calibrate = bool(ctx.params.get("calibrate", True))
         work_root = Path(self.store.run_dir(ctx.project_id, ctx.run_id)) / "selectivity" / ctx.task_id
+        cache = ComputeCache(self.store, bool(ctx.params.get("resume")))
 
         # best affinity per (receptor_name, molecule_id)
         best: dict[tuple[str, str], float] = {}
@@ -160,7 +162,8 @@ class SelectivityMinion(Agent):
                 ligand = engine.prepare_ligand(smi, work_root / rname / f"lig_{mid}")
                 if not ligand.pdbqt_path:
                     continue
-                poses = engine.dock(receptor, ligand, protocol, work_root / rname / f"dock_{mid}")
+                poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
+                                    protocol, work_root / rname / f"dock_{mid}")
                 if poses:
                     best[(rname, mid)] = min(p.affinity_kcal_per_mol for p in poses
                                              if p.affinity_kcal_per_mol is not None)
@@ -169,8 +172,8 @@ class SelectivityMinion(Agent):
                     ligand = engine.prepare_ligand(cal_smi, work_root / rname / f"cal_{ci}")
                     if not ligand.pdbqt_path:
                         continue
-                    poses = engine.dock(receptor, ligand, protocol,
-                                        work_root / rname / f"caldock_{ci}")
+                    poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
+                                        protocol, work_root / rname / f"caldock_{ci}")
                     if poses:
                         vina = min(p.affinity_kcal_per_mol for p in poses
                                    if p.affinity_kcal_per_mol is not None)

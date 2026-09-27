@@ -18,6 +18,7 @@ from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..dynamics import make_engine
 from ..logging.hashing import hash_jsonable
+from ..orchestrator.checkpoint import ComputeCache, cached_run_md
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -74,7 +75,8 @@ class DynamicsMinion(Agent):
             seed=int(ctx.params.get("seed", 42)),
             minimize_max_iterations=int(ctx.params.get("minimize_max_iterations", 200)),
         )
-        run = engine.run_md(pdb_path, identifier, protocol)
+        run = cached_run_md(engine, ComputeCache(self.store, bool(ctx.params.get("resume"))),
+                            pdb_path, identifier, protocol)
 
         summary = DynamicsSummary(
             total_runs=1,

@@ -241,6 +241,16 @@ def _inject_grounding(tasks: list[RunTask]) -> list[RunTask]:
     return base
 
 
+def _inject_resume(tasks: list[RunTask]) -> list[RunTask]:
+    """Opt-in content-addressed resume: mark every task to reuse cached
+    docking/MD results instead of recomputing (deterministic; only the docking/
+    dynamics/selectivity agents read the flag)."""
+    base = [t.model_copy(deep=True) for t in tasks]
+    for t in base:
+        t.params["resume"] = True
+    return base
+
+
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
     # Hermes reasoning is the project standard: default ON unless the JSON sets
@@ -258,6 +268,8 @@ def cmd_run(args) -> int:
         for t in tasks:
             if t.agent == "report_minion":
                 t.params["iupac"] = True
+    if args.resume:
+        tasks = _inject_resume(tasks)
 
     iterations = max(1, int(args.iterations))
     if iterations > 1:
@@ -382,6 +394,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="resolve molecules against ChEMBL/PubChem/PubMed and record observed external records (URL + identifier; network-dependent, non-deterministic)")
     pr.add_argument("--iterations", type=int, default=1,
                     help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
+    pr.add_argument("--resume", action="store_true",
+                    help="reuse cached docking/MD results (content-addressed, deterministic) instead of recomputing")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
                     help="directory to copy the exported PDF into (default: <repo>/reports)")
