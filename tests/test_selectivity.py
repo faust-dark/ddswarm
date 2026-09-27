@@ -1,15 +1,19 @@
-"""Tests for selectivity_minion + the thermodynamic selectivity math."""
+"""Tests for selectivity_minion + the thermodynamic selectivity math + ADR library."""
 
 import math
+from pathlib import Path
 
 from ddswarm.agents import SelectivityMinion
 from ddswarm.agents.base import AgentContext
-from ddswarm.chemistry.receptors import expand_receptor
+from ddswarm.chemistry.receptors import canonical_receptor_name, expand_receptor
 from ddswarm.chemistry.selectivity import (
+    classify_cox_gi,
+    classify_occupancy_adr,
     classify_sexual_adr,
     docking_ki,
     occupancy_at,
     select_adr_profile,
+    select_adr_profiles,
     selectivity_index,
 )
 from ddswarm.contracts import ProjectSpec
@@ -64,11 +68,66 @@ def test_agent_no_molecules_insufficient(tmp_path):
     assert res.status.value == "insufficient_evidence"
 
 
-def test_select_adr_profile_matches_only_ssri_panel():
+def test_select_adr_profiles_matches_all_profiles():
+    # SSRI sexual-ADR profile
+    assert select_adr_profiles("SERT", ["HTR2A", "HTR2C"]) == ["sert_5ht2c_sexual_adr"]
+    assert select_adr_profiles("SERT", ["HTR2A"]) == []
+    # NSAID COX GI profile (with alias resolution)
+    assert select_adr_profiles("COX2", ["COX1"]) == ["cox_gi_risk"]
+    assert select_adr_profiles("PTGS2", ["PTGS1"]) == ["cox_gi_risk"]
+    # single antitarget profile
+    assert select_adr_profiles("SERT", ["CHRM1"]) == ["chrm1_anticholinergic"]
+    # multiple antitarget profiles (ordered: registry insertion order)
+    assert select_adr_profiles("SERT", ["HRH1", "CHRM1"]) == ["chrm1_anticholinergic", "hrh1_sedation"]
+    # a panel can match special + antitarget profiles at once
+    assert select_adr_profiles("SERT", ["HTR2C", "CHRM1"]) == [
+        "sert_5ht2c_sexual_adr", "chrm1_anticholinergic"]
+    # no match
+    assert select_adr_profiles(None, []) == []
+    assert select_adr_profiles("DRD2", ["HTR2A"]) == []
+
+
+def test_select_adr_profile_backward_compat():
     assert select_adr_profile("SERT", ["HTR2A", "HTR2C"]) == "sert_5ht2c_sexual_adr"
     assert select_adr_profile("SERT", ["HTR2A"]) is None
     assert select_adr_profile("DRD2", ["HTR2A", "HTR2C"]) is None
     assert select_adr_profile(None, []) is None
+
+
+def test_classify_cox_gi_labels():
+    # SI = Ki_COX1/Ki_COX2 = 1000 -> COX-2 preferred
+    assert classify_cox_gi(1e-6, 1e-9)[0] == "cox2_preferential"
+    # SI = 1 -> non-selective
+    assert classify_cox_gi(1e-7, 1e-7)[0] == "non_selective_nsaid"
+    # SI = 0.01 -> COX-1 preferred
+    assert classify_cox_gi(1e-9, 1e-7)[0] == "cox1_preferring"
+    # missing affinity
+    assert classify_cox_gi(None, 1e-7)[0] == "insufficient_data"
+    assert classify_cox_gi(1e-7, None)[0] == "insufficient_data"
+
+
+def test_classify_occupancy_adr_labels():
+    # blockade profile: high occupancy -> liability
+    assert classify_occupancy_adr("chrm1_anticholinergic", 0.8)[0] == "liability"
+    assert classify_occupancy_adr("chrm1_anticholinergic", 0.1)[0] == "low_risk"
+    assert classify_occupancy_adr("chrm1_anticholinergic", None)[0] == "insufficient_data"
+    # agonism profile: high occupancy -> sign-dependent engagement (not liability)
+    assert classify_occupancy_adr("htr2b_valvulopathy", 0.8)[0] == "sign_dependent_engagement"
+
+
+def test_canonical_receptor_name_aliases():
+    assert canonical_receptor_name("PTGS2") == "COX2"
+    assert canonical_receptor_name("COX-2") == "COX2"
+    assert canonical_receptor_name("M1") == "CHRM1"
+    assert canonical_receptor_name("5-HT2C") == "HTR2C"
+    assert canonical_receptor_name("5HT2C") == "HTR2C"
+    assert canonical_receptor_name("mu") == "OPRM1"
+    assert canonical_receptor_name("MOR") == "OPRM1"
+    assert canonical_receptor_name("alpha1A") == "ADRA1A"
+    assert canonical_receptor_name("SLC6A4") == "SERT"
+    assert canonical_receptor_name("hERG") == "KCNH2"
+    # unknown names are normalized, never mapped to a fabricated entry
+    assert canonical_receptor_name("UNKNOWN_THING") == "UNKNOWNTHING"
 
 
 def test_expand_receptor_fills_pdb_from_registry():
@@ -76,16 +135,93 @@ def test_expand_receptor_fills_pdb_from_registry():
     assert expand_receptor({"name": "SERT"})["pdb_id"] == "5I73"
     # explicit pdb_id always wins
     assert expand_receptor({"name": "DRD2", "pdb_id": "1ABC"})["pdb_id"] == "1ABC"
+    # alias resolution fills a curated pdb_id (COX2 via PTGS2)
+    assert expand_receptor({"name": "COX2"})["pdb_id"] == "3LN1"
+    assert expand_receptor({"name": "PTGS2"})["pdb_id"] == "3LN1"
     # unregistered name stays untouched (no pdb_id invented)
     assert "pdb_id" not in expand_receptor({"name": "MADE_UP"})
     # registry entry with no curated pdb_id does not fabricate one
-    assert "pdb_id" not in expand_receptor({"name": "COX1"})
+    assert "pdb_id" not in expand_receptor({"name": "ADRA2C"})
 
 
-def test_interpret_adr_only_for_ssri_profile():
-    # a non-SSRI panel never gets an ADR label
-    assert SelectivityMinion._interpret_adr(None, {"DRD2": 0.1}, 0.9, "CC") is None
-    # SSRI profile with negligible 5-HT2C and retained SERT -> class effect
+def test_interpret_adr_ssri_cox_and_antitarget():
+    # no profiles -> empty list
+    assert SelectivityMinion._interpret_adr([], {"DRD2": 0.1}, {}, 0.9, "CC") == []
+    # SSRI profile -> class effect
     r = SelectivityMinion._interpret_adr(
-        "sert_5ht2c_sexual_adr", {"SERT": 0.9, "HTR2C": 0.0}, 0.9, "CC")
-    assert r is not None and r.label == "class_effect"
+        ["sert_5ht2c_sexual_adr"], {"SERT": 0.9, "HTR2C": 0.0}, {}, 0.9, "CC")
+    assert len(r) == 1 and r[0].profile == "sert_5ht2c_sexual_adr" and r[0].label == "class_effect"
+    # antitarget -> liability
+    r = SelectivityMinion._interpret_adr(
+        ["chrm1_anticholinergic"], {"CHRM1": 0.8}, {}, 0.9, "CC")
+    assert len(r) == 1 and r[0].profile == "chrm1_anticholinergic" and r[0].label == "liability"
+    # cox -> cox2_preferential (needs the ki dict, not occupancy)
+    r = SelectivityMinion._interpret_adr(
+        ["cox_gi_risk"], {}, {"COX1": 1e-6, "COX2": 1e-9}, 0.9, "CC")
+    assert len(r) == 1 and r[0].profile == "cox_gi_risk" and r[0].label == "cox2_preferential"
+
+
+def _run_selectivity(store, receptors, primary, affinities, monkeypatch):
+    """Run the full selectivity agent against a fake deterministic docking engine."""
+    from ddswarm import agents
+    from ddswarm.docking.base import DockPose, DockingEngine, PreparedLigand, PreparedReceptor
+
+    class Fake(DockingEngine):
+        name = "fake"
+        version = "1.0"
+
+        def __init__(self):
+            self.last_receptor = None
+
+        def prepare_receptor(self, source, work_dir):
+            self.last_receptor = source.identifier
+            return PreparedReceptor()
+
+        def prepare_ligand(self, smiles, work_dir):
+            return PreparedLigand(canonical_smiles=smiles, pdbqt_path=Path("l.pdbqt"))
+
+        def available(self):
+            return True, "fake"
+
+        def dock(self, receptor, ligand, protocol, work_dir):
+            a = affinities.get((self.last_receptor, ligand.canonical_smiles))
+            return [DockPose(rank=1, affinity_kcal_per_mol=a)] if a is not None else []
+
+    monkeypatch.setattr(agents.selectivity, "make_engine", lambda name, vina_binary=None: Fake())
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o", status="approved",
+                       starting_materials=["c1ccccc1"])
+    params = {"receptors": receptors, "primary": primary, "calibrate": False,
+              "box": {"center": [0, 0, 0], "size": [20, 20, 20]}}
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec,
+                       params=params, inputs={})
+    return SelectivityMinion(store).run(ctx)
+
+
+def test_agent_e2e_cox_panel(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    res = _run_selectivity(
+        store,
+        receptors=[{"name": "COX2", "pdb_id": "3LN1"}, {"name": "COX1", "pdb_id": "6Y3C"}],
+        primary="COX2",
+        affinities={("3LN1", "c1ccccc1"): -9.5, ("6Y3C", "c1ccccc1"): -6.0},
+        monkeypatch=monkeypatch)
+    assert res.status.value == "success"
+    assert any("cox_gi_risk:cox2_preferential" in f for f in res.findings)
+
+
+def test_agent_e2e_tca_panel(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    res = _run_selectivity(
+        store,
+        receptors=[{"name": "SERT", "pdb_id": "5I73"},
+                   {"name": "M1", "pdb_id": "5CXV"},
+                   {"name": "H1", "pdb_id": "3RZE"}],
+        primary="SERT",
+        affinities={("5I73", "c1ccccc1"): -9.0,
+                    ("5CXV", "c1ccccc1"): -11.5,
+                    ("3RZE", "c1ccccc1"): -11.5},
+        monkeypatch=monkeypatch)
+    assert res.status.value == "success"
+    # alias names M1/H1 canonicalised to CHRM1/HRH1 and interpreted as liabilities
+    assert any("chrm1_anticholinergic:liability" in f for f in res.findings)
+    assert any("hrh1_sedation:liability" in f for f in res.findings)

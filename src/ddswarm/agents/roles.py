@@ -22,7 +22,7 @@ AGENT_ROLES: dict[str, tuple[str, str]] = {
     "formulation_minion": ("Formulation", "estimates developability — solubility, permeability, and BCS class"),
     "docking_minion": ("Docking", "docks candidates into the receptor and reports predicted affinity (opt-in)"),
     "dynamics_minion": ("Receptor MD", "runs a short receptor molecular-dynamics relaxation (opt-in, gated on all four branches)"),
-    "selectivity_minion": ("Target selectivity", "docks SERT/5-HT2A/5-HT2C and derives a mechanistic sexual-ADR risk from occupancy (opt-in)"),
+    "selectivity_minion": ("Target selectivity", "docks a configurable receptor panel and derives mechanistic ADR interpretations from occupancy (SSRI sexual-ADR, NSAID GI, antitarget ADRs) — opt-in"),
     "safety_minion": ("Safety", "safety gate — flags controlled substances and dual-use targets"),
     "report_minion": ("Report", "aggregates the run into a structured report and ranks the survivors"),
     "memory_minion": ("Memory", "distils the generation into best candidates, avoided scaffolds, and insights"),

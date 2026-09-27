@@ -109,16 +109,12 @@
           "title": "Selectivity Indices",
           "type": "array"
         },
-        "adr": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/AdrInterpretation"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+        "adr_interpretations": {
+          "items": {
+            "$ref": "#/$defs/AdrInterpretation"
+          },
+          "title": "Adr Interpretations",
+          "type": "array"
         },
         "evidence_level": {
           "$ref": "#/$defs/EvidenceLevel",
@@ -498,8 +494,8 @@
   },
   "properties": {
     "schema_version": {
-      "const": "1.1",
-      "default": "1.1",
+      "const": "1.2",
+      "default": "1.2",
       "title": "Schema Version",
       "type": "string"
     },

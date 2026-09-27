@@ -538,7 +538,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
             _narrative_safety(sas, para)
 
         if sels:
-            sub("Target selectivity & sexual-ADR risk", "selectivity_minion")
+            sub("Target selectivity & ADR risk", "selectivity_minion")
             _narrative_selectivity(sels, para)
 
         if cts:
@@ -1143,10 +1143,10 @@ def _narrative_selectivity(sels, para) -> None:
                  if si.value is not None else f"Ki({si.off_target})/Ki({si.primary}) = n/a")
                 for si in m.selectivity_indices)
             para(f"{m.molecule_id}: occupancy {occs}; selectivity {sis or 'n/a'}.")
-            if m.adr is not None:
-                para(f"ADR ({m.adr.profile}): {m.adr.label}. {m.adr.rationale}")
-                if m.adr.note:
-                    para(f"Functional sign (chemotype match): {m.adr.note}.")
+            for a in m.adr_interpretations:
+                para(f"ADR ({a.profile}): {a.label}. {a.rationale}")
+                if a.note:
+                    para(f"Functional sign (chemotype match): {a.note}.")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:

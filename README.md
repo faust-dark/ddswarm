@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 28: MD trajectory checkpoint/resume)
+# ddswarm — drug discovery multi-agent swarm (Increment 29: receptor registry + pluggable ADR profiles)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -267,6 +267,29 @@ minimization reference is saved alongside the State so the RMSD is always
 measured against the same minimized structure. Honest caveat: the base MD is
 chaotic and not bit-reproducible across *fresh* runs, and resumed metrics cover
 the continued segment only (prior/total steps are tracked for audit).
+
+**Increment 29** populates the two selectivity libraries as *data* so they serve
+any future query:
+
+- **`chemistry/receptors.py`** — a curated registry of ~61 dockable targets
+  across GPCRs (serotonergic/dopaminergic/adrenergic/muscarinic/histamine/
+  opioid/cannabinoid/adenosine/melatonin receptors plus GLP-1R/CCR5/MC4R),
+  monoamine transporters, enzymes (COX-1/2, PDE5, ACE, HMG-CoA reductase,
+  MAO-A/B, AChE, DPP4) and ion channels (hERG/Nav1.5/Cav1.2). Every `pdb_id`
+  was verified against the RCSB PDB data API (no invented ids; uncurated targets
+  stay `pdb_id: None`), and `canonical_receptor_name` resolves aliases
+  (`PTGS2`→`COX2`, `M1`→`CHRM1`, `5-HT2C`→`HTR2C`, `mu`→`OPRM1`, ...) so panels
+  may name a target several ways.
+
+- **`chemistry/selectivity.py`** — a pluggable ADR profile library: the SSRI
+  sexual-ADR profile, the NSAID COX-2/COX-1 GI-risk profile (tiered on the
+  selectivity index Ki(COX-1)/Ki(COX-2)), and 7 off-target "antitarget" ADR
+  profiles (M1 anticholinergic, H1 sedation, D2 extrapyramidal/prolactin,
+  α1A/α1B orthostatic hypotension, 5-HT2B valvulopathy, κ dysphoria) tiered on
+  occupancy at the reference concentration. Each profile is mechanistic and
+  citable; sign-dependent (agonism) profiles stay "engagement" because docking
+  reports binding, not function. A panel can match several profiles at once, so
+  `MoleculeSelectivity.adr_interpretations` is now a list (schema 1.2).
 
 ## Architecture
 

@@ -8,10 +8,13 @@ computed at a fixed reference concentration, and a general selectivity index
 (Ki_off / Ki_primary) is derived for every off-target relative to the
 designated primary (on-target) receptor.
 
-An optional ADR interpretation is attached only when the panel matches a known
-adverse-effect profile (e.g. the SSRI profile: SERT primary + 5-HT2C
-off-target -> sexual-ADR risk). Any other panel yields pure affinity +
-selectivity indices without inventing an ADR label.
+Optional ADR interpretations are attached only when the panel matches a known
+adverse-effect profile from the pluggable library (SSRI sexual-ADR, NSAID
+COX-2/COX-1 GI risk, and off-target "antitarget" ADRs such as H1 sedation, M1
+anticholinergic burden, D2 extrapyramidal/prolactin, alpha-1 orthostatic
+hypotension, 5-HT2B valvulopathy, kappa-opioid dysphoria). A panel can match
+several profiles, so each molecule carries a list of interpretations; any other
+panel yields pure affinity + selectivity indices without inventing an ADR label.
 
 All values are *calculated* (docking + deterministic thermodynamics), never
 experimental evidence. Vina scores are relative, not calibrated absolute free
@@ -29,8 +32,8 @@ from .enums import AgentResultStatus, EvidenceLevel
 from .provenance import ProvenanceEntry
 
 # Documented label sets of the SSRI sexual-ADR interpretation profile. The
-# AdrInterpretation.label field is a free string so other profiles can add
-# labels without touching this contract.
+# AdrInterpretation.label field is a free string so other profiles (COX GI,
+# antitarget ADRs) add their own labels without touching this contract.
 SexualAdrRisk = Literal["class_effect", "efficacy_tradeoff", "direct_5ht2c_engagement",
                         "direct_5ht2c_antagonism", "direct_5ht2c_agonism",
                         "insufficient_data"]
@@ -77,7 +80,7 @@ class MoleculeSelectivity(BaseModel):
     primary_receptor: str | None = None
     affinities: list[ReceptorAffinity] = Field(default_factory=list)
     selectivity_indices: list[SelectivityIndex] = Field(default_factory=list)
-    adr: AdrInterpretation | None = None           # only when an ADR profile matches
+    adr_interpretations: list[AdrInterpretation] = Field(default_factory=list)
     evidence_level: EvidenceLevel = EvidenceLevel.calculated
 
 
@@ -101,7 +104,7 @@ class VinaCalibration(BaseModel):
 
 
 class SelectivityAssessment(BaseModel):
-    schema_version: Literal["1.1"] = "1.1"
+    schema_version: Literal["1.2"] = "1.2"
     project_id: str
     agent: str = "selectivity_minion"
     status: AgentResultStatus

@@ -9,12 +9,16 @@ concentration (C/(C+Ki)), and derives a general selectivity index
 (on-target) receptor.
 
 An optional adverse-effect interpretation is attached only when the panel
-matches a known profile — today the SSRI profile (SERT primary + 5-HT2C
-off-target -> sexual-ADR risk). Any other panel reports pure affinity +
-selectivity indices without inventing an ADR label. Docking reports binding,
-not functional sign, so the SSRI profile's direct 5-HT2C engagement is refined
-by documented-chemotype matching (antagonist-like/agonist-like via
-chemistry/ht2_function); unmatched chemotypes remain of unknown sign.
+matches a profile from the pluggable ADR library — the SSRI profile (SERT
+primary + 5-HT2C off-target -> sexual-ADR risk), the NSAID profile (COX-2
+primary + COX-1 off-target -> GI risk), and off-target "antitarget" ADRs (H1
+sedation, M1 anticholinergic, D2 extrapyramidal/prolactin, alpha-1 orthostatic
+hypotension, 5-HT2B valvulopathy, kappa dysphoria). Any other panel reports
+pure affinity + selectivity indices without inventing an ADR label. Docking
+reports binding, not functional sign, so the SSRI profile's direct 5-HT2C
+engagement is refined by documented-chemotype matching (antagonist-like/
+agonist-like via chemistry/ht2_function); unmatched chemotypes remain of
+unknown sign.
 
 Opt-in (like docking/dynamics): needs the Vina binary + network for PDB download.
 """
@@ -26,12 +30,15 @@ from pathlib import Path
 from rdkit import rdBase
 
 from ..chemistry.ht2_function import classify_ht2_function
-from ..chemistry.receptors import expand_receptor
+from ..chemistry.receptors import canonical_receptor_name, expand_receptor
 from ..chemistry.selectivity import (
+    ANTITARGET_PROFILES,
+    classify_cox_gi,
+    classify_occupancy_adr,
     classify_sexual_adr,
     docking_ki,
     occupancy_at,
-    select_adr_profile,
+    select_adr_profiles,
     selectivity_index,
 )
 from ..chemistry.vina_calibration import (
@@ -90,7 +97,13 @@ class SelectivityMinion(Agent):
             )
 
         raw_receptors = ctx.params.get("receptors") or _DEFAULT_RECEPTORS
-        receptors = [expand_receptor(dict(rc)) for rc in raw_receptors]
+        receptors = []
+        for rc in raw_receptors:
+            d = expand_receptor(dict(rc))
+            # canonicalise names (PTGS2->COX2, M1->CHRM1, 5-HT2C->HTR2C, ...) so the
+            # affinity/occupancy dicts and the ADR interpreters key on one spelling.
+            d["name"] = canonical_receptor_name(str(d.get("name", "")))
+            receptors.append(d)
         if not receptors:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
@@ -99,7 +112,8 @@ class SelectivityMinion(Agent):
             )
 
         receptor_names = [str(rc.get("name", "")) for rc in receptors]
-        primary = str(ctx.params.get("primary") or (receptor_names[0] if receptor_names else ""))
+        primary = canonical_receptor_name(
+            str(ctx.params.get("primary") or (receptor_names[0] if receptor_names else "")))
         if primary not in receptor_names:
             return self._result(
                 ctx, AgentResultStatus.failed,
@@ -197,7 +211,7 @@ class SelectivityMinion(Agent):
         if parent is not None:
             parent_primary_occ = occupancy_at(c_ref, ki_of(primary, best.get((primary, "parent"))))
 
-        adr_profile = select_adr_profile(primary, off_targets)
+        adr_profiles = select_adr_profiles(primary, off_targets)
 
         for mid, smi in molecules:
             if mid == "parent":
@@ -229,11 +243,11 @@ class SelectivityMinion(Agent):
                 )
                 for r in off_targets
             ]
-            adr = self._interpret_adr(adr_profile, occ, parent_primary_occ, smi)
+            adrs = self._interpret_adr(adr_profiles, occ, ki, parent_primary_occ, smi)
             assessed.append(MoleculeSelectivity(
                 molecule_id=mid, canonical_smiles=smi,
                 primary_receptor=primary, affinities=affs,
-                selectivity_indices=indices, adr=adr,
+                selectivity_indices=indices, adr_interpretations=adrs,
             ))
 
         insufficient = sum(1 for m in assessed if all(a.ki_molar is None for a in m.affinities))
@@ -243,7 +257,7 @@ class SelectivityMinion(Agent):
             insufficient_data=insufficient,
             primary_receptor=primary,
         )
-        note = self._note(calibrate, adr_profile, primary, off_targets, notes)
+        note = self._note(calibrate, adr_profiles, primary, off_targets, notes)
 
         calibration = None
         if calibrate:
@@ -283,10 +297,15 @@ class SelectivityMinion(Agent):
         art = self.persist_artifact(ctx, "selectivity_assessment", f"sel_{ctx.project_id}", assessment)
         findings = [f"selectivity: {summary.assessed}/{summary.total_molecules} assessed "
                     f"({summary.insufficient_data} insufficient data), primary={primary}"]
-        if adr_profile:
-            labels = {m.adr.label for m in assessed if m.adr is not None}
-            if labels:
-                findings.append(f"ADR ({adr_profile}): " + ", ".join(sorted(labels)))
+        if adr_profiles:
+            label_counts: dict[str, int] = {}
+            for m in assessed:
+                for a in m.adr_interpretations:
+                    key = f"{a.profile}:{a.label}"
+                    label_counts[key] = label_counts.get(key, 0) + 1
+            if label_counts:
+                findings.append("ADR " + ", ".join(
+                    f"{k}:{v}" for k, v in sorted(label_counts.items())))
         return self._result(
             ctx, AgentResultStatus.success,
             input_refs=ctx.input_refs, artifacts=[art], findings=findings,
@@ -297,10 +316,28 @@ class SelectivityMinion(Agent):
 
     # ---- helpers ----
     @staticmethod
-    def _interpret_adr(profile: str | None, occ: dict[str, float | None],
-                       parent_primary_occ: float | None, smi: str) -> AdrInterpretation | None:
-        if profile != "sert_5ht2c_sexual_adr":
-            return None
+    def _interpret_adr(profiles: list[str], occ: dict[str, float | None],
+                       ki: dict[str, float | None], parent_primary_occ: float | None,
+                       smi: str) -> list[AdrInterpretation]:
+        """Interpret every matching ADR profile into AdrInterpretation entries."""
+        out: list[AdrInterpretation] = []
+        for profile in profiles:
+            if profile == "sert_5ht2c_sexual_adr":
+                out.append(SelectivityMinion._interpret_ssri_adr(occ, parent_primary_occ, smi))
+            elif profile == "cox_gi_risk":
+                label, rationale = classify_cox_gi(ki.get("COX1"), ki.get("COX2"))
+                out.append(AdrInterpretation(profile=profile, label=label, rationale=rationale))
+            else:
+                prof = ANTITARGET_PROFILES.get(profile)
+                if prof is None:
+                    continue
+                label, rationale = classify_occupancy_adr(profile, occ.get(prof["receptor"]))
+                out.append(AdrInterpretation(profile=profile, label=label, rationale=rationale))
+        return out
+
+    @staticmethod
+    def _interpret_ssri_adr(occ: dict[str, float | None], parent_primary_occ: float | None,
+                            smi: str) -> AdrInterpretation:
         label, rationale = classify_sexual_adr(
             sert_occupancy=occ.get("SERT"),
             htr2c_occupancy=occ.get("HTR2C"),
@@ -321,10 +358,11 @@ class SelectivityMinion(Agent):
                 label = "direct_5ht2c_agonism"
                 rationale = (f"direct 5-HT2C binding + documented agonist chemotype ({joined}); "
                              f"5-HT2C agonism may WORSEN sexual ADR — confirm functionally. {cites}")
-        return AdrInterpretation(profile=profile, label=label, rationale=rationale, note=note)
+        return AdrInterpretation(
+            profile="sert_5ht2c_sexual_adr", label=label, rationale=rationale, note=note)
 
     @staticmethod
-    def _note(calibrate: bool, adr_profile: str | None, primary: str,
+    def _note(calibrate: bool, adr_profiles: list[str], primary: str,
               off_targets: list[str], notes: list[str]) -> str:
         base = (
             "Ki/occupancy are "
@@ -334,10 +372,11 @@ class SelectivityMinion(Agent):
             + f"; primary (on-target) = {primary}, off-targets = {', '.join(off_targets) or 'none'}. "
             "Docking reports binding, not function"
         )
-        if adr_profile:
-            base += (f"; the panel matches the ADR profile '{adr_profile}', whose functional-sign "
-                     "refinement (antagonist-like/agonist-like) is by documented-chemotype matching "
-                     "and stays 'unknown sign' when no chemotype matches")
+        if adr_profiles:
+            base += (f"; the panel matches ADR profile(s) {', '.join(adr_profiles)} — blockade-driven "
+                     "antitarget ADRs are tiered on occupancy at the reference concentration, while "
+                     "sign-dependent ones (agonism) stay 'engagement' until a functional assay or "
+                     "chemotype match resolves the sign")
         else:
             base += "; the panel matches no built-in ADR profile, so no adverse-effect label is "
             "asserted (pure affinity + selectivity indices)"

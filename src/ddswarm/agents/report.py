@@ -354,8 +354,8 @@ class ReportMinion(Agent):
                          f"(primary={s.summary.primary_receptor})")
             adr_labels: dict[str, int] = {}
             for m in s.molecules:
-                if m.adr is not None:
-                    adr_labels[m.adr.label] = adr_labels.get(m.adr.label, 0) + 1
+                for a in m.adr_interpretations:
+                    adr_labels[a.label] = adr_labels.get(a.label, 0) + 1
             if adr_labels:
                 parts.append("ADR " + ", ".join(f"{k}:{v}" for k, v in sorted(adr_labels.items())))
         if not parts:
@@ -388,7 +388,7 @@ class ReportMinion(Agent):
         if "regulatory_checklist" not in by_kind:
             gaps.append("no 7D regulatory checklist (opt-in; needs reasoning.backend=hermes)")
         if "selectivity_assessment" not in by_kind:
-            gaps.append("no target-selectivity / sexual-ADR scoring (opt-in; needs Vina + receptor PDBs)")
+            gaps.append("no target-selectivity / ADR scoring (opt-in; needs Vina + receptor PDBs)")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")
@@ -444,7 +444,7 @@ class ReportMinion(Agent):
             "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
             "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
             "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred parameters — not measured human pharmacokinetics.",
-            "Selectivity/sexual-ADR scoring converts Vina docking scores to Ki via the Gibbs identity, hybrid-calibrated against a fixed literature-Ki set (per-receptor offset, slope fixed at 1); the calibrated Ki remains a calculated estimate, not an absolute affinity — and docking reports binding, not function, so the functional sign of a direct 5-HT2C engagement is refined only by documented-chemotype matching (antagonist-like / agonist-like), never by a functional assay.",
+            "Selectivity/ADR scoring converts Vina docking scores to Ki via the Gibbs identity, hybrid-calibrated against a fixed literature-Ki set (per-receptor offset, slope fixed at 1); the calibrated Ki remains a calculated estimate, not an absolute affinity. ADR labels come from a pluggable mechanistic profile library (SSRI sexual-ADR, NSAID COX-2/COX-1 GI risk, and off-target antitarget ADRs tiered on occupancy at the reference concentration); docking reports binding, not function, so sign-dependent effects (5-HT2C engagement, 5-HT2B valvulopathy, kappa dysphoria) are refined only by documented-chemotype matching, never by a functional assay.",
         ]
 
     @staticmethod
