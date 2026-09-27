@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 24: external-DB grounding)
+# ddswarm — drug discovery multi-agent swarm (Increment 25: machine-readable export)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -234,6 +234,13 @@ external ID + URL + retrieval timestamp — the first machine-readable link to
 live external records in the pipeline. Grounding is opt-in because live APIs are
 non-deterministic across time, so grounded entries are excluded from the
 reproducibility hash.
+
+**Increment 25** adds the **machine-readable candidate export** (`export_minion`,
+in the default pipeline, after report). One flat row per screened molecule with
+every computed/predicted score plus a deterministic go/no-go verdict — no-go
+(screening reject or safety block), review (advisory liability: tox/CYP/hERG/
+Brenk/BCS IV), go (clean) — written as CSV + JSON + SDF sidecars into the store
+and copied into `reports/`.
 
 ## Architecture
 
