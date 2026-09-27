@@ -31,6 +31,7 @@ from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.regulatory_checklist import RegulatoryChecklist
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.cyp_assessment import CypAssessment
+from ..contracts.herg_assessment import HergAssessment
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.selectivity_assessment import SelectivityAssessment
@@ -52,6 +53,7 @@ _KIND_MODELS: dict[str, type] = {
     "formulation_assessment": FormulationAssessment,
     "retrosynthesis_plan": RetrosynthesisPlan,
     "cyp_assessment": CypAssessment,
+    "herg_assessment": HergAssessment,
     "tox_profile": ToxProfile,
     "safety_assessment": SafetyAssessment,
     "patent_landscape": PatentLandscape,
@@ -217,6 +219,10 @@ class ReportMinion(Agent):
             for m in cyp.molecules:
                 for l in m.liabilities:
                     c[l.evidence_level.value] += 1
+        for ha in by_kind.get("herg_assessment", []):
+            for m in ha.molecules:
+                if m.flagged:
+                    c[m.evidence_level.value] += 1
         for sa in by_kind.get("safety_assessment", []):
             for f in sa.flags:
                 c[f.evidence_level.value] += 1
@@ -278,6 +284,9 @@ class ReportMinion(Agent):
         if cyps:
             parts.append(f"CYP DDI {sum(c.summary.flagged_inhibition for c in cyps)} inhibitor-flagged, "
                          f"{sum(c.summary.flagged_induction for c in cyps)} inducer-flagged")
+        has = by_kind.get("herg_assessment", [])
+        if has:
+            parts.append(f"hERG {sum(h.summary.flagged for h in has)} flagged")
         fas = by_kind.get("formulation_assessment", [])
         if fas:
             bcs: dict[str, int] = {}
@@ -377,6 +386,9 @@ class ReportMinion(Agent):
         cyps = by_kind.get("cyp_assessment", [])
         if cyps and sum(c.summary.total_alerts for c in cyps) == 0:
             gaps.append("no CYP DDI alerts (curated chemotype set is small; not a clean-DDI declaration)")
+        has = by_kind.get("herg_assessment", [])
+        if has and sum(h.summary.flagged for h in has) == 0:
+            gaps.append("no hERG pharmacophore flags (coarse 2D screen; not a clean-hERG declaration)")
         if "knowledge_pack" not in by_kind:
             gaps.append("no research performed")
         return gaps
@@ -409,6 +421,7 @@ class ReportMinion(Agent):
             "Evidence breakdown is a coarse rollup; individual entries carry finer-grained evidence_level.",
             "Structural tox alerts are predicted liabilities from literature rules, not observed toxicity.",
             "CYP inhibition/induction flags are structural alerts (predicted), not a functional enzyme assay; induction is a weak 2D-structure signal (PXR/CAR/AhR-driven) and may miss or over-call.",
+            "hERG flags are predicted pharmacophore + lipophilicity matches, not a patch-clamp assay; IC50 potency is not estimated, so a flag does not rank cardiotoxic potency.",
             "Brenk 'unwanted functionality' alerts are advisory, not eliminating (PAINS stays hard); set filters.brenk_hard=true to make Brenk eliminate.",
             "LLM-contributed entries are inferred/hypothetical; verify against primary sources.",
             "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",

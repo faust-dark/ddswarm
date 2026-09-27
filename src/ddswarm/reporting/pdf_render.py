@@ -435,6 +435,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     rps = by_kind.get("retrosynthesis_plan", [])
     tps = by_kind.get("tox_profile", [])
     cyps = by_kind.get("cyp_assessment", [])
+    has = by_kind.get("herg_assessment", [])
     fas = by_kind.get("formulation_assessment", [])
     drs = by_kind.get("docking_result", [])
     mds = by_kind.get("dynamics_result", [])
@@ -515,6 +516,9 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if cyps:
             sub("CYP DDI", "cyp_minion")
             _narrative_cyp(cyps, para)
+        if has:
+            sub("hERG", "herg_minion")
+            _narrative_herg(has, para)
         if fas:
             sub("Formulation", "formulation_minion")
             _narrative_formulation(fas, para)
@@ -804,6 +808,28 @@ def _narrative_cyp(cyps, para) -> None:
             para(f"{m.molecule_id}: {detail}.")
     para("Induction flags in particular are a weak 2D-structure signal (PXR/CAR/AhR-driven) and "
          "should be confirmed by an in-vitro PXR/CYP induction assay before acting on them.")
+
+
+def _narrative_herg(has, para) -> None:
+    for ha in has:
+        n = ha.summary.total_molecules
+        flagged = ha.summary.flagged
+        if flagged == 0:
+            para(f"hERG pharmacophore screening found no basic-amine + >=2-aromatic + lipophilic "
+                 f"match across {n} molecule(s). This is a coarse 2D screen, not a clean-hERG "
+                 f"declaration.")
+            continue
+        para(f"hERG screening flagged {flagged} of {n} molecule(s) as potential hERG "
+             f"(Kv11.1) liabilities — a protonatable basic amine plus >=2 aromatic rings and "
+             f"cLogP >= 3.0 (the hERG pore pharmacophore gated by lipophilicity). These are "
+             f"predicted liabilities, not patch-clamp results.")
+        for m in ha.molecules:
+            if m.flagged:
+                para(f"{m.molecule_id}: basic amine ({', '.join(m.basic_amine_motifs)}), "
+                     f"{m.aromatic_rings} aromatic rings, cLogP {m.clogp}.")
+    para("A hERG flag does not rank potency — IC50 is not estimated from a 2D pharmacophore, "
+         "and many flagged molecules (e.g. SSRIs) are weak rather than potent hERG blockers. "
+         "Confirm any flag with a functional hERG (patch-clamp) assay before acting.")
 
 
 def _narrative_formulation(fas, para) -> None:

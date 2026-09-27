@@ -49,6 +49,7 @@ from .enums import (
     TaskStatus,
 )
 from .event_log import EventLog
+from .herg_assessment import HergAssessment, HergSummary, MoleculeHergProfile
 from .knowledge_pack import KnowledgePack, KnowledgePackEntry
 from .memory import MemoryEntry, ProjectMemory
 from .patent_landscape import PatentEntry, PatentLandscape, PatentSummary
@@ -128,6 +129,8 @@ __all__ = [
     "FormulationSummary",
     "GenerationCandidate",
     "GenerationMemory",
+    "HergAssessment",
+    "HergSummary",
     "InputRef",
     "InputType",
     "KnowledgePack",
@@ -136,6 +139,7 @@ __all__ = [
     "MoleculeDesign",
     "MoleculeCypProfile",
     "MoleculeFormulation",
+    "MoleculeHergProfile",
     "MoleculeProperties",
     "MoleculeScreenResult",
     "MoleculeSelectivity",

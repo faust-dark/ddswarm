@@ -28,6 +28,7 @@ from .run_manifest import RunManifest
 from .run_request import RunRequest
 from .retrosynthesis_plan import RetrosynthesisPlan
 from .cyp_assessment import CypAssessment
+from .herg_assessment import HergAssessment
 from .safety_assessment import SafetyAssessment
 from .screened_batch import ScreenedBatch
 from .selectivity_assessment import SelectivityAssessment
@@ -53,6 +54,7 @@ MODELS: dict[str, type] = {
     "RunRequest": RunRequest,
     "RetrosynthesisPlan": RetrosynthesisPlan,
     "CypAssessment": CypAssessment,
+    "HergAssessment": HergAssessment,
     "ToxProfile": ToxProfile,
     "Report": Report,
     "ReportDocument": ReportDocument,

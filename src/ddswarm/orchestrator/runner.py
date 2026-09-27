@@ -31,6 +31,7 @@ from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
 from ..contracts.report_document import ReportDocument
 from ..contracts.cyp_assessment import CypAssessment
+from ..contracts.herg_assessment import HergAssessment
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.selectivity_assessment import SelectivityAssessment
@@ -53,6 +54,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "screened_batch": ScreenedBatch,
     "retrosynthesis_plan": RetrosynthesisPlan,
     "cyp_assessment": CypAssessment,
+    "herg_assessment": HergAssessment,
     "tox_profile": ToxProfile,
     "report": Report,
     "report_document": ReportDocument,
