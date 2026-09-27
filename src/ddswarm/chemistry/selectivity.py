@@ -61,6 +61,20 @@ def selectivity_index(ki_off_target_molar: float | None,
     return ki_off_target_molar / ki_on_target_molar
 
 
+def select_adr_profile(primary: str | None, off_targets: list[str]) -> str | None:
+    """Return the id of the ADR profile that matches this panel, if any.
+
+    Today the only shipped profile is the SSRI sexual-ADR interpretation, which
+    applies only when SERT is the primary and 5-HT2C is a docked off-target.
+    Any other panel returns None — the assessment reports pure affinity +
+    selectivity indices and does not invent an ADR label. New profiles can be
+    added here without touching the contract.
+    """
+    if primary == "SERT" and "HTR2C" in off_targets:
+        return "sert_5ht2c_sexual_adr"
+    return None
+
+
 def classify_sexual_adr(
     *,
     sert_occupancy: float | None,

@@ -350,11 +350,14 @@ class ReportMinion(Agent):
         sels = by_kind.get("selectivity_assessment", [])
         if sels:
             s = sels[0]
-            labels: dict[str, int] = {}
+            parts.append(f"selectivity {s.summary.assessed}/{s.summary.total_molecules} assessed "
+                         f"(primary={s.summary.primary_receptor})")
+            adr_labels: dict[str, int] = {}
             for m in s.molecules:
-                labels[m.sexual_adr_risk] = labels.get(m.sexual_adr_risk, 0) + 1
-            parts.append(f"selectivity {s.summary.assessed}/{s.summary.total_molecules} assessed; "
-                         f"sexual-ADR " + ", ".join(f"{k}:{v}" for k, v in sorted(labels.items())))
+                if m.adr is not None:
+                    adr_labels[m.adr.label] = adr_labels.get(m.adr.label, 0) + 1
+            if adr_labels:
+                parts.append("ADR " + ", ".join(f"{k}:{v}" for k, v in sorted(adr_labels.items())))
         if not parts:
             return "no artifacts to summarize"
         return "Run summary: " + "; ".join(parts) + "."

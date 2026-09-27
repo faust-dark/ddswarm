@@ -1104,20 +1104,20 @@ def _narrative_clinical_simulation(css, para) -> None:
 def _narrative_selectivity(sels, para) -> None:
     for sel in sels:
         c_ref = sel.reference_concentration_molar
-        para(f"Each candidate was docked against SERT, 5-HT2A and 5-HT2C; the best docking "
+        primary = sel.primary_receptor or "primary"
+        para(f"Each candidate was docked against a configurable receptor panel; the best docking "
              f"affinity was converted to a dissociation constant via the Gibbs identity "
-             f"(ΔG = RT·ln Ki) and a fractional receptor occupancy computed at a fixed "
-             f"reference concentration of {c_ref:g} M. Docking reports binding, not function, "
-             f"so a direct 5-HT2C engagement is classified by documented-chemotype matching "
-             f"(antagonist-like / agonist-like); a chemotype that matches neither stays of "
-             f"unknown sign.")
+             f"(ΔG = RT·ln Ki) and a fractional receptor occupancy computed at a fixed reference "
+             f"concentration of {c_ref:g} M. The primary (on-target) receptor is {primary}; each "
+             f"off-target yields a selectivity index Ki(off)/Ki(primary). Docking reports binding, "
+             f"not function.")
         if sel.calibration is not None:
             cal = sel.calibration
             fits = ", ".join(
                 f"{r} offset {cal.intercepts.get(r):+.2f} kcal/mol "
                 f"(n={cal.n_points.get(r)}, RMSE {cal.rmsd_kcal_per_mol.get(r):.2f})"
                 if cal.intercepts.get(r) is not None else f"{r} uncalibrated"
-                for r in ("SERT", "HTR2A", "HTR2C"))
+                for r in cal.intercepts)
             para(f"Vina scores were hybrid-calibrated against a fixed literature-Ki set: "
                  f"{fits}. The slope is fixed at 1 (no rescaling), so the mapping to Ki is "
                  f"monotonic; the calibrated Ki remains a calculated estimate.")
@@ -1126,22 +1126,22 @@ def _narrative_selectivity(sels, para) -> None:
                  "calibrated absolute free energy).")
         if sel.reference_molecule:
             para(f"The parent molecule {sel.reference_molecule} is docked alongside the "
-                 f"candidates as the SERT-efficacy reference"
-                 + (f" (parent SERT occupancy {sel.reference_sert_occupancy:.0%} at the reference "
-                    f"concentration)" if sel.reference_sert_occupancy is not None else "") + ".")
+                 f"candidates as the {primary}-efficacy reference"
+                 + (f" (parent {primary} occupancy {sel.reference_primary_occupancy:.0%} at the "
+                    f"reference concentration)" if sel.reference_primary_occupancy is not None else "") + ".")
         for m in sel.molecules:
-            si_2c = (f"{m.selectivity_index_5ht2c_sert:.1f}"
-                     if m.selectivity_index_5ht2c_sert is not None else "n/a")
-            si_2a = (f"{m.selectivity_index_5ht2a_sert:.1f}"
-                     if m.selectivity_index_5ht2a_sert is not None else "n/a")
-            occ_s = f"{m.sert_occupancy:.0%}" if m.sert_occupancy is not None else "n/a"
-            occ_2c = f"{m.htr2c_occupancy:.0%}" if m.htr2c_occupancy is not None else "n/a"
-            para(f"{m.molecule_id}: SERT occupancy {occ_s}, direct 5-HT2C occupancy {occ_2c}, "
-                 f"selectivity Ki(5-HT2C)/Ki(SERT) = {si_2c}, Ki(5-HT2A)/Ki(SERT) = {si_2a}.")
-            para(f"Sexual-ADR risk: {m.sexual_adr_risk}. {m.sexual_adr_rationale}")
-            if m.ht2c_function and m.ht2c_function != "unknown":
-                para(f"5-HT2 functional sign (chemotype match): {m.ht2c_function}"
-                     + (f" — {m.ht2c_function_note}" if m.ht2c_function_note else "") + ".")
+            occs = ", ".join(
+                (f"{a.receptor} {a.occupancy:.0%}" if a.occupancy is not None else f"{a.receptor} n/a")
+                for a in m.affinities)
+            sis = ", ".join(
+                (f"Ki({si.off_target})/Ki({si.primary}) = {si.value:.1f}"
+                 if si.value is not None else f"Ki({si.off_target})/Ki({si.primary}) = n/a")
+                for si in m.selectivity_indices)
+            para(f"{m.molecule_id}: occupancy {occs}; selectivity {sis or 'n/a'}.")
+            if m.adr is not None:
+                para(f"ADR ({m.adr.profile}): {m.adr.label}. {m.adr.rationale}")
+                if m.adr.note:
+                    para(f"Functional sign (chemotype match): {m.adr.note}.")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:

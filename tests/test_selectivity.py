@@ -4,10 +4,12 @@ import math
 
 from ddswarm.agents import SelectivityMinion
 from ddswarm.agents.base import AgentContext
+from ddswarm.chemistry.receptors import expand_receptor
 from ddswarm.chemistry.selectivity import (
     classify_sexual_adr,
     docking_ki,
     occupancy_at,
+    select_adr_profile,
     selectivity_index,
 )
 from ddswarm.contracts import ProjectSpec
@@ -60,3 +62,30 @@ def test_agent_no_molecules_insufficient(tmp_path):
     ctx = AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec, params={}, inputs={})
     res = SelectivityMinion(store).run(ctx)
     assert res.status.value == "insufficient_evidence"
+
+
+def test_select_adr_profile_matches_only_ssri_panel():
+    assert select_adr_profile("SERT", ["HTR2A", "HTR2C"]) == "sert_5ht2c_sexual_adr"
+    assert select_adr_profile("SERT", ["HTR2A"]) is None
+    assert select_adr_profile("DRD2", ["HTR2A", "HTR2C"]) is None
+    assert select_adr_profile(None, []) is None
+
+
+def test_expand_receptor_fills_pdb_from_registry():
+    assert expand_receptor({"name": "DRD2"})["pdb_id"] == "6CM4"
+    assert expand_receptor({"name": "SERT"})["pdb_id"] == "5I73"
+    # explicit pdb_id always wins
+    assert expand_receptor({"name": "DRD2", "pdb_id": "1ABC"})["pdb_id"] == "1ABC"
+    # unregistered name stays untouched (no pdb_id invented)
+    assert "pdb_id" not in expand_receptor({"name": "MADE_UP"})
+    # registry entry with no curated pdb_id does not fabricate one
+    assert "pdb_id" not in expand_receptor({"name": "COX1"})
+
+
+def test_interpret_adr_only_for_ssri_profile():
+    # a non-SSRI panel never gets an ADR label
+    assert SelectivityMinion._interpret_adr(None, {"DRD2": 0.1}, 0.9, "CC") is None
+    # SSRI profile with negligible 5-HT2C and retained SERT -> class effect
+    r = SelectivityMinion._interpret_adr(
+        "sert_5ht2c_sexual_adr", {"SERT": 0.9, "HTR2C": 0.0}, 0.9, "CC")
+    assert r is not None and r.label == "class_effect"

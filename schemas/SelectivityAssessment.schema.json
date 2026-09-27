@@ -1,5 +1,48 @@
 {
   "$defs": {
+    "AdrInterpretation": {
+      "description": "Pluggable adverse-effect interpretation for a matching receptor panel.",
+      "properties": {
+        "profile": {
+          "title": "Profile",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "profile",
+        "label"
+      ],
+      "title": "AdrInterpretation",
+      "type": "object"
+    },
     "AgentResultStatus": {
       "enum": [
         "success",
@@ -40,6 +83,18 @@
           "default": null,
           "title": "Canonical Smiles"
         },
+        "primary_receptor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Receptor"
+        },
         "affinities": {
           "items": {
             "$ref": "#/$defs/ReceptorAffinity"
@@ -47,119 +102,23 @@
           "title": "Affinities",
           "type": "array"
         },
-        "selectivity_index_5ht2c_sert": {
+        "selectivity_indices": {
+          "items": {
+            "$ref": "#/$defs/SelectivityIndex"
+          },
+          "title": "Selectivity Indices",
+          "type": "array"
+        },
+        "adr": {
           "anyOf": [
             {
-              "type": "number"
+              "$ref": "#/$defs/AdrInterpretation"
             },
             {
               "type": "null"
             }
           ],
-          "default": null,
-          "title": "Selectivity Index 5Ht2C Sert"
-        },
-        "selectivity_index_5ht2a_sert": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Selectivity Index 5Ht2A Sert"
-        },
-        "sert_occupancy": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Sert Occupancy"
-        },
-        "htr2c_occupancy": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Htr2C Occupancy"
-        },
-        "htr2a_occupancy": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Htr2A Occupancy"
-        },
-        "sexual_adr_risk": {
-          "default": "insufficient_data",
-          "enum": [
-            "class_effect",
-            "efficacy_tradeoff",
-            "direct_5ht2c_engagement",
-            "direct_5ht2c_antagonism",
-            "direct_5ht2c_agonism",
-            "insufficient_data"
-          ],
-          "title": "Sexual Adr Risk",
-          "type": "string"
-        },
-        "sexual_adr_rationale": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Sexual Adr Rationale"
-        },
-        "ht2c_function": {
-          "anyOf": [
-            {
-              "enum": [
-                "antagonist_like",
-                "agonist_like",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Ht2C Function"
-        },
-        "ht2c_function_note": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Ht2C Function Note"
+          "default": null
         },
         "evidence_level": {
           "$ref": "#/$defs/EvidenceLevel",
@@ -276,11 +235,6 @@
     "ReceptorAffinity": {
       "properties": {
         "receptor": {
-          "enum": [
-            "SERT",
-            "HTR2A",
-            "HTR2C"
-          ],
           "title": "Receptor",
           "type": "string"
         },
@@ -355,6 +309,53 @@
       "title": "ReceptorAffinity",
       "type": "object"
     },
+    "SelectivityIndex": {
+      "description": "Ki_off / Ki_primary for one off-target vs the designated primary.",
+      "properties": {
+        "off_target": {
+          "title": "Off Target",
+          "type": "string"
+        },
+        "primary": {
+          "title": "Primary",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "evidence_level": {
+          "$ref": "#/$defs/EvidenceLevel",
+          "default": "calculated"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "off_target",
+        "primary"
+      ],
+      "title": "SelectivityIndex",
+      "type": "object"
+    },
     "SelectivitySummary": {
       "properties": {
         "total_molecules": {
@@ -371,6 +372,18 @@
           "default": 0,
           "title": "Insufficient Data",
           "type": "integer"
+        },
+        "primary_receptor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Receptor"
         }
       },
       "title": "SelectivitySummary",
@@ -485,8 +498,8 @@
   },
   "properties": {
     "schema_version": {
-      "const": "1.0",
-      "default": "1.0",
+      "const": "1.1",
+      "default": "1.1",
       "title": "Schema Version",
       "type": "string"
     },
@@ -517,6 +530,18 @@
       "title": "Reference Concentration Molar",
       "type": "number"
     },
+    "primary_receptor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Primary Receptor"
+    },
     "reference_molecule": {
       "anyOf": [
         {
@@ -529,7 +554,7 @@
       "default": null,
       "title": "Reference Molecule"
     },
-    "reference_sert_occupancy": {
+    "reference_primary_occupancy": {
       "anyOf": [
         {
           "type": "number"
@@ -539,7 +564,7 @@
         }
       ],
       "default": null,
-      "title": "Reference Sert Occupancy"
+      "title": "Reference Primary Occupancy"
     },
     "calibration": {
       "anyOf": [

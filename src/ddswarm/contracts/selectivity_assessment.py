@@ -1,17 +1,22 @@
 """SelectivityAssessment artifact (selectivity_minion output).
 
-A mechanistic target-selectivity / sexual-adverse-effect assessment: each
-candidate is docked against SERT, 5-HT2A and 5-HT2C; the docking affinity is
-converted to a dissociation constant via the Gibbs free-energy identity
-(ΔG = RT·ln Ki), a fractional receptor occupancy is computed at a fixed
-reference concentration, and a selectivity index + a deterministic
-sexual-ADR risk label are derived.
+A mechanistic target-selectivity assessment over a CONFIGURABLE panel of
+receptors: each candidate is docked against every configured receptor, the
+docking affinity is converted to a dissociation constant via the Gibbs
+free-energy identity (ΔG = RT·ln Ki), a fractional receptor occupancy is
+computed at a fixed reference concentration, and a general selectivity index
+(Ki_off / Ki_primary) is derived for every off-target relative to the
+designated primary (on-target) receptor.
+
+An optional ADR interpretation is attached only when the panel matches a known
+adverse-effect profile (e.g. the SSRI profile: SERT primary + 5-HT2C
+off-target -> sexual-ADR risk). Any other panel yields pure affinity +
+selectivity indices without inventing an ADR label.
 
 All values are *calculated* (docking + deterministic thermodynamics), never
 experimental evidence. Vina scores are relative, not calibrated absolute free
 energies, so every Ki/occupancy is a ranking estimate. Docking reports binding,
-not functional sign (agonist vs antagonist) — a direct 5-HT2C engagement is
-therefore flagged as of unknown sign.
+not functional sign (agonist vs antagonist).
 """
 
 from __future__ import annotations
@@ -23,7 +28,9 @@ from pydantic import BaseModel, Field
 from .enums import AgentResultStatus, EvidenceLevel
 from .provenance import ProvenanceEntry
 
-ReceptorKind = Literal["SERT", "HTR2A", "HTR2C"]
+# Documented label sets of the SSRI sexual-ADR interpretation profile. The
+# AdrInterpretation.label field is a free string so other profiles can add
+# labels without touching this contract.
 SexualAdrRisk = Literal["class_effect", "efficacy_tradeoff", "direct_5ht2c_engagement",
                         "direct_5ht2c_antagonism", "direct_5ht2c_agonism",
                         "insufficient_data"]
@@ -32,9 +39,13 @@ Ht2Function = Literal["antagonist_like", "agonist_like", "unknown"]
 CALIBRATION_SOURCE = ("NIMH PDSP Ki Database (https://pdsp.unc.edu/databases/pdsp.php); "
                       "literature Ki values — verify against the primary source")
 
+# ADR profile id of the built-in SSRI sexual-ADR interpretation (the only
+# profile shipped today; more are pluggable without contract changes).
+SSRI_SEXUAL_ADR_PROFILE = "sert_5ht2c_sexual_adr"
+
 
 class ReceptorAffinity(BaseModel):
-    receptor: ReceptorKind
+    receptor: str
     pdb_id: str | None = None
     best_affinity_kcal_per_mol: float | None = None   # most negative (best) pose
     ki_molar: float | None = None                     # exp(dG/RT); relative estimate
@@ -43,22 +54,30 @@ class ReceptorAffinity(BaseModel):
     note: str | None = None
 
 
+class SelectivityIndex(BaseModel):
+    """Ki_off / Ki_primary for one off-target vs the designated primary."""
+    off_target: str
+    primary: str
+    value: float | None = None       # Ki_off / Ki_primary; larger = more selective
+    evidence_level: EvidenceLevel = EvidenceLevel.calculated
+    note: str | None = None
+
+
+class AdrInterpretation(BaseModel):
+    """Pluggable adverse-effect interpretation for a matching receptor panel."""
+    profile: str                                   # e.g. "sert_5ht2c_sexual_adr"
+    label: str                                     # profile-specific risk label
+    rationale: str | None = None
+    note: str | None = None
+
+
 class MoleculeSelectivity(BaseModel):
     molecule_id: str
     canonical_smiles: str | None = None
+    primary_receptor: str | None = None
     affinities: list[ReceptorAffinity] = Field(default_factory=list)
-    selectivity_index_5ht2c_sert: float | None = None  # Ki_HTR2C / Ki_SERT
-    selectivity_index_5ht2a_sert: float | None = None  # Ki_HTR2A / Ki_SERT
-    sert_occupancy: float | None = None
-    htr2c_occupancy: float | None = None
-    htr2a_occupancy: float | None = None
-    sexual_adr_risk: SexualAdrRisk = "insufficient_data"
-    sexual_adr_rationale: str | None = None
-    # functional sign of the direct 5-HT2C engagement (from documented chemotype
-    # matching, NOT a functional assay) — refines direct_5ht2c_engagement into
-    # direct_5ht2c_antagonism / direct_5ht2c_agonism when a chemotype matches.
-    ht2c_function: Ht2Function | None = None
-    ht2c_function_note: str | None = None
+    selectivity_indices: list[SelectivityIndex] = Field(default_factory=list)
+    adr: AdrInterpretation | None = None           # only when an ADR profile matches
     evidence_level: EvidenceLevel = EvidenceLevel.calculated
 
 
@@ -66,6 +85,7 @@ class SelectivitySummary(BaseModel):
     total_molecules: int = 0
     assessed: int = 0
     insufficient_data: int = 0
+    primary_receptor: str | None = None
 
 
 class VinaCalibration(BaseModel):
@@ -81,15 +101,16 @@ class VinaCalibration(BaseModel):
 
 
 class SelectivityAssessment(BaseModel):
-    schema_version: Literal["1.0"] = "1.0"
+    schema_version: Literal["1.1"] = "1.1"
     project_id: str
     agent: str = "selectivity_minion"
     status: AgentResultStatus
     molecules: list[MoleculeSelectivity] = Field(default_factory=list)
     summary: SelectivitySummary = Field(default_factory=SelectivitySummary)
     reference_concentration_molar: float = 1e-8
+    primary_receptor: str | None = None            # on-target (efficacy reference)
     reference_molecule: str | None = None          # parent SMILES (efficacy reference)
-    reference_sert_occupancy: float | None = None  # parent SERT occupancy at C_ref
+    reference_primary_occupancy: float | None = None  # parent occupancy on primary
     calibration: VinaCalibration | None = None     # hybrid Vina->Ki offset fit
     note: str | None = None
     provenance: list[ProvenanceEntry] = Field(default_factory=list)

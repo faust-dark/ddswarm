@@ -83,9 +83,11 @@ from .cyp_assessment import CypAssessment, CypLiability, CypSummary, MoleculeCyp
 from .candidate_table import CandidateRow, CandidateTable, ExportSummary
 from .safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
 from .selectivity_assessment import (
+    AdrInterpretation,
     MoleculeSelectivity,
     ReceptorAffinity,
     SelectivityAssessment,
+    SelectivityIndex,
     SelectivitySummary,
     VinaCalibration,
 )
@@ -97,6 +99,7 @@ from .validation_report import ValidationCheck, ValidationReport, ValidationSumm
 __all__ = [
     "AdmetPrediction",
     "AdmetSummary",
+    "AdrInterpretation",
     "ApplicabilityDomain",
     "EndpointPrediction",
     "MoleculeAdmetResult",
@@ -181,6 +184,7 @@ __all__ = [
     "ScreenedBatch",
     "SearchBox",
     "SelectivityAssessment",
+    "SelectivityIndex",
     "SelectivitySummary",
     "VinaCalibration",
     "StageFinding",

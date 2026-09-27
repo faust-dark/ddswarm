@@ -1,17 +1,20 @@
-"""selectivity_minion: mechanistic target-selectivity / sexual-ADR scoring.
+"""selectivity_minion: mechanistic target-selectivity scoring over a configurable
+receptor panel.
 
-Docks each candidate against SERT, 5-HT2A and 5-HT2C (AutoDock Vina), converts
+Docks each candidate against every configured receptor (AutoDock Vina), converts
 the docking free energy to a dissociation constant via the Gibbs identity
 (ΔG = RT·ln Ki), computes a fractional occupancy at a fixed reference
-concentration (C/(C+Ki)), and derives a selectivity index plus a deterministic
-sexual-ADR risk label.
+concentration (C/(C+Ki)), and derives a general selectivity index
+(Ki_off / Ki_primary) for each off-target relative to the designated primary
+(on-target) receptor.
 
-The classification encodes the SSRI mechanism: sexual dysfunction is mediated
-by elevated synaptic 5-HT activating 5-HT2A/2C — an indirect effect driven by
-SERT occupancy (class-effect coupling). Docking reports binding, not functional
-sign, so a direct 5-HT2C engagement is refined by documented-chemotype matching
-(antagonist-like/agonist-like via chemistry/ht2_function); unmatched chemotypes
-remain flagged as of unknown sign.
+An optional adverse-effect interpretation is attached only when the panel
+matches a known profile — today the SSRI profile (SERT primary + 5-HT2C
+off-target -> sexual-ADR risk). Any other panel reports pure affinity +
+selectivity indices without inventing an ADR label. Docking reports binding,
+not functional sign, so the SSRI profile's direct 5-HT2C engagement is refined
+by documented-chemotype matching (antagonist-like/agonist-like via
+chemistry/ht2_function); unmatched chemotypes remain of unknown sign.
 
 Opt-in (like docking/dynamics): needs the Vina binary + network for PDB download.
 """
@@ -23,10 +26,12 @@ from pathlib import Path
 from rdkit import rdBase
 
 from ..chemistry.ht2_function import classify_ht2_function
+from ..chemistry.receptors import expand_receptor
 from ..chemistry.selectivity import (
     classify_sexual_adr,
     docking_ki,
     occupancy_at,
+    select_adr_profile,
     selectivity_index,
 )
 from ..chemistry.vina_calibration import (
@@ -39,9 +44,11 @@ from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.selectivity_assessment import (
+    AdrInterpretation,
     MoleculeSelectivity,
     ReceptorAffinity,
     SelectivityAssessment,
+    SelectivityIndex,
     SelectivitySummary,
     VinaCalibration,
 )
@@ -53,6 +60,9 @@ from .base import Agent, AgentContext
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
 
+# Default panel is the SSRI triad (backward-compatible). Any receptor list can be
+# passed via params["receptors"]; names without a pdb_id are expanded from the
+# registry, and explicit pdb_id/identifier/url always wins.
 _DEFAULT_RECEPTORS = [
     {"name": "SERT", "pdb_id": "5I73"},
     {"name": "HTR2A", "pdb_id": "6A93"},
@@ -78,13 +88,24 @@ class SelectivityMinion(Agent):
                 reproducibility={"reason": "engine_unavailable"},
             )
 
-        receptors = ctx.params.get("receptors") or _DEFAULT_RECEPTORS
+        raw_receptors = ctx.params.get("receptors") or _DEFAULT_RECEPTORS
+        receptors = [expand_receptor(dict(rc)) for rc in raw_receptors]
         if not receptors:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
                 warnings=["no receptors configured (params['receptors'] empty)"],
                 reproducibility={"reason": "no_receptors"},
             )
+
+        receptor_names = [str(rc.get("name", "")) for rc in receptors]
+        primary = str(ctx.params.get("primary") or (receptor_names[0] if receptor_names else ""))
+        if primary not in receptor_names:
+            return self._result(
+                ctx, AgentResultStatus.failed,
+                errors=[f"primary receptor {primary!r} not in the configured panel {receptor_names}"],
+                reproducibility={"reason": "primary_not_in_panel"},
+            )
+        off_targets = [r for r in receptor_names if r != primary]
 
         molecules = self._collect_molecules(ctx)
         if not molecules:
@@ -95,7 +116,7 @@ class SelectivityMinion(Agent):
             )
 
         # parent (starting material) docks alongside the survivors as the
-        # efficacy reference for the SERT-occupancy comparison.
+        # efficacy reference for the primary-receptor occupancy comparison.
         parent = None
         if ctx.spec.starting_materials:
             parent = ctx.spec.starting_materials[0]
@@ -117,9 +138,6 @@ class SelectivityMinion(Agent):
 
         for rc in receptors:
             rname = str(rc.get("name", ""))
-            if rname not in ("SERT", "HTR2A", "HTR2C"):
-                notes.append(f"skipping unknown receptor {rname!r}")
-                continue
             source = ReceptorSource(
                 kind=rc.get("kind", "pdb_id"),
                 identifier=str(rc.get("pdb_id") or rc.get("identifier", "")),
@@ -161,7 +179,7 @@ class SelectivityMinion(Agent):
         # fit the hybrid Vina->Ki offset calibration (per receptor)
         calib: dict[str, tuple[float | None, int, float | None]] = {}
         if calibrate:
-            for rname in ("SERT", "HTR2A", "HTR2C"):
+            for rname in receptor_names:
                 calib[rname] = fit_offset(calib_pairs.get(rname, []))
 
         def ki_of(rname: str, dg: float | None) -> float | None:
@@ -171,10 +189,12 @@ class SelectivityMinion(Agent):
 
         # assemble per-molecule selectivity
         assessed: list[MoleculeSelectivity] = []
-        # parent SERT occupancy = efficacy reference (from docking the parent)
-        parent_sert_occ = None
+        # parent primary-receptor occupancy = efficacy reference
+        parent_primary_occ = None
         if parent is not None:
-            parent_sert_occ = occupancy_at(c_ref, ki_of("SERT", best.get(("SERT", "parent"))))
+            parent_primary_occ = occupancy_at(c_ref, ki_of(primary, best.get((primary, "parent"))))
+
+        adr_profile = select_adr_profile(primary, off_targets)
 
         for mid, smi in molecules:
             if mid == "parent":
@@ -182,14 +202,14 @@ class SelectivityMinion(Agent):
             affs: list[ReceptorAffinity] = []
             ki: dict[str, float | None] = {}
             occ: dict[str, float | None] = {}
-            for rname in ("SERT", "HTR2A", "HTR2C"):
+            for rname in receptor_names:
                 dg = best.get((rname, mid))
                 k = ki_of(rname, dg)
                 o = occupancy_at(c_ref, k)
                 ki[rname] = k
                 occ[rname] = o
                 affs.append(ReceptorAffinity(
-                    receptor=rname,  # type: ignore[arg-type]
+                    receptor=rname,
                     pdb_id=pdb_by_receptor.get(rname),
                     best_affinity_kcal_per_mol=dg,
                     ki_molar=k,
@@ -199,79 +219,43 @@ class SelectivityMinion(Agent):
                           else "relative estimate (Vina scoring is not calibrated absolute free energy)")
                     if dg is not None else None,
                 ))
-            si_2c = selectivity_index(ki.get("HTR2C"), ki.get("SERT"))
-            si_2a = selectivity_index(ki.get("HTR2A"), ki.get("SERT"))
-            label, rationale = classify_sexual_adr(
-                sert_occupancy=occ.get("SERT"),
-                htr2c_occupancy=occ.get("HTR2C"),
-                reference_sert_occupancy=parent_sert_occ,
-            )
-            ht2_sign, ht2_motifs, ht2_citations = classify_ht2_function(smi)
-            if label == "direct_5ht2c_engagement" and ht2_sign != "unknown":
-                joined = ", ".join(ht2_motifs)
-                cites = "; ".join(ht2_citations)
-                if ht2_sign == "antagonist_like":
-                    label = "direct_5ht2c_antagonism"
-                    rationale = (
-                        f"direct 5-HT2C binding + documented antagonist chemotype ({joined}); "
-                        f"5-HT2C antagonism may REDUCE sexual ADR — confirm functionally. {cites}"
-                    )
-                else:
-                    label = "direct_5ht2c_agonism"
-                    rationale = (
-                        f"direct 5-HT2C binding + documented agonist chemotype ({joined}); "
-                        f"5-HT2C agonism may WORSEN sexual ADR — confirm functionally. {cites}"
-                    )
-            ht2_note = None
-            if ht2_motifs:
-                ht2_note = "; ".join(f"{m} ({c})" for m, c in zip(ht2_motifs, ht2_citations))
+            indices = [
+                SelectivityIndex(
+                    off_target=r, primary=primary,
+                    value=selectivity_index(ki.get(r), ki.get(primary)),
+                )
+                for r in off_targets
+            ]
+            adr = self._interpret_adr(adr_profile, occ, parent_primary_occ, smi)
             assessed.append(MoleculeSelectivity(
-                molecule_id=mid, canonical_smiles=smi, affinities=affs,
-                selectivity_index_5ht2c_sert=si_2c,
-                selectivity_index_5ht2a_sert=si_2a,
-                sert_occupancy=occ.get("SERT"),
-                htr2c_occupancy=occ.get("HTR2C"),
-                htr2a_occupancy=occ.get("HTR2A"),
-                sexual_adr_risk=label,  # type: ignore[arg-type]
-                sexual_adr_rationale=rationale,
-                ht2c_function=ht2_sign,  # type: ignore[arg-type]
-                ht2c_function_note=ht2_note,
+                molecule_id=mid, canonical_smiles=smi,
+                primary_receptor=primary, affinities=affs,
+                selectivity_indices=indices, adr=adr,
             ))
 
-        insufficient = sum(1 for m in assessed if m.sexual_adr_risk == "insufficient_data")
+        insufficient = sum(1 for m in assessed if all(a.ki_molar is None for a in m.affinities))
         summary = SelectivitySummary(
             total_molecules=len(assessed),
             assessed=len(assessed) - insufficient,
             insufficient_data=insufficient,
+            primary_receptor=primary,
         )
-        if calibrate:
-            note = ("Ki/occupancy are hybrid-calibrated estimates (per-receptor offset from a "
-                    "fixed literature-Ki set, slope a = 1 so monotonicity is exact); docking "
-                    "reports binding, not function — the functional sign of a direct 5-HT2C "
-                    "engagement is refined by documented-chemotype matching "
-                    "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype "
-                    "matches.")
-        else:
-            note = ("Ki/occupancy are relative estimates (Vina scoring is not calibrated absolute "
-                    "free energy); docking reports binding, not function — the functional sign of a "
-                    "direct 5-HT2C engagement is refined by documented-chemotype matching "
-                    "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype matches.")
-        if notes:
-            note += " Receptor notes: " + "; ".join(notes)
+        note = self._note(calibrate, adr_profile, primary, off_targets, notes)
 
         calibration = None
         if calibrate:
             calibration = VinaCalibration(
-                intercepts={r: calib[r][0] for r in ("SERT", "HTR2A", "HTR2C")},
-                n_points={r: calib[r][1] for r in ("SERT", "HTR2A", "HTR2C")},
-                rmsd_kcal_per_mol={r: calib[r][2] for r in ("SERT", "HTR2A", "HTR2C")},
+                intercepts={r: calib[r][0] for r in receptor_names},
+                n_points={r: calib[r][1] for r in receptor_names},
+                rmsd_kcal_per_mol={r: calib[r][2] for r in receptor_names},
                 note="per-receptor offset fit on a fixed, committed literature-Ki set; slope "
                      "fixed at 1 (no rescaling) so the Vina->Ki mapping is monotonic. The "
                      "calibrated Ki is a calculated estimate, not an experimental affinity.",
             )
 
         input_hash = hash_jsonable({"receptors": receptors, "molecules": molecules,
-                                    "c_ref": c_ref, "seed": seed, "calibrate": calibrate})
+                                    "primary": primary, "c_ref": c_ref, "seed": seed,
+                                    "calibrate": calibrate})
         output_hash = hash_jsonable([m.model_dump() for m in assessed])
         assessment = SelectivityAssessment(
             project_id=ctx.project_id,
@@ -279,25 +263,27 @@ class SelectivityMinion(Agent):
             molecules=assessed,
             summary=summary,
             reference_concentration_molar=c_ref,
+            primary_receptor=primary,
             reference_molecule=parent,
-            reference_sert_occupancy=parent_sert_occ,
+            reference_primary_occupancy=parent_primary_occ,
             calibration=calibration,
             note=note,
             provenance=[ProvenanceEntry(
                 source="target-selectivity scoring (AutoDock Vina + Gibbs/occupancy)",
                 tool_versions=[TOOL, RDKIT_TOOL, ToolVersion(name=engine_name, version=engine.version)],
-                params={"receptors": receptors, "c_ref": c_ref, "exhaustiveness": exhaustiveness,
-                        "seed": seed},
+                params={"receptors": receptors, "primary": primary, "c_ref": c_ref,
+                        "exhaustiveness": exhaustiveness, "seed": seed},
                 input_hash=input_hash,
                 output_hash=output_hash,
             )],
         )
         art = self.persist_artifact(ctx, "selectivity_assessment", f"sel_{ctx.project_id}", assessment)
         findings = [f"selectivity: {summary.assessed}/{summary.total_molecules} assessed "
-                    f"({summary.insufficient_data} insufficient data)"]
-        labels = {m.sexual_adr_risk for m in assessed}
-        if labels:
-            findings.append("sexual-ADR labels: " + ", ".join(sorted(labels)))
+                    f"({summary.insufficient_data} insufficient data), primary={primary}"]
+        if adr_profile:
+            labels = {m.adr.label for m in assessed if m.adr is not None}
+            if labels:
+                findings.append(f"ADR ({adr_profile}): " + ", ".join(sorted(labels)))
         return self._result(
             ctx, AgentResultStatus.success,
             input_refs=ctx.input_refs, artifacts=[art], findings=findings,
@@ -307,6 +293,56 @@ class SelectivityMinion(Agent):
         )
 
     # ---- helpers ----
+    @staticmethod
+    def _interpret_adr(profile: str | None, occ: dict[str, float | None],
+                       parent_primary_occ: float | None, smi: str) -> AdrInterpretation | None:
+        if profile != "sert_5ht2c_sexual_adr":
+            return None
+        label, rationale = classify_sexual_adr(
+            sert_occupancy=occ.get("SERT"),
+            htr2c_occupancy=occ.get("HTR2C"),
+            reference_sert_occupancy=parent_primary_occ,
+        )
+        ht2_sign, ht2_motifs, ht2_citations = classify_ht2_function(smi)
+        note = None
+        if ht2_motifs:
+            note = "; ".join(f"{m} ({c})" for m, c in zip(ht2_motifs, ht2_citations))
+        if label == "direct_5ht2c_engagement" and ht2_sign != "unknown":
+            joined = ", ".join(ht2_motifs)
+            cites = "; ".join(ht2_citations)
+            if ht2_sign == "antagonist_like":
+                label = "direct_5ht2c_antagonism"
+                rationale = (f"direct 5-HT2C binding + documented antagonist chemotype ({joined}); "
+                             f"5-HT2C antagonism may REDUCE sexual ADR — confirm functionally. {cites}")
+            else:
+                label = "direct_5ht2c_agonism"
+                rationale = (f"direct 5-HT2C binding + documented agonist chemotype ({joined}); "
+                             f"5-HT2C agonism may WORSEN sexual ADR — confirm functionally. {cites}")
+        return AdrInterpretation(profile=profile, label=label, rationale=rationale, note=note)
+
+    @staticmethod
+    def _note(calibrate: bool, adr_profile: str | None, primary: str,
+              off_targets: list[str], notes: list[str]) -> str:
+        base = (
+            "Ki/occupancy are "
+            + ("hybrid-calibrated estimates (per-receptor offset from a fixed literature-Ki set, "
+               "slope a = 1 so monotonicity is exact)" if calibrate
+               else "relative estimates (Vina scoring is not calibrated absolute free energy)")
+            + f"; primary (on-target) = {primary}, off-targets = {', '.join(off_targets) or 'none'}. "
+            "Docking reports binding, not function"
+        )
+        if adr_profile:
+            base += (f"; the panel matches the ADR profile '{adr_profile}', whose functional-sign "
+                     "refinement (antagonist-like/agonist-like) is by documented-chemotype matching "
+                     "and stays 'unknown sign' when no chemotype matches")
+        else:
+            base += "; the panel matches no built-in ADR profile, so no adverse-effect label is "
+            "asserted (pure affinity + selectivity indices)"
+        base += "."
+        if notes:
+            base += " Receptor notes: " + "; ".join(notes)
+        return base
+
     def _collect_molecules(self, ctx: AgentContext) -> list[tuple[str, str]]:
         mols: list[tuple[str, str]] = []
         for sb in ctx.inputs.get("screened_batch", []):
