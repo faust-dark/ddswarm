@@ -2,6 +2,7 @@
 
 from .base import Agent, AgentContext
 from .clinical import ClinicalMinion
+from .cyp import CypMinion
 from .designer import DesignerMinion
 from .docking import DockingMinion
 from .dynamics import DynamicsMinion
@@ -22,9 +23,9 @@ from .tox import ToxMinion
 from .validation import ValidationMinion
 
 __all__ = [
-    "Agent", "AgentContext", "ClinicalMinion", "DesignerMinion", "DockingMinion",
-    "DynamicsMinion", "FormulationMinion", "PatentMinion", "PredictorMinion",
-    "MemoryMinion", "OrchestratorMinion",
+    "Agent", "AgentContext", "ClinicalMinion", "CypMinion", "DesignerMinion",
+    "DockingMinion", "DynamicsMinion", "FormulationMinion", "PatentMinion",
+    "PredictorMinion", "MemoryMinion", "OrchestratorMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",
     "SafetyMinion", "ScreenerMinion", "SelectivityMinion", "ToxMinion", "ValidationMinion",

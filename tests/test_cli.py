@@ -43,7 +43,7 @@ def test_init_writes_project(tmp_path):
     assert rc == 0
     req = RunRequest.model_validate_json(out.read_text())
     assert req.project.project_id == "x1"
-    assert len(req.tasks) == 11  # safety, research, design, screen, predict, retrosynth, tox, formulation, report, validation, report_pdf
+    assert len(req.tasks) == 12  # safety, research, design, screen, predict, retrosynth, tox, cyp, formulation, report, validation, report_pdf
     assert req.reasoning is None
 
 

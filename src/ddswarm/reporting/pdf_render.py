@@ -434,6 +434,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     aps = by_kind.get("admet_prediction", [])
     rps = by_kind.get("retrosynthesis_plan", [])
     tps = by_kind.get("tox_profile", [])
+    cyps = by_kind.get("cyp_assessment", [])
     fas = by_kind.get("formulation_assessment", [])
     drs = by_kind.get("docking_result", [])
     mds = by_kind.get("dynamics_result", [])
@@ -511,6 +512,9 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
         if tps:
             sub("Toxicity", "tox_minion")
             _narrative_tox(tps, para)
+        if cyps:
+            sub("CYP DDI", "cyp_minion")
+            _narrative_cyp(cyps, para)
         if fas:
             sub("Formulation", "formulation_minion")
             _narrative_formulation(fas, para)
@@ -778,6 +782,28 @@ def _narrative_tox(tps, para) -> None:
         para(f"Structural-toxicity screening flagged {alerts} toxicophore alert(s) across {n} "
              "molecule(s). These are predicted liabilities from literature rules (evidence level: "
              "predicted), not observed toxicity.")
+
+
+def _narrative_cyp(cyps, para) -> None:
+    for cyp in cyps:
+        n = cyp.summary.total_molecules
+        inh = cyp.summary.flagged_inhibition
+        ind = cyp.summary.flagged_induction
+        if cyp.summary.total_alerts == 0:
+            para(f"CYP drug-drug-interaction screening found no inhibitor or inducer chemotype "
+                 f"alerts across {n} molecule(s). The curated chemotype set is small, so this is a "
+                 f"limited screen, not a clean-DDI declaration.")
+            continue
+        para(f"CYP DDI screening flagged {inh} inhibitor candidate(s) and {ind} inducer "
+             f"candidate(s) across {n} molecule(s). These are structural alerts (evidence level: "
+             f"predicted), not a functional enzyme assay.")
+        for m in cyp.molecules:
+            if not m.liabilities:
+                continue
+            detail = "; ".join(f"{l.enzyme} {l.effect} ({l.alert_slug})" for l in m.liabilities)
+            para(f"{m.molecule_id}: {detail}.")
+    para("Induction flags in particular are a weak 2D-structure signal (PXR/CAR/AhR-driven) and "
+         "should be confirmed by an in-vitro PXR/CYP induction assay before acting on them.")
 
 
 def _narrative_formulation(fas, para) -> None:

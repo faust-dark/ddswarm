@@ -36,6 +36,7 @@ from .agents import (
     SelectivityMinion,
     ToxMinion,
     ValidationMinion,
+    CypMinion,
 )
 from .contracts import (
     GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
@@ -55,8 +56,9 @@ DEFAULT_PIPELINE = [
             params={"providers": ["rule_admet"]}),
     RunTask(task_id="retrosynth", agent="retrosynthesis_minion", depends_on=["screen"]),
     RunTask(task_id="tox", agent="tox_minion", depends_on=["screen"]),
+    RunTask(task_id="cyp", agent="cyp_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
-    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "formulation"]),
+    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "cyp", "formulation"]),
     RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
     RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation"]),
 ]
@@ -81,6 +83,7 @@ def build_agents(store: Store) -> dict:
         "dynamics_minion": DynamicsMinion(store),
         "retrosynthesis_minion": RetrosynthesisMinion(store),
         "tox_minion": ToxMinion(store),
+        "cyp_minion": CypMinion(store),
         "formulation_minion": FormulationMinion(store),
         "safety_minion": SafetyMinion(store),
         "selectivity_minion": SelectivityMinion(store),

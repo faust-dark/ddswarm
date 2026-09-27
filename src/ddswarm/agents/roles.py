@@ -15,6 +15,7 @@ AGENT_ROLES: dict[str, tuple[str, str]] = {
     "predictor_minion": ("ADMET prediction", "estimates ADMET properties from five published rules"),
     "retrosynthesis_minion": ("Synthesis", "scores synthetic accessibility and proposes a theoretical retrosynthetic disconnection"),
     "tox_minion": ("Toxicity", "flags structural toxicophore alerts (predicted liabilities, not observed toxicity)"),
+    "cyp_minion": ("CYP DDI", "flags CYP inhibition/induction structural alerts (predicted drug-drug-interaction liabilities, not a functional assay)"),
     "formulation_minion": ("Formulation", "estimates developability — solubility, permeability, and BCS class"),
     "docking_minion": ("Docking", "docks candidates into the receptor and reports predicted affinity (opt-in)"),
     "dynamics_minion": ("Receptor MD", "runs a short receptor molecular-dynamics relaxation (opt-in, gated on all four branches)"),

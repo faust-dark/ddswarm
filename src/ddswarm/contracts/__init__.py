@@ -77,6 +77,7 @@ from .retrosynthesis_plan import (
     RetrosynthesisSummary,
     SynthesisRoute,
 )
+from .cyp_assessment import CypAssessment, CypLiability, CypSummary, MoleculeCypProfile
 from .safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
 from .selectivity_assessment import (
     MoleculeSelectivity,
@@ -108,6 +109,9 @@ __all__ = [
     "ClinicalSummary",
     "ConcentrationPoint",
     "ConvergenceConfig",
+    "CypAssessment",
+    "CypLiability",
+    "CypSummary",
     "EffectPoint",
     "DesignBatch",
     "DockedPose",
@@ -130,6 +134,7 @@ __all__ = [
     "KnowledgePackEntry",
     "MemoryEntry",
     "MoleculeDesign",
+    "MoleculeCypProfile",
     "MoleculeFormulation",
     "MoleculeProperties",
     "MoleculeScreenResult",
