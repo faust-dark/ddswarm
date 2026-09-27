@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 19: target-selectivity / sexual-ADR scoring)
+# ddswarm — drug discovery multi-agent swarm (Increment 20: functional-sign resolution)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -185,6 +185,20 @@ Two honesty constraints are built in: Vina scores are relative, so every
 Ki/occupancy is a *ranking* estimate (never an absolute affinity), and the
 reference concentration (default 10 nM) is a documented modeling assumption
 whose choice affects occupancy magnitude but not the monotonic ordering.
+
+**Increment 20** adds **functional-sign resolution** for direct 5-HT2C/5-HT2A
+engagement (`chemistry/ht2_function.py`). Docking reports *binding*, not
+*function*; to resolve whether a directly-engaging candidate is a potential
+5-HT2C antagonist (protective) or agonist (worsening), `classify_ht2_function`
+matches the molecule against a curated, cited library of documented antagonist
+chemotypes (4-aroyl-piperidine/ketanserin, mianserin/mirtazapine tetracyclic,
+clozapine/olanzapine dibenzodiazepine) and agonist chemotypes
+(tryptamine/indole-ethylamine, 2,5-dimethoxy-phenethylamine). A match refines
+`direct_5ht2c_engagement` into `direct_5ht2c_antagonism` /
+`direct_5ht2c_agonism`; an unmatched chemotype stays of unknown sign. The label
+is "antagonist-like"/"agonist-like" — structural similarity to a documented
+class, never a functional-assay verdict (the same honesty standard as the tox
+toxicophore library).
 
 ## Architecture
 

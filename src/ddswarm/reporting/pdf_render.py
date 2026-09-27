@@ -1012,8 +1012,10 @@ def _narrative_selectivity(sels, para) -> None:
              f"affinity was converted to a dissociation constant via the Gibbs identity "
              f"(ΔG = RT·ln Ki) and a fractional receptor occupancy computed at a fixed "
              f"reference concentration of {c_ref:g} M. Ki and occupancy are relative "
-             f"ranking estimates (Vina scoring is not a calibrated absolute free energy), "
-             f"and docking reports binding, not functional sign (agonist vs antagonist).")
+             f"ranking estimates (Vina scoring is not a calibrated absolute free energy). "
+             f"Docking reports binding, not function, so a direct 5-HT2C engagement is "
+             f"classified by documented-chemotype matching (antagonist-like / agonist-like); "
+             f"a chemotype that matches neither stays of unknown sign.")
         if sel.reference_molecule:
             para(f"The parent molecule {sel.reference_molecule} is docked alongside the "
                  f"candidates as the SERT-efficacy reference"
@@ -1029,6 +1031,9 @@ def _narrative_selectivity(sels, para) -> None:
             para(f"{m.molecule_id}: SERT occupancy {occ_s}, direct 5-HT2C occupancy {occ_2c}, "
                  f"selectivity Ki(5-HT2C)/Ki(SERT) = {si_2c}, Ki(5-HT2A)/Ki(SERT) = {si_2a}.")
             para(f"Sexual-ADR risk: {m.sexual_adr_risk}. {m.sexual_adr_rationale}")
+            if m.ht2c_function and m.ht2c_function != "unknown":
+                para(f"5-HT2 functional sign (chemotype match): {m.ht2c_function}"
+                     + (f" — {m.ht2c_function_note}" if m.ht2c_function_note else "") + ".")
 
 
 def _narrative_conclusion(report, validation_report, survivors, n_passed) -> str:

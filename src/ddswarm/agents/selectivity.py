@@ -9,7 +9,9 @@ sexual-ADR risk label.
 The classification encodes the SSRI mechanism: sexual dysfunction is mediated
 by elevated synaptic 5-HT activating 5-HT2A/2C — an indirect effect driven by
 SERT occupancy (class-effect coupling). Docking reports binding, not functional
-sign, so a direct 5-HT2C engagement is flagged as of unknown sign.
+sign, so a direct 5-HT2C engagement is refined by documented-chemotype matching
+(antagonist-like/agonist-like via chemistry/ht2_function); unmatched chemotypes
+remain flagged as of unknown sign.
 
 Opt-in (like docking/dynamics): needs the Vina binary + network for PDB download.
 """
@@ -20,6 +22,7 @@ from pathlib import Path
 
 from rdkit import rdBase
 
+from ..chemistry.ht2_function import classify_ht2_function
 from ..chemistry.selectivity import (
     classify_sexual_adr,
     docking_ki,
@@ -170,6 +173,25 @@ class SelectivityMinion(Agent):
                 htr2c_occupancy=occ.get("HTR2C"),
                 reference_sert_occupancy=parent_sert_occ,
             )
+            ht2_sign, ht2_motifs, ht2_citations = classify_ht2_function(smi)
+            if label == "direct_5ht2c_engagement" and ht2_sign != "unknown":
+                joined = ", ".join(ht2_motifs)
+                cites = "; ".join(ht2_citations)
+                if ht2_sign == "antagonist_like":
+                    label = "direct_5ht2c_antagonism"
+                    rationale = (
+                        f"direct 5-HT2C binding + documented antagonist chemotype ({joined}); "
+                        f"5-HT2C antagonism may REDUCE sexual ADR — confirm functionally. {cites}"
+                    )
+                else:
+                    label = "direct_5ht2c_agonism"
+                    rationale = (
+                        f"direct 5-HT2C binding + documented agonist chemotype ({joined}); "
+                        f"5-HT2C agonism may WORSEN sexual ADR — confirm functionally. {cites}"
+                    )
+            ht2_note = None
+            if ht2_motifs:
+                ht2_note = "; ".join(f"{m} ({c})" for m, c in zip(ht2_motifs, ht2_citations))
             assessed.append(MoleculeSelectivity(
                 molecule_id=mid, canonical_smiles=smi, affinities=affs,
                 selectivity_index_5ht2c_sert=si_2c,
@@ -179,6 +201,8 @@ class SelectivityMinion(Agent):
                 htr2a_occupancy=occ.get("HTR2A"),
                 sexual_adr_risk=label,  # type: ignore[arg-type]
                 sexual_adr_rationale=rationale,
+                ht2c_function=ht2_sign,  # type: ignore[arg-type]
+                ht2c_function_note=ht2_note,
             ))
 
         insufficient = sum(1 for m in assessed if m.sexual_adr_risk == "insufficient_data")
@@ -188,8 +212,9 @@ class SelectivityMinion(Agent):
             insufficient_data=insufficient,
         )
         note = ("Ki/occupancy are relative estimates (Vina scoring is not calibrated absolute "
-                "free energy); docking reports binding, not functional sign (agonist vs "
-                "antagonist) — a direct 5-HT2C engagement is flagged as of unknown sign.")
+                "free energy); docking reports binding, not function — the functional sign of a "
+                "direct 5-HT2C engagement is refined by documented-chemotype matching "
+                "(antagonist-like/agonist-like) and stays 'unknown sign' when no chemotype matches.")
         if notes:
             note += " Receptor notes: " + "; ".join(notes)
 

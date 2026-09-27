@@ -113,6 +113,8 @@
             "class_effect",
             "efficacy_tradeoff",
             "direct_5ht2c_engagement",
+            "direct_5ht2c_antagonism",
+            "direct_5ht2c_agonism",
             "insufficient_data"
           ],
           "title": "Sexual Adr Risk",
@@ -129,6 +131,35 @@
           ],
           "default": null,
           "title": "Sexual Adr Rationale"
+        },
+        "ht2c_function": {
+          "anyOf": [
+            {
+              "enum": [
+                "antagonist_like",
+                "agonist_like",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ht2C Function"
+        },
+        "ht2c_function_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ht2C Function Note"
         },
         "evidence_level": {
           "$ref": "#/$defs/EvidenceLevel",

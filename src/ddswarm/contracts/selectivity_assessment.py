@@ -24,8 +24,10 @@ from .enums import AgentResultStatus, EvidenceLevel
 from .provenance import ProvenanceEntry
 
 ReceptorKind = Literal["SERT", "HTR2A", "HTR2C"]
-SexualAdrRisk = Literal["class_effect", "efficacy_tradeoff",
-                        "direct_5ht2c_engagement", "insufficient_data"]
+SexualAdrRisk = Literal["class_effect", "efficacy_tradeoff", "direct_5ht2c_engagement",
+                        "direct_5ht2c_antagonism", "direct_5ht2c_agonism",
+                        "insufficient_data"]
+Ht2Function = Literal["antagonist_like", "agonist_like", "unknown"]
 
 
 class ReceptorAffinity(BaseModel):
@@ -49,6 +51,11 @@ class MoleculeSelectivity(BaseModel):
     htr2a_occupancy: float | None = None
     sexual_adr_risk: SexualAdrRisk = "insufficient_data"
     sexual_adr_rationale: str | None = None
+    # functional sign of the direct 5-HT2C engagement (from documented chemotype
+    # matching, NOT a functional assay) — refines direct_5ht2c_engagement into
+    # direct_5ht2c_antagonism / direct_5ht2c_agonism when a chemotype matches.
+    ht2c_function: Ht2Function | None = None
+    ht2c_function_note: str | None = None
     evidence_level: EvidenceLevel = EvidenceLevel.calculated
 
 
