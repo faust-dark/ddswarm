@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 20: functional-sign resolution)
+# ddswarm — drug discovery multi-agent swarm (Increment 21: hybrid Vina-score calibration)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -199,6 +199,17 @@ clozapine/olanzapine dibenzodiazepine) and agonist chemotypes
 is "antagonist-like"/"agonist-like" — structural similarity to a documented
 class, never a functional-assay verdict (the same honesty standard as the tox
 toxicophore library).
+
+**Increment 21** adds a **hybrid Vina-score calibration** (`chemistry/
+vina_calibration.py`): the docking score is corrected against a fixed, committed
+literature-Ki set (NIMH PDSP) with a per-receptor intercept (slope fixed at
+a = 1, so the Vina→Ki mapping stays monotonic), then converted to Ki/occupancy
+via the unchanged Gibbs identity. The mechanistic model enforces the physics;
+the statistical component estimates only the systematic energy-scale offset.
+The calibrated Ki is a *calculated estimate* (residual RMSE carried on the
+artifact), not an experimental affinity, and the selectivity index
+(Ki_off/Ki_on) is approximately calibration-invariant because the per-receptor
+offsets cancel in the ratio.
 
 ## Architecture
 
