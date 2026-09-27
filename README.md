@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 22: CYP DDI flags)
+# ddswarm — drug discovery multi-agent swarm (Increment 24: external-DB grounding)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -219,6 +219,21 @@ aryloxy-alkylamine→2D6, benzimidazole→2C19, purine→1A2) and CYP3A4 inducti
 match is a deterministic fact, but the label is "potential inhibitor/inducer"
 (predicted), never a functional enzyme assay; induction is explicitly flagged as
 a weak 2D-structure signal (PXR/CAR/AhR-driven).
+
+**Increment 23** adds the **hERG (Kv11.1) cardiotoxicity flag** (`herg_minion`,
+in the default pipeline). Hybrid mechanistic + descriptor rule: a protonatable
+basic amine + >=2 aromatic rings (the Y652/F656 pore pharmacophore) gated by
+lipophilicity (cLogP >= 3.0). A flag is a *predicted* liability, not a
+patch-clamp assay, and potency (IC50) is not ranked from a 2D pharmacophore.
+
+**Increment 24** adds **external-database grounding** (`grounding_minion`,
+opt-in via `--grounding`). Each molecule is resolved by standard InChIKey
+against ChEMBL REST, PubChem PUG-REST, and PubMed E-utilities (DrugBank
+identifier via PubChem xref), recording every hit as an *observed* entry with an
+external ID + URL + retrieval timestamp — the first machine-readable link to
+live external records in the pipeline. Grounding is opt-in because live APIs are
+non-deterministic across time, so grounded entries are excluded from the
+reproducibility hash.
 
 ## Architecture
 
