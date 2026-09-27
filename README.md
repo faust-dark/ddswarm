@@ -597,6 +597,10 @@ ddswarm run project.json [--reasoning none|hermes] [--iupac] [--store ./store] [
 ddswarm runs [project_id]                       # list runs
 ddswarm report project_id [run_id]              # per-task report
 ddswarm memory project_id                       # cross-run conclusions
+ddswarm receptors list [--family GPCR]          # list the ~61-target registry
+ddswarm receptors lookup SERT                   # resolve a name/alias to its entry
+ddswarm receptors adr                           # list the ADR profile library
+ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile match
 ```
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.

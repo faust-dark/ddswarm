@@ -4,6 +4,7 @@
     ddswarm runs [project_id] [--store DIR]
     ddswarm report project_id [run_id] [--store DIR]
     ddswarm init project.json --project-id ID --objective "..." [--targets ...] [--smiles ...]
+    ddswarm receptors {list|lookup|adr|match} [...]
 
 project.json is a RunRequest: {project: ProjectSpec, tasks: [...], reasoning: {...}}.
 If `tasks` is omitted a default pipeline runs (research -> design -> screen -> predict);
@@ -46,6 +47,8 @@ from .contracts import (
 )
 from pydantic import ValidationError
 
+from .chemistry.receptors import RECEPTOR_REGISTRY, canonical_receptor_name
+from .chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES, select_adr_profiles
 from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
@@ -381,6 +384,71 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_receptors(args) -> int:
+    """Query the receptor registry + ADR profile library (deterministic, offline)."""
+    if args.action == "list":
+        fam = (args.family or "").lower()
+        rows = [(n, e) for n, e in sorted(RECEPTOR_REGISTRY.items())
+                if not fam or fam in str(e.get("family", "")).lower()]
+        if not rows:
+            print("no receptors match the family filter")
+            return 0
+        for n, e in rows:
+            pdb = e.get("pdb_id") or "-"
+            print(f"{n:12s} {str(e.get('gene', '')):14s} {pdb:6s} {e.get('family', '')}")
+            if e.get("reference"):
+                print(f"{'':12s} {'':14s} {'':6s} ref: {e['reference']}")
+        with_pdb = sum(1 for _, e in rows if e.get("pdb_id"))
+        print(f"\n{len(rows)} target(s) shown ({with_pdb} with pdb_id, "
+              f"{len(rows) - with_pdb} without)")
+        return 0
+
+    if args.action == "lookup":
+        key = canonical_receptor_name(args.name)
+        e = RECEPTOR_REGISTRY.get(key)
+        if e is None:
+            print(f"not found: {args.name}")
+            return 0
+        print(f"name      : {e.get('name')}")
+        print(f"gene      : {e.get('gene')}")
+        print(f"family    : {e.get('family')}")
+        print(f"pdb_id    : {e.get('pdb_id') or '(none — supply pdb_id explicitly)'}")
+        print(f"reference : {e.get('reference')}")
+        return 0
+
+    if args.action == "adr":
+        print("ADR profile library (mechanistic, citable; docking reports binding, not function)")
+        print("\nSpecial profiles:")
+        for pid, prof in SPECIAL_ADR_PROFILES.items():
+            print(f"\n  {pid}")
+            print(f"    trigger  : {prof['primary']} primary + "
+                  f"{', '.join(prof['off_targets'])} off-target")
+            print(f"    adr      : {prof['adr']}")
+            print(f"    mechanism: {prof['mechanism']}")
+            print(f"    citation : {prof['citation']}")
+        print("\nOff-target 'antitarget' ADRs (tiered on occupancy at the reference concentration):")
+        for pid, prof in ANTITARGET_PROFILES.items():
+            print(f"\n  {pid}  ({prof['receptor']}, {prof['sign']})")
+            print(f"    adr      : {prof['adr']}")
+            print(f"    mechanism: {prof['mechanism']}")
+            print(f"    citation : {prof['citation']}")
+        return 0
+
+    if args.action == "match":
+        off_targets = [o.strip() for o in args.off_targets.split(",") if o.strip()]
+        profiles = select_adr_profiles(args.primary, off_targets)
+        print(f"primary: {args.primary}; off-targets: {', '.join(off_targets)}")
+        if not profiles:
+            print("no built-in ADR profile matches this panel")
+        else:
+            for pid in profiles:
+                print(f"  - {pid}")
+        return 0
+
+    print(f"unknown action: {args.action}", file=sys.stderr)
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ddswarm", description="drug-discovery swarm runner")
     sub = p.add_subparsers(dest="command", required=True)
@@ -428,6 +496,28 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--smiles", nargs="*", default=[])
     pi.add_argument("--input-type", default="mixed")
     pi.set_defaults(func=cmd_init)
+
+    prc = sub.add_parser("receptors", help="query the receptor registry and ADR profile library")
+    rsub = prc.add_subparsers(dest="action", required=True)
+
+    rl = rsub.add_parser("list", help="list all dockable targets")
+    rl.add_argument("--family", help="filter by a substring of the family string "
+                    "(e.g. GPCR, enzyme, channel, transporter, cyclooxygenase)")
+    rl.set_defaults(func=cmd_receptors)
+
+    rk = rsub.add_parser("lookup", help="resolve a receptor name/alias to its registry entry")
+    rk.add_argument("name")
+    rk.set_defaults(func=cmd_receptors)
+
+    ra = rsub.add_parser("adr", help="list the pluggable ADR profile library")
+    ra.set_defaults(func=cmd_receptors)
+
+    rm = rsub.add_parser("match", help="show which ADR profiles match a panel (dry-run, no docking)")
+    rm.add_argument("--primary", required=True)
+    rm.add_argument("--off-targets", required=True,
+                    help="comma-separated off-target receptor names (aliases resolved)")
+    rm.set_defaults(func=cmd_receptors)
+
     return p
 
 

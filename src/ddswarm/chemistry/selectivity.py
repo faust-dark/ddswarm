@@ -119,6 +119,30 @@ ANTITARGET_PROFILES: dict[str, dict] = {
     },
 }
 
+# Registry of the "special" ADR profiles whose interpretation is more nuanced
+# than a plain occupancy tier (SSRI sexual-ADR uses SERT occupancy + direct
+# 5-HT2C engagement; NSAID GI risk uses the COX-2/COX-1 selectivity index). The
+# trigger (primary + off-targets) is data so `select_adr_profiles` matches them
+# generically and the CLI can list them; the interpretation stays code.
+SPECIAL_ADR_PROFILES: dict[str, dict] = {
+    SSRI_SEXUAL_ADR_PROFILE: {
+        "primary": "SERT", "off_targets": ["HTR2C"],
+        "adr": "sexual dysfunction (SSRI class effect + direct 5-HT2C engagement)",
+        "mechanism": "SERT blockade raises synaptic 5-HT, which activates 5-HT2A/2C "
+                     "(indirect class effect); direct 5-HT2C binding can decouple "
+                     "(antagonist) or worsen (agonist) it — docking reports binding, not sign",
+        "citation": "Serretti & Chiesa 2009 (J Clin Psychopharmacol) — SSRI sexual dysfunction meta-analysis",
+    },
+    COX_GI_PROFILE: {
+        "primary": "COX2", "off_targets": ["COX1"],
+        "adr": "gastrointestinal ulcer/bleeding (NSAID)",
+        "mechanism": "COX-1 is constitutive and its prostaglandins maintain the gastric "
+                     "mucosal barrier; non-selective COX-1/COX-2 inhibition strips that "
+                     "protection while retaining anti-inflammatory effect",
+        "citation": "Vane 1971 (Nature); Wallace 2008 (Physiol Rev) — NSAID GI toxicity",
+    },
+}
+
 
 def docking_ki(affinity_kcal_per_mol: float | None,
                temperature_k: float = DEFAULT_TEMPERATURE_K) -> float | None:
@@ -168,10 +192,9 @@ def select_adr_profiles(primary: str | None, off_targets: list[str]) -> list[str
     offs = [canonical_receptor_name(o) for o in off_targets]
 
     profiles: list[str] = []
-    if prim == "SERT" and "HTR2C" in offs:
-        profiles.append(SSRI_SEXUAL_ADR_PROFILE)
-    if prim == "COX2" and "COX1" in offs:
-        profiles.append(COX_GI_PROFILE)
+    for pid, prof in SPECIAL_ADR_PROFILES.items():
+        if prim == prof["primary"] and all(o in offs for o in prof["off_targets"]):
+            profiles.append(pid)
     for pid, prof in ANTITARGET_PROFILES.items():
         if prof["receptor"] in offs:
             profiles.append(pid)

@@ -102,3 +102,49 @@ def test_run_iterations_two_generations(tmp_path):
     assert "execution_plan" in kinds
     assert "generation_memory" in kinds
     assert "report_document" in kinds
+
+
+def test_receptors_list_and_lookup(capsys):
+    assert cli.main(["receptors", "list"]) == 0
+    out = capsys.readouterr().out
+    assert "SERT" in out and "5I73" in out
+    assert "61 target(s) shown (59 with pdb_id, 2 without)" in out
+
+    assert cli.main(["receptors", "list", "--family", "enzyme"]) == 0
+    out = capsys.readouterr().out
+    assert "ACE" in out
+    assert "SERT" not in out  # transporters are filtered out
+
+    # alias resolution: PTGS2 -> COX2, M1 -> CHRM1
+    assert cli.main(["receptors", "lookup", "PTGS2"]) == 0
+    out = capsys.readouterr().out
+    assert "COX2" in out and "3LN1" in out
+
+    assert cli.main(["receptors", "lookup", "M1"]) == 0
+    out = capsys.readouterr().out
+    assert "CHRM1" in out and "5CXV" in out
+
+    assert cli.main(["receptors", "lookup", "DOES_NOT_EXIST"]) == 0
+    assert "not found" in capsys.readouterr().out
+
+
+def test_receptors_adr_and_match(capsys):
+    assert cli.main(["receptors", "adr"]) == 0
+    out = capsys.readouterr().out
+    assert "sert_5ht2c_sexual_adr" in out
+    assert "cox_gi_risk" in out
+    assert "chrm1_anticholinergic" in out
+    assert "hrh1_sedation" in out
+
+    assert cli.main(["receptors", "match", "--primary", "COX2", "--off-targets", "COX1"]) == 0
+    assert "cox_gi_risk" in capsys.readouterr().out
+
+    assert cli.main(["receptors", "match", "--primary", "SERT",
+                     "--off-targets", "M1,H1,ADRA1A"]) == 0
+    out = capsys.readouterr().out
+    assert "chrm1_anticholinergic" in out
+    assert "hrh1_sedation" in out
+    assert "adra1a_orthostatic_hypotension" in out
+
+    assert cli.main(["receptors", "match", "--primary", "DRD2", "--off-targets", "HTR2A"]) == 0
+    assert "no built-in ADR profile" in capsys.readouterr().out
