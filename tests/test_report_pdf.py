@@ -76,6 +76,27 @@ def test_narrative_schema_reflects_stages():
     assert any("designer_minion" in l and "research" in l for l in lines)
 
 
+def test_structural_modification_lines():
+    from ddswarm.contracts.design_batch import DesignBatch, MoleculeDesign
+    from ddswarm.reporting.pdf_render import _structural_modification_lines
+
+    db = DesignBatch(project_id="p", status=AgentResultStatus.success, molecules=[
+        MoleculeDesign(id="a", smiles="X1", transformation="cl_to_f",
+                       rationale="chlorine -> fluorine halogen swap (a common bioisosteric replacement)"),
+        MoleculeDesign(id="b", smiles="X2", transformation="cl_to_f",
+                       rationale="chlorine -> fluorine halogen swap (a common bioisosteric replacement)"),
+        MoleculeDesign(id="c", smiles="X3", transformation="8-NO2 → 8-F",
+                       rationale="the nitro group drives sedation; fluorine lowers it"),
+        MoleculeDesign(id="d", smiles="X4", transformation="n_demethylate",
+                       rationale="minimal analog via 'n_demethylate' (label only; no new structure)"),
+    ])
+    lines = _structural_modification_lines([db])
+    assert len(lines) == 2  # duplicate collapsed, label-only skipped
+    assert any("chlorine -> fluorine halogen swap" in l for l in lines)
+    assert any("8-NO2 → 8-F" in l and "sedation" in l for l in lines)
+    assert not any("label only" in l for l in lines)
+
+
 def test_default_pipeline_exports_pdf(tmp_path):
     store = Store(tmp_path)
     spec = ProjectSpec(project_id="pdf", input_type="mixed", objective="inhibit EGFR",
@@ -101,6 +122,7 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert doc.pdf_hash
     assert "Prompt" in doc.sections
     assert "Overview" in doc.sections
+    assert "Structural modifications rationale" in doc.sections
     assert "Conclusion" in doc.sections
     assert "Evidence and confidence" in doc.sections
     assert "Identified candidate" in doc.sections

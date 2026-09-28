@@ -366,6 +366,37 @@ def _survivors(by_kind) -> list[str]:
     return out
 
 
+def _structural_modification_lines(dbs) -> list[str]:
+    """One plain-language line per structural modification (what changed, and why).
+
+    Pulls transformation + rationale from each design; skips label-only entries
+    (no real structural change) and dedupes by (transformation, rationale). A
+    slug transformation (offline library, e.g. "cl_to_f") is dropped because the
+    rationale already names the change; a free-text transformation (LLM) is kept
+    as the "what" and paired with the rationale as the "why".
+    """
+    lines: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for db in dbs:
+        for m in db.molecules:
+            rationale = (m.rationale or "").strip()
+            transformation = (m.transformation or "").strip()
+            if not rationale or "label only" in rationale:
+                continue
+            key = (transformation, rationale)
+            if key in seen:
+                continue
+            seen.add(key)
+            if transformation and " " in transformation:
+                text = f"{transformation} — {rationale}"
+            else:
+                text = rationale
+            if not text.endswith("."):
+                text += "."
+            lines.append(text)
+    return lines
+
+
 # ---- main render ----
 
 
@@ -499,6 +530,17 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
             if not (project_spec.mechanism_of_action or project_spec.indication
                     or project_spec.existing_drugs):
                 para("No overview narrative was generated for this run.")
+
+        # ---- structural modifications rationale (what changed, and why) ----
+        section("Structural modifications rationale")
+        mods = _structural_modification_lines(dbs)
+        if mods:
+            para("Each designed analog is a deliberate structural change on the parent "
+                 "scaffold, with a medicinal-chemistry rationale:")
+            bullets(mods)
+        else:
+            para("No structural modifications were recorded for this run (the design stage "
+                 "produced no real transformation, or no design_batch artifact was present).")
 
         # ---- reasoning preamble (why and how we reached these candidates) ----
         section("Reasoning and plan")
