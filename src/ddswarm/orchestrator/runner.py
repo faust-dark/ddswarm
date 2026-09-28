@@ -180,7 +180,7 @@ class Runner:
                 continue  # already terminal-failed
 
             dep_failed = any(
-                task_status.get(d) in (TaskStatus.failed, TaskStatus.blocked, TaskStatus.insufficient_evidence)
+                task_status.get(d) == TaskStatus.blocked
                 for d in deps
             )
             if dep_failed:
@@ -294,10 +294,14 @@ class Runner:
         return self.store.load_agent_result(project_id, run_id, task_id, n)
 
     def _final_status(self, statuses: list[TaskStatus]) -> RunStatus:
+        # Non-blocking since Increment 38: only a safety `blocked` verdict gates
+        # the run. failed (a crashed agent) still marks the run failed but does
+        # not stop downstream; insufficient_evidence is a reported gap, not a
+        # blocker — the run completes and the report lists what is missing.
+        if any(s == TaskStatus.blocked for s in statuses):
+            return RunStatus.blocked
         if any(s == TaskStatus.failed for s in statuses):
             return RunStatus.failed
-        if any(s in (TaskStatus.blocked, TaskStatus.insufficient_evidence) for s in statuses):
-            return RunStatus.blocked
         return RunStatus.completed
 
     def _find_manifest(self, run_id: str) -> RunManifest:

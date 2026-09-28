@@ -95,17 +95,17 @@ class ReportMinion(Agent):
             stage_findings.append(StageFinding(
                 task_id=task_id, agent=ts.agent, status=ts.status.value,
                 findings=list(res.findings) if res else [],
-                warnings=list(res.warnings) if res else [],
+                warnings=(list(res.warnings) + [f"ERROR: {e}" for e in res.errors]) if res else [],
                 artifact_kinds=kinds,
             ))
 
         # The run's final status is set *after* report (the last task) finishes,
         # so derive it from the other tasks' statuses, mirroring Runner._final_status.
         statuses = [sf.status for sf in stage_findings if sf.task_id != ctx.task_id]
-        if any(s == "failed" for s in statuses):
-            run_status = "failed"
-        elif any(s in ("blocked", "insufficient_evidence") for s in statuses):
+        if any(s == "blocked" for s in statuses):
             run_status = "blocked"
+        elif any(s == "failed" for s in statuses):
+            run_status = "failed"
         else:
             run_status = "completed"
 

@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 37: patent/FTO landscape in the default pipeline)
+# ddswarm — drug discovery multi-agent swarm (Increment 38: non-blocking agents — only safety gates)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -402,6 +402,17 @@ before. Honesty unchanged: every entry is LLM recall forced to `inferred` and
 tagged "verify against primary source"; the agent is a research aid, not a legal
 FTO/novelty opinion.
 
+**Increment 38** makes every agent NON-BLOCKING except the safety gate. The
+runner's result gating no longer stops downstream on `failed` or
+`insufficient_evidence` — only `blocked` (a safety verdict) still propagates.
+`insufficient_evidence` is now a reported gap: the run completes and the report
+lists what an agent could not compute (no backend, no molecules) instead of
+dying on it. `failed` (a crashed agent) still marks the run `failed` but does
+not gate downstream — the report surfaces the error text. `safety_minion`
+remains the single hard gate: a controlled-substance/dual-use `block` still
+halts every downstream task and marks the run `blocked`. The report's
+`run_status` derivation mirrors the runner.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -659,9 +670,10 @@ SMILES — fentanyl, methamphetamine, MDMA) and dual-use/biosafety targets
 (matched by name — ricin, botulinum toxin, anthrax, variola, ebola, sarin,
 sulfur mustard). A match is an *observed* fact against that list, and it
 returns `verdict=block` -> `AgentResultStatus.blocked`, which the orchestrator
-propagates to every downstream task. The list is deliberately small and
-non-exhaustive, and the note on every flag says so — this is a policy aid,
-NOT a legal determination and NOT a database.
+propagates to every downstream task. Since Increment 38 this is the ONLY
+remaining hard gate — every other agent is non-blocking. The list is
+deliberately small and non-exhaustive, and the note on every flag says so —
+this is a policy aid, NOT a legal determination and NOT a database.
 
 ## Validation (Increment 7)
 
@@ -785,12 +797,14 @@ schemas/*.schema.json                  # exported JSON Schema for every contract
   `input_type`; ProjectSpec must be `approved`.
 - **Gate C — chemical validity**: molecules must sanitize + canonicalize
   (invalid SMILES are eliminated with a reason, not silently dropped).
-- **Result gating**: `failed`/`blocked`/`insufficient_evidence` stops downstream
-  tasks; `success`/`partial` lets them proceed.
+- **Result gating**: only `blocked` (a safety verdict) stops downstream tasks;
+  `failed` marks the run failed but downstream still runs (error surfaced in the
+  report); `insufficient_evidence` is a reported gap; `success`/`partial` let
+  downstream proceed.
 
 ## Verification status
 
-Run `pytest -q` — 140 tests pass. The real-Vina smoke test auto-skips when the
+Run `pytest -q` — 310 tests pass. The real-Vina smoke test auto-skips when the
 binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
 are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
 backends (with a fake `hermes` script), the CLI, SA-score classification, the

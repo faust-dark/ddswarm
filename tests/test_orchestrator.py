@@ -4,6 +4,8 @@ import pytest
 
 from ddswarm.agents import DesignerMinion, ResearcherMinion, Agent
 from ddswarm.contracts import ProjectSpec, RunStatus
+from ddswarm.contracts.agent_result import AgentResult
+from ddswarm.contracts.enums import AgentResultStatus
 from ddswarm.orchestrator import BlockedByGate, Runner, Store, TaskDefinition
 
 GEFITINIB_SMILES = "COC1=C(C=C2C(=C1)N=CN=C2NC3=CC(=C(C=C3)F)Cl)OCCCN4CCOCC4"
@@ -85,25 +87,52 @@ class FailingAgent(Agent):
         raise RuntimeError("boom")
 
 
-def test_failure_stops_downstream(tmp_path):
+class SafetyBlockingAgent(Agent):
+    name = "safety_minion"
+
+    def run(self, ctx):
+        return AgentResult(project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
+                           status=AgentResultStatus.blocked)
+
+
+def test_failure_marks_run_failed_but_downstream_runs(tmp_path):
     store = Store(tmp_path)
     runner = Runner(store, {"researcher_minion": FailingAgent(store), "designer_minion": DesignerMinion(store)})
     manifest = runner.create_run(make_spec(), make_tasks())
     final = runner.run(manifest.run_id, project_id="p1")
-    assert final.status == RunStatus.failed
+    assert final.status == RunStatus.failed  # a crash still marks the run failed
     ts_design = store.load_task_spec("p1", manifest.run_id, "design")
-    assert ts_design.status.value == "blocked"
+    assert ts_design.status.value == "success"  # but downstream is NOT gated
 
 
-def test_insufficient_evidence_stops_downstream(tmp_path):
+def test_insufficient_evidence_does_not_block_run(tmp_path):
     store = Store(tmp_path)
     runner = Runner(store, make_agents(store))
     spec = make_spec(starting_materials=[], targets=[])
     manifest = runner.create_run(spec, make_tasks(with_seed=False))
     final = runner.run(manifest.run_id, project_id="p1")
-    assert final.status == RunStatus.blocked
+    assert final.status == RunStatus.completed  # insufficient_evidence is a gap, not a block
     res = store.load_latest_agent_result("p1", manifest.run_id, "research")
     assert res.status.value == "insufficient_evidence"
+
+
+def test_safety_block_still_gates_downstream(tmp_path):
+    # The ONE remaining hard gate: a safety `blocked` verdict must still stop
+    # every downstream task and mark the run blocked.
+    store = Store(tmp_path)
+    runner = Runner(store, {"safety_minion": SafetyBlockingAgent(store),
+                            "researcher_minion": ResearcherMinion(store),
+                            "designer_minion": DesignerMinion(store)})
+    tasks = [
+        TaskDefinition(task_id="safety", agent="safety_minion"),
+        TaskDefinition(task_id="research", agent="researcher_minion", depends_on=["safety"]),
+        TaskDefinition(task_id="design", agent="designer_minion", depends_on=["research"]),
+    ]
+    manifest = runner.create_run(make_spec(), tasks)
+    final = runner.run(manifest.run_id, project_id="p1")
+    assert final.status == RunStatus.blocked
+    assert store.load_task_spec("p1", manifest.run_id, "research").status.value == "blocked"
+    assert store.load_task_spec("p1", manifest.run_id, "design").status.value == "blocked"
 
 
 def test_retry_is_versioned(tmp_path):

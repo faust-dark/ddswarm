@@ -29,6 +29,8 @@ def gate_a_input_validity(spec: ProjectSpec) -> list[str]:
 
 
 def result_ok(status: AgentResultStatus) -> bool:
-    """A task is considered to have succeeded (downstream may proceed) for
-    success and partial. failed/blocked/insufficient_evidence stop downstream."""
+    """Logging helper: reads as an outright success (success/partial).
+
+    This is NOT the gating rule — gating lives in the runner and, since
+    Increment 38, only `blocked` (a safety verdict) stops downstream."""
     return status in (AgentResultStatus.success, AgentResultStatus.partial)
