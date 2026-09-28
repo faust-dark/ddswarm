@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 35: human-readable synthesis method)
+# ddswarm — drug discovery multi-agent swarm (Increment 36: IUPAC name default-on in identified candidate)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -64,12 +64,12 @@ report labels every stage as "Stage — agent" (e.g. "Synthesis —
 retrosynthesis_minion"), and the Methodology section lists, in plain language,
 what each agent does.
 
-**Increment 13** adds an opt-in **IUPAC name** as a human-readability label
+**Increment 13** adds an **IUPAC name** as a human-readability label
 alongside the canonical identifiers. SMILES + InChIKey remain the machine
-backbone (every compute step consumes SMILES); the IUPAC name is fetched only
-when asked for, from the NIH CACTUS web service (`--iupac`), and is clearly
-marked non-deterministic + non-authoritative — it is excluded from the report's
-reproducibility hash.
+backbone (every compute step consumes SMILES); the IUPAC name is fetched from
+the NIH CACTUS web service by default (disable with `--no-iupac`), and is
+clearly marked non-deterministic + non-authoritative — it is excluded from the
+report's reproducibility hash.
 
 **Increment 14** adds deterministic **PK/PD** and turns Hermes reasoning on by
 default. `clinical_minion` now emits a `ClinicalSimulation` artifact alongside
@@ -377,6 +377,18 @@ than the old 300 s reasoning budget, so the default `run_budget` is raised to
 600 s everywhere (config, backend, registry, and every reasoning agent's
 fallback). Honesty unchanged: routes stay `evidence_level=hypothetical`.
 
+**Increment 36** makes the IUPAC name of the identified candidate part of the
+standard report rather than an opt-in. The NIH CACTUS lookup (which generates a
+de-novo IUPAC name from the structure, not just a database match) now runs **by
+default** in `report_minion`; the `--iupac` flag is replaced by `--no-iupac` to
+disable it for fully-offline/deterministic runs. The "Identified candidate"
+section already rendered `CandidateSelection.iupac_name` when present, so this
+increment wires the fetch to be unconditional; the label stays marked
+"readability-only, not authoritative" and is still excluded from the report's
+reproducibility hash. Caveat: CACTUS can fail to name a few structures (some
+novel scaffolds, specific stereochemistries) and then the section falls back to
+SMILES + InChIKey — the machine identifiers always remain.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -679,7 +691,7 @@ The `ddswarm` console script runs a whole pipeline from one versioned file:
 ```bash
 ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
     --targets "EGFR" --smiles "COC1=..."       # scaffold (default pipeline)
-ddswarm run project.json [--reasoning none|hermes] [--iupac] [--store ./store] [--reports-dir reports/]
+ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--store ./store] [--reports-dir reports/]
 ddswarm runs [project_id]                       # list runs
 ddswarm report project_id [run_id]              # per-task report
 ddswarm memory project_id                       # cross-run conclusions
@@ -713,11 +725,12 @@ baseline). LLM-contributed entries are forced to `evidence_level`
 `inferred`/`hypothetical` and tagged "verify against primary source", because a
 recalled PubChem ID or patent number is not experimental evidence.
 
-`--iupac` fetches IUPAC names for the ranked candidates from the NIH CACTUS web
-service and prints them in the report as a readability label (alongside the 2D
-structure, SMILES and InChIKey). It is opt-in because it is network-dependent
-and third-party: the names are non-deterministic across time and not
-authoritative, so they are excluded from the report's reproducibility hash.
+IUPAC names for the ranked candidates are fetched from the NIH CACTUS web
+service **by default** and printed in the report as a readability label
+(alongside the 2D structure, SMILES and InChIKey); pass `--no-iupac` to disable
+(e.g. for fully-offline deterministic runs). It is network-dependent and
+third-party: the names are non-deterministic across time and not authoritative,
+so they are excluded from the report's reproducibility hash.
 Canonical SMILES + InChIKey remain the identifiers of record.
 
 ## Run

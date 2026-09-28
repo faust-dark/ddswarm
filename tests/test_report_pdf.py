@@ -126,3 +126,35 @@ def test_chart_docking_one_bar_per_molecule():
     finally:
         if fig is not None:
             plt.close(fig)
+
+
+def test_identified_candidate_renders_iupac_name(tmp_path):
+    # The "Identified candidate" section must show the IUPAC name alongside
+    # SMILES + InChIKey when one is present (fetched by default from CACTUS).
+    import shutil
+    import subprocess
+
+    if shutil.which("pdftotext") is None:
+        import pytest
+        pytest.skip("pdftotext not available")
+
+    from ddswarm.contracts.report import CandidateSelection
+
+    iupac = ("9-fluoro-11,17-dihydroxy-17-(2-hydroxyacetyl)-10,13,16-trimethyl-"
+             "6,7,8,11,12,14,15,16-octahydro-6H-cyclopenta[a]phenanthren-3-one")
+    report = Report(
+        project_id="p", run_id="run_1", status=AgentResultStatus.success,
+        run_status="completed", executive_summary="s",
+        identified_candidate=CandidateSelection(
+            rank=1, smiles="CC1CC2C3CCC4=CC(=O)C=CC4(C)C3(F)C(O)CC2(C)C1(O)C(=O)CO",
+            score=0.5, iupac_name=iupac),
+        provenance=[ProvenanceEntry(source="test")],
+    )
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="obj",
+                       targets=["X"], status="approved")
+    out = tmp_path / "r.pdf"
+    render_report_pdf(report, {}, spec, None, out)
+    text = subprocess.run(["pdftotext", str(out), "-"], capture_output=True, text=True).stdout
+    flat = "".join(text.split())  # drop all whitespace so line-wrapped names stay contiguous
+    assert "IUPAC" in flat
+    assert "9-fluoro-11,17-dihydroxy-17-(2-hydroxyacetyl)" in flat

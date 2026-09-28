@@ -37,9 +37,10 @@ class CandidateSelection(BaseModel):
     ReportMinion._rank_survivors); it is a ranking aid, not experimental merit.
 
     `iupac_name` is an optional, HUMAN-READABILITY label fetched from the NIH
-    CACTUS web service when the run opts in (`--iupac`). It is non-deterministic
-    (network + third-party), NOT authoritative, and excluded from the report's
-    output hash — canonical SMILES + InChIKey remain the identifiers."""
+    CACTUS web service by default (disable with `--no-iupac`). It is
+    non-deterministic (network + third-party), NOT authoritative, and excluded
+    from the report's output hash — canonical SMILES + InChIKey remain the
+    identifiers."""
 
     rank: int
     smiles: str

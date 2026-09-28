@@ -271,7 +271,7 @@ def cmd_run(args) -> int:
     tasks = _inject_reasoning(list(tasks), req.reasoning)
     if args.grounding:
         tasks = _inject_grounding(tasks)
-    if args.iupac:
+    if not args.no_iupac:
         for t in tasks:
             if t.agent == "report_minion":
                 t.params["iupac"] = True
@@ -459,9 +459,9 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="run a pipeline from a project.json file")
     pr.add_argument("project_file")
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
-                    help="override reasoning backend for the reasoning agents (research/design/retrosynth/patent/clinical/regulatory)")
-    pr.add_argument("--iupac", action="store_true",
-                    help="fetch IUPAC names (NIH CACTUS web service) for the ranked candidates as a readability label (non-deterministic)")
+                    help="override reasoning backend for the reasoning agents (research/overview/design/retrosynth/patent/clinical/regulatory)")
+    pr.add_argument("--no-iupac", action="store_true",
+                    help="disable IUPAC name fetching for the ranked candidates (default: fetch from the NIH CACTUS web service as a readability label — non-deterministic, network-dependent, never authoritative)")
     pr.add_argument("--grounding", action="store_true",
                     help="resolve molecules against ChEMBL/PubChem/PubMed and record observed external records (URL + identifier; network-dependent, non-deterministic)")
     pr.add_argument("--iterations", type=int, default=1,
