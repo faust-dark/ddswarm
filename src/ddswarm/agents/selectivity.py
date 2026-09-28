@@ -29,8 +29,9 @@ from pathlib import Path
 
 from rdkit import rdBase
 
+from ..chemistry.chembl_client import receptor_reference_ligands, search_target
 from ..chemistry.ht2_function import classify_ht2_function
-from ..chemistry.receptors import canonical_receptor_name, expand_receptor
+from ..chemistry.receptors import RECEPTOR_REGISTRY, canonical_receptor_name, expand_receptor
 from ..chemistry.selectivity import (
     ANTITARGET_PROFILES,
     classify_cox_gi,
@@ -150,6 +151,8 @@ class SelectivityMinion(Agent):
         best: dict[tuple[str, str], float] = {}
         pdb_by_receptor: dict[str, str] = {}
         calib_pairs: dict[str, list[tuple[float, float]]] = {}  # receptor -> (vina, ΔG_lit)
+        cal_sources: dict[str, str] = {}  # receptor -> "static" | "chembl" | "none"
+        chembl_ligands: dict[str, list[tuple[str, float, str]]] = {}  # fetched (for hash)
         notes: list[str] = []
 
         for rc in receptors:
@@ -182,7 +185,11 @@ class SelectivityMinion(Agent):
                     best[(rname, mid)] = min(p.affinity_kcal_per_mol for p in poses
                                              if p.affinity_kcal_per_mol is not None)
             if calibrate:
-                for ci, (cal_smi, ki_exp, _cit) in enumerate(CALIBRATION_SET.get(rname, [])):
+                cal_ligands, cal_source = self._calibration_ligands(rname, ctx)
+                cal_sources[rname] = cal_source
+                if cal_source == "chembl":
+                    chembl_ligands[rname] = cal_ligands
+                for ci, (cal_smi, ki_exp, _cit) in enumerate(cal_ligands):
                     ligand = engine.prepare_ligand(cal_smi, work_root / rname / f"cal_{ci}")
                     if not ligand.pdbqt_path:
                         continue
@@ -261,18 +268,33 @@ class SelectivityMinion(Agent):
 
         calibration = None
         if calibrate:
+            if chembl_ligands:
+                cal_note = (
+                    "per-receptor offset fit on the fixed committed set plus ON-DEMAND ChEMBL "
+                    "reference ligands for " + ", ".join(sorted(chembl_ligands)) + " "
+                    "(network-dependent, non-reproducible); slope fixed at 1 so the Vina->Ki "
+                    "mapping is monotonic. The calibrated Ki is a calculated estimate, not an "
+                    "experimental affinity."
+                )
+            else:
+                cal_note = (
+                    "per-receptor offset fit on a fixed, committed literature-Ki set; slope "
+                    "fixed at 1 (no rescaling) so the Vina->Ki mapping is monotonic. The "
+                    "calibrated Ki is a calculated estimate, not an experimental affinity."
+                )
             calibration = VinaCalibration(
                 intercepts={r: calib[r][0] for r in receptor_names},
                 n_points={r: calib[r][1] for r in receptor_names},
                 rmsd_kcal_per_mol={r: calib[r][2] for r in receptor_names},
-                note="per-receptor offset fit on a fixed, committed literature-Ki set; slope "
-                     "fixed at 1 (no rescaling) so the Vina->Ki mapping is monotonic. The "
-                     "calibrated Ki is a calculated estimate, not an experimental affinity.",
+                note=cal_note,
             )
 
-        input_hash = hash_jsonable({"receptors": receptors, "molecules": molecules,
-                                    "primary": primary, "c_ref": c_ref, "seed": seed,
-                                    "calibrate": calibrate})
+        hash_input = {"receptors": receptors, "molecules": molecules,
+                      "primary": primary, "c_ref": c_ref, "seed": seed,
+                      "calibrate": calibrate}
+        if chembl_ligands:
+            hash_input["chembl_calibration"] = chembl_ligands
+        input_hash = hash_jsonable(hash_input)
         output_hash = hash_jsonable([m.model_dump() for m in assessed])
         assessment = SelectivityAssessment(
             project_id=ctx.project_id,
@@ -315,6 +337,32 @@ class SelectivityMinion(Agent):
         )
 
     # ---- helpers ----
+    @staticmethod
+    def _calibration_ligands(rname: str, ctx: AgentContext) -> tuple[list[tuple[str, float, str]], str]:
+        """(smiles, ki_molar, citation) for a receptor + the source ("static"|"chembl"|"none").
+
+        The fixed, committed CALIBRATION_SET wins; when a receptor is absent
+        from it and params['chembl_calibration'] is set, reference ligands are
+        fetched from ChEMBL on-demand (network-dependent, opt-in — the fetched
+        values are re-hashed by the caller, not silently folded into the output).
+        """
+        static = CALIBRATION_SET.get(rname, [])
+        if static:
+            return static, "static"
+        if ctx.params.get("chembl_calibration"):
+            gene = (RECEPTOR_REGISTRY.get(rname) or {}).get("gene")
+            if gene:
+                try:
+                    tid = search_target(gene)
+                    if tid:
+                        refs = receptor_reference_ligands(tid)
+                        if refs:
+                            return ([(r["smiles"], r["ki_molar"], r["citation"]) for r in refs],
+                                    "chembl")
+                except Exception:
+                    return [], "none"
+        return [], "none"
+
     @staticmethod
     def _interpret_adr(profiles: list[str], occ: dict[str, float | None],
                        ki: dict[str, float | None], parent_primary_occ: float | None,
@@ -366,7 +414,7 @@ class SelectivityMinion(Agent):
               off_targets: list[str], notes: list[str]) -> str:
         base = (
             "Ki/occupancy are "
-            + ("hybrid-calibrated estimates (per-receptor offset from a fixed literature-Ki set, "
+            + ("hybrid-calibrated estimates (per-receptor offset from a literature-Ki set, "
                "slope a = 1 so monotonicity is exact)" if calibrate
                else "relative estimates (Vina scoring is not calibrated absolute free energy)")
             + f"; primary (on-target) = {primary}, off-targets = {', '.join(off_targets) or 'none'}. "

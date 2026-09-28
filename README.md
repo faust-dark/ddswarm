@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 29: receptor registry + pluggable ADR profiles)
+# ddswarm — drug discovery multi-agent swarm (Increment 31: on-demand ChEMBL literature layer)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -290,6 +290,25 @@ any future query:
   citable; sign-dependent (agonism) profiles stay "engagement" because docking
   reports binding, not function. A panel can match several profiles at once, so
   `MoleculeSelectivity.adr_interpretations` is now a list (schema 1.2).
+
+**Increment 30** makes the two libraries queryable from the terminal:
+`ddswarm receptors {list,lookup,adr,match}` — a deterministic, offline CLI over
+`RECEPTOR_REGISTRY` + the ADR profile library (alias resolution, dry-run profile
+matching, no docking). The SSRI + COX "special" ADR profiles became data
+(`SPECIAL_ADR_PROFILES`) so `select_adr_profiles` matches them generically.
+
+**Increment 31** adds an **on-demand ChEMBL literature layer**
+(`chemistry/chembl_client.py`) so per-compound literature data is fetched at
+query time rather than committed as a large static dataset. `search_target(gene)`
+resolves a gene to its human ChEMBL target id; `compound_affinities(inchi_key)`
+returns a molecule's best Ki/Kd/IC50 per target; `receptor_reference_ligands
+(target)` returns reference ligands + measured Ki (median across assays) for
+fitting the Vina→Ki offset. `selectivity_minion` now falls back to this
+on-demand source when a receptor is absent from the fixed `CALIBRATION_SET` and
+`params["chembl_calibration"]` is set — so docking calibration works for ANY
+panel, not just SERT/5-HT2A/5-HT2C. This layer is network-dependent and
+non-deterministic: it is opt-in, and the fetched reference ligands are re-hashed
+into the input hash (never silently folded into a reproducible score).
 
 ## Architecture
 

@@ -225,3 +225,85 @@ def test_agent_e2e_tca_panel(tmp_path, monkeypatch):
     # alias names M1/H1 canonicalised to CHRM1/HRH1 and interpreted as liabilities
     assert any("chrm1_anticholinergic:liability" in f for f in res.findings)
     assert any("hrh1_sedation:liability" in f for f in res.findings)
+
+
+def _ctx(params):
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o", status="approved",
+                       starting_materials=["c1ccccc1"])
+    return AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec,
+                        params=params, inputs={})
+
+
+def test_calibration_ligands_static_wins():
+    ligs, source = SelectivityMinion._calibration_ligands("SERT", _ctx({}))
+    assert source == "static"
+    assert ligs  # SERT is in the fixed CALIBRATION_SET
+
+
+def test_calibration_ligands_on_demand_chembl(monkeypatch):
+    from ddswarm import agents
+    monkeypatch.setattr(agents.selectivity, "search_target", lambda gene: "CHEMBL217")
+    monkeypatch.setattr(agents.selectivity, "receptor_reference_ligands",
+                        lambda tid: [{"smiles": "CCN", "ki_molar": 1e-9, "citation": "ref Ki=1 nM"}])
+    ligs, source = SelectivityMinion._calibration_ligands("DRD2", _ctx({"chembl_calibration": True}))
+    assert source == "chembl"
+    assert ligs == [("CCN", 1e-9, "ref Ki=1 nM")]
+
+
+def test_calibration_ligands_none_when_off():
+    # receptor not in the static set + chembl_calibration off -> no calibration
+    ligs, source = SelectivityMinion._calibration_ligands("DRD2", _ctx({}))
+    assert source == "none" and ligs == []
+
+
+def test_calibration_ligands_none_on_chembl_failure(monkeypatch):
+    from ddswarm import agents
+    monkeypatch.setattr(agents.selectivity, "search_target", lambda gene: None)  # no target
+    ligs, source = SelectivityMinion._calibration_ligands("DRD2", _ctx({"chembl_calibration": True}))
+    assert source == "none" and ligs == []
+
+
+def test_agent_e2e_chembl_calibration_on_demand(tmp_path, monkeypatch):
+    """A receptor absent from the static set is calibrated from ChEMBL on-demand."""
+    from ddswarm import agents
+    from ddswarm.contracts.selectivity_assessment import SelectivityAssessment
+    from ddswarm.docking.base import DockPose, DockingEngine, PreparedLigand, PreparedReceptor
+
+    monkeypatch.setattr(agents.selectivity, "search_target", lambda gene: "CHEMBL217")
+    monkeypatch.setattr(agents.selectivity, "receptor_reference_ligands",
+                        lambda tid: [{"smiles": "CCN", "ki_molar": 1e-9, "citation": "ref Ki=1 nM"}])
+
+    class Fake(DockingEngine):
+        name = "fake"
+        version = "1.0"
+
+        def __init__(self):
+            self.last_receptor = None
+
+        def prepare_receptor(self, source, work_dir):
+            self.last_receptor = source.identifier
+            return PreparedReceptor()
+
+        def prepare_ligand(self, smiles, work_dir):
+            return PreparedLigand(canonical_smiles=smiles, pdbqt_path=Path("l.pdbqt"))
+
+        def available(self):
+            return True, "fake"
+
+        def dock(self, receptor, ligand, protocol, work_dir):
+            if self.last_receptor == "6CM4":
+                if ligand.canonical_smiles == "CCN":  # the on-demand calibration ligand
+                    return [DockPose(rank=1, affinity_kcal_per_mol=-9.0)]
+                return [DockPose(rank=1, affinity_kcal_per_mol=-8.0)]
+            return []
+
+    monkeypatch.setattr(agents.selectivity, "make_engine", lambda name, vina_binary=None: Fake())
+    store = Store(tmp_path)
+    params = {"receptors": [{"name": "DRD2", "pdb_id": "6CM4"}], "primary": "DRD2",
+              "calibrate": True, "chembl_calibration": True,
+              "box": {"center": [0, 0, 0], "size": [20, 20, 20]}}
+    res = SelectivityMinion(store).run(_ctx(params))
+    assert res.status.value == "success"
+    art = store.load_artifact(res.artifacts[0].uri, SelectivityAssessment)
+    assert art.calibration.n_points["DRD2"] == 1
+    assert "ON-DEMAND ChEMBL" in art.calibration.note
