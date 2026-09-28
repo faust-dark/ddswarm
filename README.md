@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 32: on-demand binding-affinity baseline)
+# ddswarm — drug discovery multi-agent swarm (Increment 33: expanded medicinal-chemistry SMARTS libraries)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -323,6 +323,28 @@ were evaluated as an on-demand ChEMBL ADMET fetch and found empty for common
 drugs (fluoxetine/citalopram: zero half-life/clearance records; DrugBank content
 is license-gated 403) — so PK stays the reasoning-backend recall that was already
 wired, and there is no fake ChEMBL-PK fetcher.
+
+**Increment 33** expands the deterministic medicinal-chemistry SMARTS libraries
+(the class-agnostic static baseline — every rule applies to any structure, and
+every SMARTS was derived from a reference compound and verified against both the
+class reference and a negative control before shipping):
+
+- `tox_alerts.py` 7 → 22 toxicophores (aromatic amine/azo/azide/hydrazide/
+  isocyanate/isothiocyanate/acyl halide/acrolein/α-halo-carbonyl/sulfonate
+  ester/C-nitroso/vinyl halide/β-lactone/catechol/glyoxal).
+- `cyp_alerts.py` now covers CYP2A6 (coumarin), 2B6 (thienopyridine), 2C8
+  (2,4-diaminopyrimidine), 2E1 (pyrazole) and a second 2D6 motif
+  (1,3-benzodioxole), plus a 4th 3A4 inducer (thiazolidinedione).
+- `herg_alerts.py` gains `HERG_CHEMOTYPES` (aryl-piperazine, phenothiazine,
+  butyrophenone, methanesulfonanilide) that enrich the reason when the
+  descriptor pharmacophore fires — a structural class label, not a new gate.
+- `functional_sign.py` (new): a general functional-sign library for D2, H1, M1,
+  α1A, μ-opioid and κ-opioid (agonist/antagonist by documented chemotype), the
+  same honesty contract as tox/CYP. Distinct μ agonist (N-methyl morphinan,
+  4-phenylpiperidine) vs antagonist (N-allyl / N-cyclopropylmethyl morphinan).
+
+The honesty standard is unchanged: a SMARTS match is a structural fact, the
+label is "potential"/"-like", never a functional-assay verdict.
 
 ## Architecture
 

@@ -56,6 +56,17 @@ def test_warfarin_discriminates_on_basic_amine():
     assert call["basic_amine_motifs"] == [] and not call["flagged"]
 
 
+def test_documented_chemotypes_are_reported():
+    # haloperidol is a butyrophenone; sotalol a methanesulfonanilide.
+    hal = assess_herg(BLOCKERS["haloperidol"])
+    assert hal["flagged"] and "butyrophenone" in hal["chemotype_matches"]
+    sotalol = assess_herg("CC(NC(C)C)c1ccc(NS(=O)(=O)C)cc1")
+    assert "methanesulfonanilide" in sotalol["chemotype_matches"]
+    # a plain basic amine with no documented scaffold reports no chemotype
+    flu = assess_herg(MODERATE["fluoxetine"])
+    assert flu["flagged"] and flu["chemotype_matches"] == []
+
+
 def test_none_and_invalid_clear():
     assert not assess_herg(None)["flagged"]
     assert not assess_herg("")["flagged"]

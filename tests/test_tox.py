@@ -30,7 +30,7 @@ def _profile(store, result):
 
 # ---- alert library ----
 def test_library_has_sources():
-    assert len(TOX_ALERTS) == 7
+    assert len(TOX_ALERTS) == 22
     for a in TOX_ALERTS:
         assert a["name"] and a["smarts"] and a["endpoint"] and a["source"]
 
@@ -39,6 +39,28 @@ def test_nitrobenzene_flags_nitro():
     alerts = match_tox_alerts(Chem.MolFromSmiles(NITROBENZENE))
     names = [a["name"] for a in alerts]
     assert "nitro group" in names
+
+
+def test_new_toxicophores_flag_reference_compounds():
+    cases = {
+        "aromatic primary amine (aniline)": "Nc1ccccc1",
+        "aromatic azo": "c1ccc(-N=N-c2ccccc2)cc1",
+        "azide": "[N-]=[N+]=Nc1ccccc1",
+        "hydrazine / hydrazide": "NNC(=O)c1ccncc1",  # isoniazid
+        "isocyanate": "CN=C=O",
+        "isothiocyanate": "C=CCN=C=S",
+        "acyl halide": "CC(=O)Cl",
+        "alpha-halo carbonyl": "BrCC(=O)c1ccccc1",  # phenacyl bromide
+        "sulfonate ester": "COS(=O)(=O)C",  # methyl mesylate
+        "C-nitroso": "O=Nc1ccccc1",
+        "vinyl halide": "C=CCl",
+        "catechol / ortho-diphenol": "Oc1ccccc1O",
+        "1,2-dicarbonyl (glyoxal)": "O=CC=O",
+    }
+    for name, smi in cases.items():
+        alerts = match_tox_alerts(Chem.MolFromSmiles(smi))
+        names = [a["name"] for a in alerts]
+        assert name in names, f"{name} not flagged for {smi}"
 
 
 def test_gefitinib_no_alerts():

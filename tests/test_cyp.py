@@ -14,12 +14,18 @@ INHIBITORS = {
     "fluoxetine": ("CYP2D6", "CNCCC(c1ccccc1)Oc1ccc(C(F)(F)F)cc1"),
     "omeprazole": ("CYP2C19", "COc1ccc2nc([nH]c2c1)S(=O)Cc1ncc(C)c(OC)c1C"),
     "caffeine": ("CYP1A2", "Cn1c(=O)c2c(ncn2C)n(C)c1=O"),
+    "coumarin": ("CYP2A6", "O=c1ccc2ccccc2o1"),
+    "clopidogrel": ("CYP2B6", "COC(=O)C(c1ccccc1Cl)N1CCc2sccc2C1"),
+    "trimethoprim": ("CYP2C8", "COc1cc(Cc2cnc(N)nc2N)cc(OC)c1OC"),
+    "fomepizole": ("CYP2E1", "Cc1cn[nH]c1"),
+    "mdma": ("CYP2D6", "CNC(C)Cc1ccc2c(c1)OCO2"),
 }
 
 INDUCERS = {
     "phenobarbital": ("CYP3A4", "CCC1(C(=O)NC(=O)NC1=O)c1ccccc1"),
     "phenytoin": ("CYP3A4", "O=C1NC(=O)C(c2ccccc2)(c2ccccc2)N1"),
     "carbamazepine": ("CYP3A4", "O=C1Nc2ccccc2-c2ccccc2C=C1"),
+    "rosiglitazone": ("CYP3A4", "CN(CCOc1ccc(cc1)CC1SC(=O)NC1=O)c1ccccn1"),
 }
 
 NEGATIVES = {

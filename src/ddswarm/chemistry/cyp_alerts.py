@@ -9,7 +9,9 @@ contains a documented chemotype), but the label is "potential inhibitor/inducer"
 The library is small and non-exhaustive. Induction is a weak 2D-structure signal
 (PXR/CAR/AhR-driven, poorly captured by SMARTS), so induction alerts carry a
 harder caveat. Enzymes covered by at least one clean chemotype: CYP3A4, 2C9,
-2C19, 2D6, 1A2.
+2C19, 2D6, 1A2, 2A6, 2B6, 2C8, 2E1. Rifampicin (the strongest clinical PXR
+inducer) and St. John's wort (hyperforin) are intentionally omitted — their
+macrolide-ansamycin / phloroglucinol scaffolds have no clean 2D SMARTS.
 """
 
 from __future__ import annotations
@@ -33,15 +35,27 @@ INHIBITION_ALERTS: list[tuple[str, str, str, str]] = [
      "benzimidazole proton-pump inhibitor (omeprazole/lansoprazole) — CYP2C19; Li et al. 2004"),
     ("CYP1A2", "purine_xanthine", "c1ncnc2ncnc12",
      "purine/methylxanthine (caffeine/theophylline) — CYP1A2 substrate/inhibitor; Kot & Daniel 2008"),
+    ("CYP2A6", "coumarin", "O=c1ccc2ccccc2o1",
+     "coumarin (probe substrate) / furanocoumarin methoxsalen mechanism-based inactivator — CYP2A6; Pelkonen et al. 2000"),
+    ("CYP2B6", "thienopyridine", "c1cc2c(s1)CCNC2",
+     "thienopyridine (clopidogrel/ticlopidine/prasugrel) mechanism-based inhibitor — CYP2B6; Richter et al. 2004"),
+    ("CYP2C8", "diaminopyrimidine", "Nc1nc(N)ncc1",
+     "2,4-diaminopyrimidine (trimethoprim) — CYP2C8 inhibitor; Wen et al. 2002"),
+    ("CYP2E1", "pyrazole", "c1cn[nH]c1",
+     "pyrazole (fomepizole / 4-methylpyrazole) — CYP2E1 inhibitor; Blomme et al."),
+    ("CYP2D6", "methylenedioxybenzene", "C1Oc2ccccc2O1",
+     "1,3-benzodioxole methylenedioxy (paroxetine/MDMA) — CYP2D6 mechanism-based inhibitor; Bertelsen et al. 2003"),
 ]
 
 INDUCTION_ALERTS: list[tuple[str, str, str, str]] = [
     ("CYP3A4", "barbiturate", "O=C1NC(=O)NC(=O)C1",
-     "barbiturate (phenobarbital) — PXR-mediated CYP3A4 induction; Lehmann et al. 1998"),
+     "barbiturate (phenobarbital) — PXR/CAR-mediated CYP3A4 induction; Lehmann et al. 1998"),
     ("CYP3A4", "hydantoin", "O=C1NC(=O)CN1",
-     "hydantoin (phenytoin) — PXR-mediated CYP3A4 induction; Lehmann et al. 1998"),
+     "hydantoin (phenytoin) — PXR/CAR-mediated CYP3A4 induction; Lehmann et al. 1998"),
     ("CYP3A4", "dibenzoazepine", "N1C(=O)C=Cc2ccccc2-c2ccccc21",
      "dibenzoazepine (carbamazepine) — PXR-mediated CYP3A4 induction; Bertilsson et al."),
+    ("CYP3A4", "thiazolidinedione", "O=C1NC(=O)SC1",
+     "thiazolidinedione (rosiglitazone/pioglitazone) — PXR-mediated CYP3A4 induction; Sahi et al. 2003"),
 ]
 
 

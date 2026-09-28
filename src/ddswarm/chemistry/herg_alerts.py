@@ -37,6 +37,27 @@ BASIC_AMINE_SMARTS: list[tuple[str, str, str]] = [
      "Sanguinetti & Tristani-Firouzi 2006 (Nature) hERG blockers"),
 ]
 
+# Documented hERG-binding SCAFFOLDS (structural classes strongly associated with
+# Kv11.1 blockade). These do NOT set the flag on their own — the descriptor
+# pharmacophore (basic amine + >=2 aromatics + cLogP) is the mechanistic gate —
+# they ENRICH the reason with the specific class when a molecule both matches a
+# chemotype AND clears the gate. A chemotype match is a structural fact, not a
+# functional assay.
+HERG_CHEMOTYPES: list[tuple[str, str, str]] = [
+    ("arylpiperazine",
+     "c1ccc(N2CCNCC2)cc1",
+     "N-aryl-piperazine class (ziprasidone/trazodone) — hERG-binding scaffold; Aronov 2005"),
+    ("phenothiazine",
+     "c1ccc2Sc3ccccc3Nc2c1",
+     "phenothiazine tricyclic (chlorpromazine/thioridazine) — classic hERG blocker; Thomas et al. 2006"),
+    ("butyrophenone",
+     "[cR1]C(=O)CCCN",
+     "butyrophenone (haloperidol/droperidol) — hERG blocker; Suessbrich et al. 1997"),
+    ("methanesulfonanilide",
+     "CS(=O)(=O)N[c]",
+     "methanesulfonanilide (dofetilide/sotalol) — class III antiarrhythmic hERG blocker; Mitcheson et al. 2000"),
+]
+
 # Pharmacophore thresholds.
 AROMATIC_RING_MIN = 2
 CLOGP_MIN = 3.0
@@ -46,13 +67,14 @@ def assess_herg(smiles: str | None) -> dict:
     """Return a hERG-liability assessment dict for one molecule.
 
     Keys: flagged (bool), basic_amine_motifs (list[str]), aromatic_rings (int),
-    clogp (float | None), reason (str).
+    clogp (float | None), chemotype_matches (list[str]), reason (str).
     """
     empty = {
         "flagged": False,
         "basic_amine_motifs": [],
         "aromatic_rings": 0,
         "clogp": None,
+        "chemotype_matches": [],
         "reason": "invalid or empty SMILES",
     }
     if not smiles:
@@ -63,6 +85,8 @@ def assess_herg(smiles: str | None) -> dict:
 
     motifs = [slug for slug, smarts, _cit in BASIC_AMINE_SMARTS
               if mol.HasSubstructMatch(Chem.MolFromSmarts(smarts))]
+    chemotypes = [slug for slug, smarts, _cit in HERG_CHEMOTYPES
+                  if mol.HasSubstructMatch(Chem.MolFromSmarts(smarts))]
     arom = rdMolDescriptors.CalcNumAromaticRings(mol)
     logp = Descriptors.MolLogP(mol)
 
@@ -75,13 +99,16 @@ def assess_herg(smiles: str | None) -> dict:
     elif logp < CLOGP_MIN:
         reason = f"cLogP {logp:.2f} below the lipophilicity gate ({CLOGP_MIN}); too polar to reach the channel"
     else:
+        class_hint = f"; known hERG scaffold ({', '.join(chemotypes)})" if chemotypes else ""
         reason = (f"basic amine ({', '.join(motifs)}) + {arom} aromatic rings + "
-                  f"cLogP {logp:.2f} — predicted potential hERG liability (not a functional assay)")
+                  f"cLogP {logp:.2f} — predicted potential hERG liability (not a functional assay)"
+                  f"{class_hint}")
 
     return {
         "flagged": flagged,
         "basic_amine_motifs": motifs,
         "aromatic_rings": arom,
         "clogp": round(logp, 2),
+        "chemotype_matches": chemotypes,
         "reason": reason,
     }
