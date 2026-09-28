@@ -125,10 +125,14 @@ class ReportMinion(Agent):
         if iupac_enabled and ranked:
             for c in ranked:
                 c.iupac_name = fetch_iupac_name(c.smiles)
-            caveats.append("IUPAC names were fetched from the NIH CACTUS web service — "
-                           "readability-only, non-deterministic (network + third-party), "
-                           "not authoritative.")
+            caveats.append("IUPAC names were fetched from the NIH CACTUS / PubChem web "
+                           "services — readability-only, non-deterministic (network + "
+                           "third-party), not authoritative.")
         identified = ranked[0] if ranked else None
+        if iupac_enabled and identified is not None and not identified.iupac_name:
+            caveats.append("IUPAC name unavailable for the identified candidate — "
+                           "CACTUS and PubChem could not name this scaffold; it is "
+                           "identified by canonical SMILES + InChIKey.")
 
         input_hash = hash_jsonable({
             kind: [a.model_dump(mode="json", exclude={"provenance", "run_id"}) for a in arts]

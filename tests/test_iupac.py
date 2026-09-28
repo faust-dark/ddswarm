@@ -41,3 +41,15 @@ def test_fetch_iupac_name_error_returns_none(monkeypatch):
 def test_fetch_iupac_name_empty_returns_none(monkeypatch):
     monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout: _FakeResp("  "))
     assert fetch_iupac_name("c1ccccc1") is None
+
+
+def test_fetch_iupac_name_pubchem_fallback(monkeypatch):
+    def fake_open(url, timeout):
+        if "cactus" in url:
+            return _FakeResp("")  # CACTUS cannot name it
+        if "pubchem" in url:
+            return _FakeResp('{"PropertyTable":{"Properties":[{"IUPACName":"benzene"}]}}')
+        raise OSError(f"unexpected url {url}")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_open)
+    assert fetch_iupac_name("c1ccccc1") == "benzene"
