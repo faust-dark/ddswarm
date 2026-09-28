@@ -32,17 +32,18 @@ class PatentMinion(Agent):
         backend_name = ctx.params.get("reasoning_backend", "none")
 
         if backend_name in (None, "", "none"):
-            return self._insufficient(
-                ctx, input_hash,
-                "requires reasoning.backend=hermes; no deterministic offline source for patent/FTO knowledge")
+            return self._not_assessed(
+                ctx, input_hash, backend_name,
+                "patent/FTO landscape not performed: requires reasoning.backend=hermes")
 
         backend, note = self._resolve_backend(ctx, warnings)
         if backend is None:
-            return self._insufficient(ctx, input_hash, note)
+            return self._not_assessed(ctx, input_hash, backend_name, note)
 
         res = backend.patent_landscape(ctx.spec, molecules, ctx.params)
         if not res.ok:
-            return self._insufficient(ctx, input_hash, f"reasoning failed: {res.note}")
+            return self._not_assessed(
+                ctx, input_hash, backend_name, f"patent/FTO reasoning failed: {res.note}")
 
         entries: list[PatentEntry] = []
         for i, raw in enumerate(res.entries):
@@ -52,7 +53,9 @@ class PatentMinion(Agent):
                 warnings.append(f"patent entry {i} invalid, skipped: {exc}")
 
         if not entries:
-            return self._insufficient(ctx, input_hash, "reasoning returned no valid patent entries")
+            return self._not_assessed(
+                ctx, input_hash, backend_name,
+                "patent/FTO landscape empty: reasoning returned no valid patent entries")
 
         relevance_counts: dict[str, int] = {}
         for e in entries:
@@ -82,12 +85,35 @@ class PatentMinion(Agent):
             tool_versions=[TOOL], reproducibility={"input_hash": input_hash},
         )
 
-    def _insufficient(self, ctx: AgentContext, input_hash: str, message: str) -> AgentResult:
+    def _not_assessed(self, ctx: AgentContext, input_hash: str, backend_name: str | None,
+                      reason: str) -> AgentResult:
+        """Non-gating baseline so patent_minion can sit in DEFAULT_PIPELINE.
+
+        Without a reasoning backend (or when it fails) the agent returns SUCCESS
+        with an empty PatentLandscape and an explicit 'patent status UNKNOWN'
+        note — never a fabricated clear, and never insufficient_evidence (which
+        would gate report/validation in the default graph)."""
+        note = (f"{reason}; patent status UNKNOWN — this run does NOT establish "
+                "novelty or freedom-to-operate")
+        payload = PatentLandscape(
+            project_id=ctx.project_id, status=AgentResultStatus.success,
+            entries=[], summary=PatentSummary(total_entries=0, relevance_counts={}, flagged=0),
+            note=note,
+            provenance=[ProvenanceEntry(
+                source="patent_minion (no reasoning backend or backend failure)",
+                tool_versions=[TOOL], input_hash=input_hash,
+                params={"reasoning_backend": backend_name},
+            )],
+        )
+        art = self.persist_artifact(ctx, "patent_landscape", f"pl_{ctx.project_id}", payload)
         return AgentResult(
             project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
-            status=AgentResultStatus.insufficient_evidence, warnings=[message],
-            provenance=[ProvenanceEntry(source="patent assessment", input_hash=input_hash)],
-            tool_versions=[TOOL], reproducibility={"reason": "requires_reasoning_backend"},
+            status=AgentResultStatus.success, artifacts=[art], input_refs=ctx.input_refs,
+            findings=[f"patent/FTO landscape: not assessed ({reason})"],
+            warnings=[note],
+            provenance=[ProvenanceEntry(source="patent landscape", output_hash=art.hash,
+                                        tool_versions=[TOOL])],
+            tool_versions=[TOOL], reproducibility={"input_hash": input_hash},
         )
 
     def _collect_molecules(self, ctx: AgentContext) -> list[tuple[str, str]]:

@@ -1,9 +1,12 @@
 """Tests for the knowledge agents (patent/clinical/regulatory).
 
 All three delegate to a reasoning backend and have NO deterministic offline
-source, so without `reasoning.backend=hermes` they return insufficient_evidence.
-Delegation is tested offline with a fake 'hermes' script (same pattern as
-test_reasoning.py). Every LLM entry must come back evidence_level='inferred'.
+source. Clinical/regulatory still return insufficient_evidence without
+`reasoning.backend=hermes`; patent_minion now returns SUCCESS with an empty
+landscape + 'patent status UNKNOWN' note (non-gating, since it sits in
+DEFAULT_PIPELINE). Delegation is tested offline with a fake 'hermes' script
+(same pattern as test_reasoning.py). Every LLM entry must come back
+evidence_level='inferred'.
 """
 
 import json
@@ -66,9 +69,17 @@ def _load(store, result, model):
 
 
 # ---- patent ----
-def test_patent_insufficient_without_backend(tmp_path):
-    result = _run(PatentMinion, Store(tmp_path), _spec(), {})
-    assert result.status.value == "insufficient_evidence"
+def test_patent_not_assessed_without_backend(tmp_path):
+    # Non-gating baseline: without a backend patent_minion returns SUCCESS with an
+    # empty landscape + an explicit 'patent status UNKNOWN' note, never
+    # insufficient_evidence (which would gate report/validation in DEFAULT_PIPELINE).
+    store = Store(tmp_path)
+    result = _run(PatentMinion, store, _spec(), {})
+    assert result.status.value == "success"
+    pl = _load(store, result, PatentLandscape)
+    assert pl.summary.total_entries == 0
+    assert pl.summary.flagged == 0
+    assert pl.note is not None and "UNKNOWN" in pl.note
 
 
 def test_patent_delegation(tmp_path):

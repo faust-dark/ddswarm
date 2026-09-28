@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 36: IUPAC name default-on in identified candidate)
+# ddswarm — drug discovery multi-agent swarm (Increment 37: patent/FTO landscape in the default pipeline)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -389,6 +389,19 @@ reproducibility hash. Caveat: CACTUS can fail to name a few structures (some
 novel scaffolds, specific stereochemistries) and then the section falls back to
 SMILES + InChIKey — the machine identifiers always remain.
 
+**Increment 37** brings the patent / freedom-to-operate landscape into the
+default pipeline so every run reports whether the candidate may already be
+claimed (a competitor's pipeline). `patent_minion` is added to
+`DEFAULT_PIPELINE` (depends on `screen`, feeds `report`) with a NON-GATING
+baseline: without `reasoning.backend=hermes` it returns `success` with an empty
+landscape and an explicit "patent status UNKNOWN — this run does NOT establish
+novelty or freedom-to-operate" note (in the executive summary, gaps, caveats,
+and the PDF's Patent-landscape section), so it never fabricates a "clear" and
+never gates the report. With hermes it delegates to the reasoning backend as
+before. Honesty unchanged: every entry is LLM recall forced to `inferred` and
+tagged "verify against primary source"; the agent is a research aid, not a legal
+FTO/novelty opinion.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -438,7 +451,9 @@ SMILES + InChIKey — the machine identifiers always remain.
   - `patent_minion` — patent / freedom-to-operate landscape for the candidates
     and/or target, delegated to the Hermes reasoning backend; every entry is LLM
     recall forced to `inferred` + "verify against primary source". A research
-    aid, NOT a legal freedom-to-operate opinion.
+    aid, NOT a legal freedom-to-operate opinion. In the default pipeline since
+    Increment 37: without a backend it returns an empty landscape with an
+    explicit "patent status UNKNOWN" note (non-gating), never a fabricated clear.
   - `clinical_minion` — clinical-stage knowledge (known drugs, trial phase,
     indication, status) for the target/candidates, delegated to the reasoning
     backend; every entry `inferred`.
@@ -668,21 +683,23 @@ green result, and it never blocks the run — it is an audit, not a gate).
 ## Knowledge agents (Increment 8)
 
 `patent_minion`, `clinical_minion`, and `regulatory_minion` are *knowledge*
-agents with no deterministic offline source, so they are opt-in (not in the
-default pipeline) and run only when `reasoning.backend=hermes` is configured.
-Each delegates through three new `ReasoningBackend` methods
+agents with no deterministic offline source. `patent_minion` sits in the default
+pipeline (its novelty check is wanted on every run) with a NON-GATING baseline:
+without `reasoning.backend=hermes` it returns `success` with an empty
+`PatentLandscape` and a "patent status UNKNOWN" note — never a fabricated clear,
+and never `insufficient_evidence` (which would gate the report). `clinical_minion`
+and `regulatory_minion` remain opt-in and still return `insufficient_evidence`
+without a backend. Each delegates through a `ReasoningBackend` method
 (`patent_landscape`, `clinical_assessment`, `regulatory_assessment`) and
-validates the returned raw dicts against its contract. Without a backend they
-return `insufficient_evidence` — they never fabricate patent numbers, trial
-data, or designations.
+validates the returned raw dicts against its contract.
 
 Every entry is forced to `evidence_level='inferred'` and tagged "verify against
 primary source": an LLM-recalled patent number is not an observed fact. The
 patent agent only counts relevance (how many entries the LLM labelled
 `covers_candidate`); it does NOT render a freedom-to-operate or infringement
-opinion. To run them, add the three tasks with `params.reasoning_backend =
-"hermes"` (plus `reasoning_command`), or set the top-level `reasoning.backend`,
-which the CLI propagates to every task.
+opinion. To run them, add the tasks with `params.reasoning_backend = "hermes"`
+(plus `reasoning_command`), or set the top-level `reasoning.backend`, which the
+CLI propagates to every task.
 
 ## CLI & reasoning backend
 
@@ -702,10 +719,11 @@ ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile ma
 ```
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
-If `tasks` is omitted a default pipeline runs (safety -> research -> design ->
-screen -> predict -> retrosynth -> tox -> formulation -> report -> validation ->
-report_pdf);
-docking and dynamics are opt-in (need the Vina binary / OpenMM + network).
+If `tasks` is omitted a default pipeline runs (safety -> research -> overview ->
+design -> screen -> predict -> retrosynth -> tox -> cyp -> herg -> formulation ->
+patent -> report -> export -> validation -> report_pdf);
+docking, dynamics, selectivity, and grounding are opt-in (need the Vina binary /
+OpenMM + network / live APIs).
 `report` writes `finding` + `feedback` to project memory, closing the loop: the
 next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
 `ddswarm run` copies it to `reports/<project_id>.pdf` (override with
@@ -720,8 +738,9 @@ This is now the **default**: `reasoning.backend` defaults to `hermes`, so
 `"reasoning": {"backend": "none"}`) to run the deterministic baseline only.
 When the backend is unavailable the deterministic agents fall
 back to their baseline — seed assembly, transformation labels, SA score — while
-the knowledge agents return `insufficient_evidence` (they have no offline
-baseline). LLM-contributed entries are forced to `evidence_level`
+`clinical_minion`/`regulatory_minion` return `insufficient_evidence` (no offline
+baseline) and `patent_minion` returns an empty landscape with a "patent status
+UNKNOWN" note. LLM-contributed entries are forced to `evidence_level`
 `inferred`/`hypothetical` and tagged "verify against primary source", because a
 recalled PubChem ID or patent number is not experimental evidence.
 

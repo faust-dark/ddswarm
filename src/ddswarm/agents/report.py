@@ -114,6 +114,11 @@ class ReportMinion(Agent):
         gaps = self._gaps(by_kind)
         next_steps = self._next_steps(gaps)
         caveats = self._caveats()
+        pls = by_kind.get("patent_landscape", [])
+        if pls and sum(p.summary.total_entries for p in pls) == 0:
+            caveats.append("Patent/FTO landscape was NOT assessed (no reasoning backend) — "
+                           "patent status UNKNOWN; this report does not establish novelty "
+                           "or freedom-to-operate.")
         ranked = self._rank_survivors(by_kind)
         # Opt-in IUPAC readability labels (network service; non-deterministic).
         iupac_enabled = bool(ctx.params.get("iupac"))
@@ -321,8 +326,12 @@ class ReportMinion(Agent):
             parts.append(f"safety {sas[0].verdict} ({sum(s.summary.total_flags for s in sas)} flags)")
         pls = by_kind.get("patent_landscape", [])
         if pls:
-            parts.append(f"patent {sum(p.summary.total_entries for p in pls)} entries "
-                         f"({sum(p.summary.flagged for p in pls)} covering)")
+            total = sum(p.summary.total_entries for p in pls)
+            flagged = sum(p.summary.flagged for p in pls)
+            if total == 0:
+                parts.append("patent/FTO: not assessed")
+            else:
+                parts.append(f"patent {total} entries ({flagged} covering)")
         cas = by_kind.get("clinical_assessment", [])
         if cas:
             phases: dict[str, int] = {}
@@ -387,7 +396,11 @@ class ReportMinion(Agent):
         if "formulation_assessment" not in by_kind:
             gaps.append("no formulation assessment performed this run")
         if "patent_landscape" not in by_kind:
-            gaps.append("no patent/FTO landscape (opt-in; needs reasoning.backend=hermes)")
+            gaps.append("no patent/FTO landscape (patent task absent from this run's pipeline)")
+        else:
+            pls = by_kind.get("patent_landscape", [])
+            if pls and sum(p.summary.total_entries for p in pls) == 0:
+                gaps.append("patent/FTO landscape not assessed (no reasoning backend) — patent status unknown")
         if "clinical_assessment" not in by_kind:
             gaps.append("no clinical assessment (opt-in; needs reasoning.backend=hermes)")
         if "clinical_simulation" not in by_kind:
@@ -429,8 +442,12 @@ class ReportMinion(Agent):
             steps.append("reconsider screening filters or the starting scaffold")
         if any("routes" in g for g in gaps):
             steps.append("enable reasoning.backend=hermes to propose synthesis routes and analogs")
-        if any("patent" in g or "clinical" in g or "regulatory" in g for g in gaps):
-            steps.append("enable reasoning.backend=hermes and add patent/clinical/regulatory tasks for a knowledge landscape")
+        if any("patent" in g and "not assessed" in g for g in gaps):
+            steps.append("enable reasoning.backend=hermes to run the patent/FTO landscape")
+        if any("no patent/FTO landscape" in g for g in gaps):
+            steps.append("add the patent task to the pipeline for a patent/FTO landscape")
+        if any("clinical" in g or "regulatory" in g for g in gaps):
+            steps.append("enable reasoning.backend=hermes and add clinical/regulatory tasks for a knowledge landscape")
         if any("clean-toxicity" in g for g in gaps):
             steps.append("extend the toxicophore library with more sourced alerts")
         if not steps:

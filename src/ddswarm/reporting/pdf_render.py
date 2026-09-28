@@ -1001,9 +1001,14 @@ def _narrative_knowledge_agents(by_kind, para, sub) -> None:
         if kind in by_kind:
             sub(stage, agent)
             n = sum(len(p.entries) for p in by_kind[kind])
-            para(f"The {stage.lower()} contributed {n} entr{'y' if n == 1 else 'ies'} "
-                 "(LLM-recalled, evidence level: inferred). These are research aids, not legal "
-                 "or regulatory determinations.")
+            if kind == "patent_landscape" and n == 0:
+                note = by_kind[kind][0].note or \
+                    "Patent/FTO landscape not performed — patent status UNKNOWN."
+                para(note)
+            else:
+                para(f"The {stage.lower()} contributed {n} entr{'y' if n == 1 else 'ies'} "
+                     "(LLM-recalled, evidence level: inferred). These are research aids, not legal "
+                     "or regulatory determinations.")
     for rc in by_kind.get("regulatory_checklist", []):
         sub("Regulatory readiness (7D)", "regulatory_minion")
         _narrative_regulatory_checklist(rc, para)
