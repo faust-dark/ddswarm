@@ -12,6 +12,7 @@ from .grounding import GroundingMinion
 from .herg import HergMinion
 from .memory_minion import MemoryMinion
 from .orchestrator import OrchestratorMinion
+from .overview import OverviewMinion
 from .patent import PatentMinion
 from .predictor import PredictorMinion
 from .regulatory import RegulatoryMinion
@@ -28,7 +29,7 @@ from .validation import ValidationMinion
 __all__ = [
     "Agent", "AgentContext", "ClinicalMinion", "CypMinion", "DesignerMinion",
     "DockingMinion", "DynamicsMinion", "ExportMinion", "FormulationMinion", "GroundingMinion", "HergMinion", "PatentMinion",
-    "PredictorMinion", "MemoryMinion", "OrchestratorMinion",
+    "PredictorMinion", "MemoryMinion", "OrchestratorMinion", "OverviewMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",
     "SafetyMinion", "ScreenerMinion", "SelectivityMinion", "ToxMinion", "ValidationMinion",

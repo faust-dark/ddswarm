@@ -23,6 +23,7 @@ from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.generation_memory import GenerationMemory
 from ..contracts.knowledge_pack import KnowledgePack
+from ..contracts.overview_report import OverviewReport
 from ..contracts.memory import MemoryEntry
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -46,6 +47,7 @@ TOOL = ToolVersion(name="ddswarm", version="0.1.0")
 
 _KIND_MODELS: dict[str, type] = {
     "knowledge_pack": KnowledgePack,
+    "overview_report": OverviewReport,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,
     "admet_prediction": AdmetPrediction,
@@ -231,6 +233,11 @@ class ReportMinion(Agent):
                     c[e.evidence_level.value] += 1
                 for a in m.binding_affinities:
                     c[a.evidence_level.value] += 1
+        for ov in by_kind.get("overview_report", []):
+            for f in (ov.mechanism_of_action, ov.chemical_structure, ov.therapeutic_uses):
+                if f:
+                    c["inferred"] += 1
+            c["observed"] += len(ov.own_database_facts)
         for sa in by_kind.get("safety_assessment", []):
             for f in sa.flags:
                 c[f.evidence_level.value] += 1

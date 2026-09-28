@@ -99,6 +99,8 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert doc.page_count >= 1
     assert doc.figure_count >= 1
     assert doc.pdf_hash
+    assert "Prompt" in doc.sections
+    assert "Overview" in doc.sections
     assert "Conclusion" in doc.sections
     assert "Evidence and confidence" in doc.sections
     assert "Identified candidate" in doc.sections

@@ -45,6 +45,18 @@
           "title": "Starting Materials",
           "type": "array"
         },
+        "user_prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Prompt"
+        },
         "mechanism_of_action": {
           "anyOf": [
             {

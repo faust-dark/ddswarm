@@ -18,6 +18,7 @@ from .formulation_assessment import FormulationAssessment
 from .generation_memory import GenerationMemory
 from .knowledge_pack import KnowledgePack
 from .memory import ProjectMemory
+from .overview_report import OverviewReport
 from .patent_landscape import PatentLandscape
 from .project_spec import ProjectSpec
 from .regulatory_assessment import RegulatoryAssessment
@@ -46,6 +47,7 @@ MODELS: dict[str, type] = {
     "TaskSpec": TaskSpec,
     "EventLog": EventLog,
     "KnowledgePack": KnowledgePack,
+    "OverviewReport": OverviewReport,
     "DesignBatch": DesignBatch,
     "ScreenedBatch": ScreenedBatch,
     "DockingResult": DockingResult,

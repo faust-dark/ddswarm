@@ -53,6 +53,7 @@ from .event_log import EventLog
 from .herg_assessment import HergAssessment, HergSummary, MoleculeHergProfile
 from .knowledge_pack import KnowledgePack, KnowledgePackEntry
 from .memory import MemoryEntry, ProjectMemory
+from .overview_report import OverviewReport
 from .patent_landscape import PatentEntry, PatentLandscape, PatentSummary
 from .project_spec import ProjectSpec
 from .regulatory_assessment import RegulatoryAssessment, RegulatoryFinding, RegulatorySummary
@@ -158,6 +159,7 @@ __all__ = [
     "MoleculeSelectivity",
     "MoleculeToxAssessment",
     "ModelSelectionMetrics",
+    "OverviewReport",
     "PDParameters",
     "PDSimulation",
     "PeripheralCompartment",

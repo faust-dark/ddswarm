@@ -445,6 +445,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
     kps = by_kind.get("knowledge_pack", [])
     dbs = by_kind.get("design_batch", [])
     sels = by_kind.get("selectivity_assessment", [])
+    ovs = by_kind.get("overview_report", [])
 
     survivors = _survivors(by_kind)
     n_passed = sum(s.summary.passed for s in sbs)
@@ -461,6 +462,43 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
                                styles["subtitle"]))
         story.append(Paragraph(_esc("In-silico drug-discovery report — every score below is calculated "
                                     "or predicted, never experimental evidence."), styles["subtitle"]))
+
+        # ---- user prompt: the input that started this research ----
+        section("Prompt")
+        para(project_spec.user_prompt or project_spec.objective)
+
+        # ---- overview: mechanism of action, structure, therapeutic uses ----
+        section("Overview")
+        ov = ovs[0] if ovs else None
+        if ov is not None:
+            for heading, text in (
+                ("Mechanism of action", ov.mechanism_of_action),
+                ("Chemical structure", ov.chemical_structure),
+                ("Therapeutic uses", ov.therapeutic_uses),
+            ):
+                if text:
+                    story.append(Paragraph(_esc(heading), styles["h2"]))
+                    para(text)
+            if ov.own_database_facts:
+                story.append(Paragraph(_esc("Known target data (own databases)"), styles["h2"]))
+                bullets(ov.own_database_facts)
+            if ov.citations:
+                story.append(Paragraph(_esc("References"), styles["h2"]))
+                bullets(ov.citations)
+        else:
+            # Fallback when no overview_minion ran (custom pipeline / old store):
+            # echo only the structured ProjectSpec fields, never fabricate.
+            if project_spec.mechanism_of_action:
+                story.append(Paragraph(_esc("Mechanism of action"), styles["h2"]))
+                para(project_spec.mechanism_of_action)
+            if project_spec.indication:
+                story.append(Paragraph(_esc("Therapeutic uses"), styles["h2"]))
+                para(project_spec.indication)
+            if project_spec.existing_drugs:
+                bullets(["Existing drugs: " + ", ".join(project_spec.existing_drugs)])
+            if not (project_spec.mechanism_of_action or project_spec.indication
+                    or project_spec.existing_drugs):
+                para("No overview narrative was generated for this run.")
 
         # ---- reasoning preamble (why and how we reached these candidates) ----
         section("Reasoning and plan")

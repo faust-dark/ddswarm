@@ -17,6 +17,7 @@ class ProjectSpec(BaseModel):
     targets: list[str] = Field(default_factory=list)
     starting_materials: list[str] = Field(default_factory=list)
     # ---- primary input, per the swarm workflow schema ----
+    user_prompt: str | None = None
     mechanism_of_action: str | None = None
     indication: str | None = None
     existing_drugs: list[str] = Field(default_factory=list)

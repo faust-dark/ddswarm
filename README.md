@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 33: expanded medicinal-chemistry SMARTS libraries)
+# ddswarm — drug discovery multi-agent swarm (Increment 34: Prompt + Overview intro in the PDF report)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -345,6 +345,24 @@ class reference and a negative control before shipping):
 
 The honesty standard is unchanged: a SMARTS match is a structural fact, the
 label is "potential"/"-like", never a functional-assay verdict.
+
+**Increment 34** opens the final PDF with the user's own prompt and a
+plain-language overview. `overview_minion` (new, in DEFAULT_PIPELINE) emits an
+`OverviewReport` with two kinds of content, kept distinct:
+
+- **deterministic own-database facts** — the curated receptor registry entry
+  (gene / family / PDB / reference) for each named target plus the starting
+  materials (evidence_level `observed`); always present.
+- **LLM-recalled narrative** — mechanism of action, chemical structure, and
+  therapeutic uses from the reasoning backend (`inferred`), present only when a
+  backend is configured.
+
+The agent always succeeds (deterministic baseline), so it never gates the
+report on a missing backend. The PDF renderer puts a verbatim **Prompt** section
+(the `ProjectSpec.user_prompt`, falling back to `objective`) and an **Overview**
+section (MoA / structure / uses / own-DB facts / references) at the very top,
+before "Reasoning and plan". `ProjectSpec` gains the optional `user_prompt`
+field; `ReasoningBackend.overview()` is the new delegation hook.
 
 ## Architecture
 

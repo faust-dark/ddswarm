@@ -23,6 +23,7 @@ from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.generation_memory import GenerationMemory
 from ..contracts.knowledge_pack import KnowledgePack
+from ..contracts.overview_report import OverviewReport
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.regulatory_assessment import RegulatoryAssessment
@@ -52,6 +53,7 @@ ARTIFACT_MODELS: dict[str, type] = {
     "dynamics_result": DynamicsResult,
     "formulation_assessment": FormulationAssessment,
     "knowledge_pack": KnowledgePack,
+    "overview_report": OverviewReport,
     "design_batch": DesignBatch,
     "screened_batch": ScreenedBatch,
     "retrosynthesis_plan": RetrosynthesisPlan,

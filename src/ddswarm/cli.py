@@ -25,6 +25,7 @@ from .agents import (
     FormulationMinion,
     MemoryMinion,
     OrchestratorMinion,
+    OverviewMinion,
     PatentMinion,
     PredictorMinion,
     RegulatoryMinion,
@@ -56,6 +57,7 @@ from .orchestrator.memory import MemoryStore
 DEFAULT_PIPELINE = [
     RunTask(task_id="safety", agent="safety_minion"),
     RunTask(task_id="research", agent="researcher_minion", params={"seed_entries": []}),
+    RunTask(task_id="overview", agent="overview_minion", depends_on=["research"]),
     RunTask(task_id="design", agent="designer_minion", depends_on=["research", "safety"]),
     RunTask(task_id="screen", agent="screener_minion", depends_on=["design"]),
     RunTask(task_id="predict", agent="predictor_minion", depends_on=["screen"],
@@ -65,7 +67,7 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="cyp", agent="cyp_minion", depends_on=["screen"]),
     RunTask(task_id="herg", agent="herg_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
-    RunTask(task_id="report", agent="report_minion", depends_on=["predict", "retrosynth", "tox", "cyp", "herg", "formulation"]),
+    RunTask(task_id="report", agent="report_minion", depends_on=["overview", "predict", "retrosynth", "tox", "cyp", "herg", "formulation"]),
     RunTask(task_id="export", agent="export_minion", depends_on=["report"]),
     RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
     RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation", "export"]),
@@ -104,6 +106,7 @@ def build_agents(store: Store) -> dict:
         "regulatory_minion": RegulatoryMinion(store),
         "orchestrator_minion": OrchestratorMinion(store),
         "memory_minion": MemoryMinion(store),
+        "overview_minion": OverviewMinion(store),
         "report_minion": ReportMinion(store),
         "report_pdf_minion": ReportPdfMinion(store),
     }
@@ -113,7 +116,7 @@ def _inject_reasoning(tasks: list[RunTask], reasoning: ReasoningConfig | None) -
     if reasoning is None or reasoning.backend in (None, "", "none"):
         return tasks
     for t in tasks:
-        if t.agent in ("researcher_minion", "designer_minion", "retrosynthesis_minion",
+        if t.agent in ("researcher_minion", "overview_minion", "designer_minion", "retrosynthesis_minion",
                        "patent_minion", "clinical_minion", "regulatory_minion"):
             t.params.setdefault("reasoning_backend", reasoning.backend)
             if reasoning.command:

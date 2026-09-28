@@ -203,6 +203,30 @@ code fences. Each object must have exactly these keys:
 """
 
 
+_OVERVIEW_PROMPT = """You are a medicinal chemist writing the opening overview of a drug-discovery report.
+
+Project objective: {objective}
+User prompt: {user_prompt}
+Target(s): {targets}
+Starting material / scaffold SMILES: {smiles}
+
+Write a concise, factual overview for a scientist, in THREE parts. Each part is
+a short prose paragraph (2-4 sentences), plain language, no lists. Do NOT
+fabricate: if you are unsure of something, say "not established from recalled
+knowledge" rather than inventing it. Distinguish clearly what is well-known
+approved-drug pharmacology from what is speculative.
+
+Respond with ONLY a single JSON object — no markdown, no prose, no code fences.
+The object must have exactly these keys:
+  "mechanism_of_action": the mechanism of action of the target / class (or null),
+  "chemical_structure": the key structural features of the scaffold and its
+                        known pharmacophore (or null),
+  "therapeutic_uses": the established or investigational therapeutic uses of the
+                      class (or null),
+  "citations": [up to 5 key literature or database references as strings].
+"""
+
+
 def extract_json_list(text: str) -> list | None:
     """Parse a JSON array from a subagent's text output, tolerating surrounding
     prose, markdown fences, a trailing truncated tail, and multiple arrays.
@@ -340,6 +364,16 @@ class HermesSubprocessBackend(ReasoningBackend):
             objective=spec.objective,
             targets="; ".join(spec.targets) or "(none)",
             molecules=mol_lines,
+        )
+        return self._run(prompt)
+
+    # ---- overview (report intro) ----
+    def overview(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+        prompt = _OVERVIEW_PROMPT.format(
+            objective=spec.objective,
+            user_prompt=spec.user_prompt or spec.objective,
+            targets="; ".join(spec.targets) or "(none)",
+            smiles="; ".join(spec.starting_materials) or "(none)",
         )
         return self._run(prompt)
 
