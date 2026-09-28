@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 31: on-demand ChEMBL literature layer)
+# ddswarm — drug discovery multi-agent swarm (Increment 32: on-demand binding-affinity baseline)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -233,7 +233,10 @@ identifier via PubChem xref), recording every hit as an *observed* entry with an
 external ID + URL + retrieval timestamp — the first machine-readable link to
 live external records in the pipeline. Grounding is opt-in because live APIs are
 non-deterministic across time, so grounded entries are excluded from the
-reproducibility hash.
+reproducibility hash. Since Increment 32, setting `params["affinities"]` on the
+grounding task additionally resolves each molecule's binding-affinity profile
+(best Ki/Kd/IC50 per target from ChEMBL, capped at 10) as an on-demand
+medicinal-chemistry baseline.
 
 **Increment 25** adds the **machine-readable candidate export** (`export_minion`,
 in the default pipeline, after report). One flat row per screened molecule with
@@ -309,6 +312,17 @@ on-demand source when a receptor is absent from the fixed `CALIBRATION_SET` and
 panel, not just SERT/5-HT2A/5-HT2C. This layer is network-dependent and
 non-deterministic: it is opt-in, and the fetched reference ligands are re-hashed
 into the input hash (never silently folded into a reproducible score).
+
+**Increment 32** wires the on-demand affinity profile into `grounding_minion`.
+When `params["affinities"]` is set on the grounding task, each grounded molecule
+also gets a `binding_affinities` list (its strongest Ki/Kd/IC50 per target from
+ChEMBL, capped at the top 10). This is the medicinal-chemistry baseline for any
+structure: a run on fluoxetine resolves SERT Kd 0.81 nM ≫ NET 240 nM ≫ DAT
+3600 nM, i.e. its known SERT-selectivity, from literature alone. PK parameters
+were evaluated as an on-demand ChEMBL ADMET fetch and found empty for common
+drugs (fluoxetine/citalopram: zero half-life/clearance records; DrugBank content
+is license-gated 403) — so PK stays the reasoning-backend recall that was already
+wired, and there is no fake ChEMBL-PK fetcher.
 
 ## Architecture
 

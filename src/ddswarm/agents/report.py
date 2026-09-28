@@ -229,6 +229,8 @@ class ReportMinion(Agent):
             for m in gr.molecules:
                 for e in m.entries:
                     c[e.evidence_level.value] += 1
+                for a in m.binding_affinities:
+                    c[a.evidence_level.value] += 1
         for sa in by_kind.get("safety_assessment", []):
             for f in sa.flags:
                 c[f.evidence_level.value] += 1

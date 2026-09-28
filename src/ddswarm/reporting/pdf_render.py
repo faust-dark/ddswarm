@@ -858,6 +858,15 @@ def _narrative_grounding(grs, para) -> None:
                 continue
             for e in m.entries:
                 para(f"{m.molecule_id} -> {e.source.upper()} {e.external_id} ({e.title}): {e.url}")
+    aff_total = sum(g.summary.total_affinities for g in grs)
+    if aff_total:
+        para("Binding-affinity baseline (ChEMBL, strongest first):")
+        for g in grs:
+            for m in g.molecules:
+                for a in m.binding_affinities[:5]:
+                    tgt = a.target_pref_name or a.target_chembl_id or "target"
+                    para(f"{m.molecule_id} -> {tgt} {a.standard_type} = {a.value_nm:g} nM"
+                         + (f" ({a.document_year})" if a.document_year else ""))
     para("Grounded entries are observed and carry a retrieval timestamp; they are excluded "
          "from the reproducibility hash because live databases change over time.")
 

@@ -32,6 +32,16 @@ class GroundedEntry(BaseModel):
     retrieved_at: str
 
 
+class BindingAffinity(BaseModel):
+    """One measured binding affinity (Ki/Kd/IC50) resolved from ChEMBL for a molecule."""
+    target_chembl_id: str | None = None
+    target_pref_name: str | None = None
+    standard_type: Literal["Ki", "Kd", "IC50"]
+    value_nm: float
+    document_year: int | None = None
+    evidence_level: EvidenceLevel = EvidenceLevel.observed
+
+
 class MoleculeGrounding(BaseModel):
     """Per-molecule grounding result."""
     molecule_id: str
@@ -39,6 +49,7 @@ class MoleculeGrounding(BaseModel):
     inchi_key: str | None = None
     status: Literal["grounded", "not_found", "failed"]
     entries: list[GroundedEntry] = Field(default_factory=list)
+    binding_affinities: list[BindingAffinity] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
 
@@ -48,10 +59,11 @@ class GroundingSummary(BaseModel):
     not_found: int = 0
     failed: int = 0
     total_entries: int = 0
+    total_affinities: int = 0
 
 
 class GroundingReport(BaseModel):
-    schema_version: str = "1.0"
+    schema_version: str = "1.1"
     project_id: str
     agent: str = "grounding_minion"
     status: AgentResultStatus

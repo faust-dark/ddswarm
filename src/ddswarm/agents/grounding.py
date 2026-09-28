@@ -20,10 +20,12 @@ from datetime import datetime, timezone
 
 from rdkit import rdBase
 
+from ..chemistry.chembl_client import compound_affinities
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.grounding_report import (
+    BindingAffinity,
     GroundedEntry,
     GroundingReport,
     GroundingSummary,
@@ -67,10 +69,23 @@ class GroundingMinion(Agent):
                 source=e["source"], external_id=e["external_id"], url=e["url"],
                 title=e["title"], detail=e.get("detail"), retrieved_at=retrieved_at,
             ) for e in g["entries"]]
+            affinities: list[BindingAffinity] = []
+            if ctx.params.get("affinities") and g.get("inchi_key"):
+                try:
+                    for a in compound_affinities(g["inchi_key"], limit=10):
+                        affinities.append(BindingAffinity(
+                            target_chembl_id=a["target_chembl_id"],
+                            target_pref_name=a["target_pref_name"],
+                            standard_type=a["standard_type"],
+                            value_nm=a["value_nm"],
+                            document_year=a["document_year"],
+                        ))
+                except Exception as exc:  # noqa: BLE001
+                    warnings.append(f"affinity fetch failed for {mid}: {exc}")
             results.append(MoleculeGrounding(
                 molecule_id=mid, canonical_smiles=s.canonical_smiles,
                 inchi_key=g["inchi_key"], status=g["status"],
-                entries=entries, errors=g["errors"],
+                entries=entries, binding_affinities=affinities, errors=g["errors"],
             ))
         if skipped:
             warnings.append(f"skipped {skipped} molecule(s) that failed sanitization")
@@ -81,6 +96,7 @@ class GroundingMinion(Agent):
             not_found=sum(1 for r in results if r.status == "not_found"),
             failed=sum(1 for r in results if r.status == "failed"),
             total_entries=sum(len(r.entries) for r in results),
+            total_affinities=sum(len(r.binding_affinities) for r in results),
         )
 
         input_hash = hash_jsonable({"molecules": [(m, s) for m, s in molecules]})
@@ -108,6 +124,8 @@ class GroundingMinion(Agent):
         finding = (f"grounding: {summary.total_molecules} molecules; "
                    f"{summary.grounded} grounded, {summary.not_found} not_found, "
                    f"{summary.failed} failed ({summary.total_entries} observed entries)")
+        if ctx.params.get("affinities"):
+            finding += f", {summary.total_affinities} binding affinities"
         return AgentResult(
             project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
             status=AgentResultStatus.success, artifacts=[art], input_refs=ctx.input_refs,
