@@ -34,7 +34,9 @@ from ..chemistry.ht2_function import classify_ht2_function
 from ..chemistry.receptors import RECEPTOR_REGISTRY, canonical_receptor_name, expand_receptor
 from ..chemistry.selectivity import (
     ANTITARGET_PROFILES,
+    SPECIAL_ADR_PROFILES,
     classify_cox_gi,
+    classify_gabaa_adr,
     classify_occupancy_adr,
     classify_sexual_adr,
     docking_ki,
@@ -97,7 +99,7 @@ class SelectivityMinion(Agent):
                 reproducibility={"reason": "engine_unavailable"},
             )
 
-        raw_receptors = ctx.params.get("receptors") or _DEFAULT_RECEPTORS
+        raw_receptors = ctx.params.get("receptors") or self._default_panel(ctx)
         receptors = []
         for rc in raw_receptors:
             d = expand_receptor(dict(rc))
@@ -375,6 +377,13 @@ class SelectivityMinion(Agent):
             elif profile == "cox_gi_risk":
                 label, rationale = classify_cox_gi(ki.get("COX1"), ki.get("COX2"))
                 out.append(AdrInterpretation(profile=profile, label=label, rationale=rationale))
+            elif profile == "gabaa_alpha2_anxiolytic":
+                label, rationale = classify_gabaa_adr(
+                    alpha1_ki=ki.get("GABRA1"),
+                    alpha2_ki=ki.get("GABRA2"),
+                    alpha5_occupancy=occ.get("GABRA5"),
+                )
+                out.append(AdrInterpretation(profile=profile, label=label, rationale=rationale))
             else:
                 prof = ANTITARGET_PROFILES.get(profile)
                 if prof is None:
@@ -432,6 +441,30 @@ class SelectivityMinion(Agent):
         if notes:
             base += " Receptor notes: " + "; ".join(notes)
         return base
+
+    @staticmethod
+    def _default_panel(ctx: AgentContext) -> list[dict]:
+        """Default receptor panel derived from the project targets when no
+        explicit ``params['receptors']`` is given (Increment 39 — selectivity is
+        always-on, so it must resolve a sensible panel generically).
+
+        primary = ``spec.targets[0]`` (canonicalised); off-targets = the
+        off-target list of whichever built-in ADR profile has that primary
+        (GABRA2 -> GABRA1/GABRA5 sedation+amnesia; COX2 -> COX1; SERT -> HTR2C).
+        No matching profile -> a primary-only panel (pure affinity, no SI). No
+        targets at all -> the legacy SSRI triad (backward-compatible).
+        """
+        targets = [canonical_receptor_name(str(t)) for t in (ctx.spec.targets or [])]
+        if not targets:
+            return list(_DEFAULT_RECEPTORS)
+        primary = targets[0]
+        off_targets: list[str] = []
+        for prof in SPECIAL_ADR_PROFILES.values():
+            if primary == canonical_receptor_name(str(prof.get("primary", ""))):
+                off_targets = [canonical_receptor_name(str(o))
+                               for o in prof.get("off_targets", [])]
+                break
+        return [{"name": primary}] + [{"name": o} for o in off_targets]
 
     def _collect_molecules(self, ctx: AgentContext) -> list[tuple[str, str]]:
         mols: list[tuple[str, str]] = []

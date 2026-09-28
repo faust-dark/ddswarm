@@ -83,7 +83,7 @@ def test_inject_grounding_inserts_task_and_wires_report():
 def test_default_pipeline_has_no_grounding():
     ids = [t.task_id for t in cli.DEFAULT_PIPELINE]
     assert "grounding" not in ids
-    assert len(ids) == 16
+    assert len(ids) == 18
 
 
 def test_agent_fetches_affinities_when_enabled(tmp_path, monkeypatch):

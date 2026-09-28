@@ -3,11 +3,12 @@
 import math
 from pathlib import Path
 
-from ddswarm.agents import SelectivityMinion
+from ddswarm.agents import DockingMinion, SelectivityMinion
 from ddswarm.agents.base import AgentContext
-from ddswarm.chemistry.receptors import canonical_receptor_name, expand_receptor
+from ddswarm.chemistry.receptors import canonical_receptor_name, expand_receptor, registry_entry
 from ddswarm.chemistry.selectivity import (
     classify_cox_gi,
+    classify_gabaa_adr,
     classify_occupancy_adr,
     classify_sexual_adr,
     docking_ki,
@@ -66,6 +67,98 @@ def test_agent_no_molecules_insufficient(tmp_path):
     ctx = AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec, params={}, inputs={})
     res = SelectivityMinion(store).run(ctx)
     assert res.status.value == "insufficient_evidence"
+
+
+def test_classify_gabaa_adr_labels():
+    # alpha2 binds 100x tighter than alpha1 -> alpha2-selective (reduced sedation)
+    label, rationale = classify_gabaa_adr(alpha1_ki=1e-6, alpha2_ki=1e-8)
+    assert label == "alpha2_selective"
+    assert "reduced sedation" in rationale
+    # comparable binding -> non-selective
+    label, _ = classify_gabaa_adr(alpha1_ki=1e-7, alpha2_ki=1e-7)
+    assert label == "non_selective"
+    # alpha1 preferred -> sedation-dominant
+    label, _ = classify_gabaa_adr(alpha1_ki=1e-9, alpha2_ki=1e-7)
+    assert label == "alpha1_preferring"
+    # missing affinity -> insufficient_data
+    label, _ = classify_gabaa_adr(alpha1_ki=None, alpha2_ki=1e-7)
+    assert label == "insufficient_data"
+    # alpha5 amnesia note is appended when occupancy crosses the threshold
+    _, rationale = classify_gabaa_adr(alpha1_ki=1e-6, alpha2_ki=1e-8, alpha5_occupancy=0.8)
+    assert "amnesia" in rationale
+
+
+def test_gabaa_registry_entries_and_aliases():
+    assert registry_entry("GABRA1")["pdb_id"] == "6X3X"
+    assert registry_entry("GABRA2")["pdb_id"] == "9QK0"
+    assert registry_entry("GABRA3")["pdb_id"] == "9TNB"
+    assert registry_entry("GABRA5")["pdb_id"] == "8BHK"
+    assert canonical_receptor_name("alpha2") == "GABRA2"
+    assert canonical_receptor_name("GABRA5") == "GABRA5"
+
+
+def test_selectivity_default_panel_gabaa():
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=["GABRA2"])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec, params={}, inputs={})
+    panel = SelectivityMinion._default_panel(ctx)
+    assert [p["name"] for p in panel] == ["GABRA2", "GABRA1", "GABRA5"]
+
+
+def test_selectivity_default_panel_primary_only():
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=["DRD2"])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="sel", spec=spec, params={}, inputs={})
+    panel = SelectivityMinion._default_panel(ctx)
+    assert [p["name"] for p in panel] == ["DRD2"]
+
+
+def test_docking_default_receptor_resolution():
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=["GABRA2"])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="dock", spec=spec, params={}, inputs={})
+    assert DockingMinion._default_receptor(ctx) == {"name": "GABRA2", "pdb_id": "9QK0"}
+    # an unregistered target resolves to None (non-blocking gap in the agent)
+    spec2 = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                        status="approved", targets=["UNREGISTERED_X"])
+    ctx2 = AgentContext(project_id="p", run_id="r1", task_id="dock", spec=spec2, params={}, inputs={})
+    assert DockingMinion._default_receptor(ctx2) is None
+
+
+def test_docking_receptor_source_resolves_pdb_id(tmp_path):
+    # _default_receptor returns the registry shape {name, pdb_id}; the run()
+    # path must read "pdb_id" (not only "identifier") or the RCSB URL is built
+    # from an empty id -> ".pdb" -> PDBFixer "list index out of range".
+    store = Store(tmp_path)
+    agent = DockingMinion(store)
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=["GABRA1"])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="dock", spec=spec, params={}, inputs={})
+    src = agent._receptor_source(ctx)
+    assert src is not None
+    assert src.identifier == "6X3X"
+    assert src.kind == "pdb_id"
+
+
+def test_docking_receptor_source_explicit_pdb_id_shape(tmp_path):
+    # explicit params['receptor'] using the registry's "pdb_id" key must resolve
+    store = Store(tmp_path)
+    agent = DockingMinion(store)
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=[])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="dock", spec=spec,
+                       params={"receptor": {"pdb_id": "6X3X"}}, inputs={})
+    src = agent._receptor_source(ctx)
+    assert src is not None and src.identifier == "6X3X"
+
+
+def test_docking_receptor_source_unresolved(tmp_path):
+    store = Store(tmp_path)
+    agent = DockingMinion(store)
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="o",
+                       status="approved", targets=["UNREGISTERED_X"])
+    ctx = AgentContext(project_id="p", run_id="r1", task_id="dock", spec=spec, params={}, inputs={})
+    assert agent._receptor_source(ctx) is None
 
 
 def test_select_adr_profiles_matches_all_profiles():

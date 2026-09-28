@@ -410,7 +410,7 @@ class ReportMinion(Agent):
         if "regulatory_checklist" not in by_kind:
             gaps.append("no 7D regulatory checklist (opt-in; needs reasoning.backend=hermes)")
         if "selectivity_assessment" not in by_kind:
-            gaps.append("no target-selectivity / ADR scoring (opt-in; needs Vina + receptor PDBs)")
+            gaps.append("no target-selectivity / ADR scoring performed (no receptor panel resolved from targets)")
         rps = by_kind.get("retrosynthesis_plan", [])
         if rps and sum(r.summary.molecules_with_routes for r in rps) == 0:
             gaps.append("no synthesis routes proposed (no reasoning backend)")

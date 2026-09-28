@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 38: non-blocking agents — only safety gates)
+# ddswarm — drug discovery multi-agent swarm (Increment 39: docking + target-selectivity always-on)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -413,6 +413,23 @@ remains the single hard gate: a controlled-substance/dual-use `block` still
 halts every downstream task and marks the run `blocked`. The report's
 `run_status` derivation mirrors the runner.
 
+**Increment 39** makes **docking** and **target-selectivity** ALWAYS ON in the
+default pipeline (16 → 18 tasks). Both now resolve their receptor(s) from the
+project targets (`spec.targets[0]` through the registry) instead of requiring an
+explicit `params.receptor` / `params.receptors`, so every run attempts a real
+AutoDock Vina dock and an off-target/ADR panel. Both remain non-blocking: a
+receptor with no PDB (or no search box) degrades to a reported gap, never a
+crash. The registry gains the **GABA-A α1/α2/α3/α5** subunits (RCSB-verified
+PDBs) plus a `gabaa_alpha2_anxiolytic` ADR profile (α2/α3 on-target, α1
+sedation + α5 amnesia off-target) and a GABA-A ADR classifier. Reference-ligand
+selection in the Vina engine was fixed to exclude glycans/ions/buffers and to
+group HETATM per individual residue, so a glycosylated receptor (GABA-A) picks
+the co-crystal drug (diazepam) — not a mannose glycan — as its redocking
+reference and search box. Known limitation: the α2 (9QK0) and α3 (9TNB)
+structures carry no benzodiazepine co-crystal, so their BZD-site box cannot be
+auto-derived yet (they fall back to a gap / orthosteric ligand); α1 (6X3X) and
+α5 (8BHK) dock at the diazepam-defined BZD site.
+
 ## Architecture
 
 - **Harness**: Hermes (this agent's runtime) drives execution.
@@ -732,10 +749,12 @@ ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile ma
 
 `project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
 If `tasks` is omitted a default pipeline runs (safety -> research -> overview ->
-design -> screen -> predict -> retrosynth -> tox -> cyp -> herg -> formulation ->
-patent -> report -> export -> validation -> report_pdf);
-docking, dynamics, selectivity, and grounding are opt-in (need the Vina binary /
-OpenMM + network / live APIs).
+design -> screen -> docking -> selectivity -> predict -> retrosynth -> tox ->
+cyp -> herg -> formulation -> patent -> report -> export -> validation ->
+report_pdf);
+docking and target-selectivity are ALWAYS ON (Increment 39) and resolve their
+receptor(s) from the project targets; dynamics and grounding remain opt-in
+(OpenMM + network / live APIs).
 `report` writes `finding` + `feedback` to project memory, closing the loop: the
 next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
 `ddswarm run` copies it to `reports/<project_id>.pdf` (override with

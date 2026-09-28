@@ -26,6 +26,26 @@ from .rmsd import parse_affinity_modes, parse_model_atoms, parse_smiles_idx
 
 _RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
 
+# Heterogens that are NOT the co-crystal drug: water, monatomic ions/metals,
+# carbohydrates (glycans), and common crystallisation buffers / lipids /
+# detergents / cryoprotectants. Excluded from reference-ligand selection so a
+# glycosylated receptor (e.g. GABA-A pentamers) does not pick a mannose/NAG
+# glycan chain as the redocking ligand instead of the drug molecule.
+_NON_DRUG_HETATM = {
+    # water
+    "HOH", "WAT", "H2O", "DOD", "SOL", "TIP", "TIP3",
+    # monatomic ions / metals
+    "NA", "CL", "MG", "CA", "K", "ZN", "MN", "FE", "CU", "CO", "NI", "CD", "HG",
+    "BR", "CS", "RB", "SR", "BA", "LI", "F", "IOD",
+    # carbohydrates / glycans
+    "NAG", "NGA", "NDG", "BMA", "MAN", "FUC", "GAL", "GLC", "GLA", "SIA", "XYS",
+    "XYP", "FUL", "RAM", "RIB", "BDP", "GLO", "MUR", "A2G", "BGC", "BGLC", "BMA",
+    # lipids / detergents / buffers / cryoprotectants
+    "LMT", "DDM", "CHS", "OLC", "POV", "PEE", "LMU", "LDA", "PLC", "PE", "PC",
+    "GOL", "EDO", "PEG", "PGE", "TRS", "MES", "EPE", "SO4", "PO4", "ACT", "EOH",
+    "DMS", "MPD", "HEZ", "SPM", "SPD", "CIT", "FMT", "ACY", "NO3",
+}
+
 
 def _pkg_version(name: str) -> str:
     try:
@@ -158,25 +178,33 @@ class VinaEngine(DockingEngine):
         ]
 
     def _extract_reference_ligand(self, raw_text: str, work_dir: Path):
-        """Extract the largest non-water HETATM residue as an RDKit mol."""
+        """Extract the largest non-water, non-glycan HETATM residue as an RDKit mol.
+
+        Grouping is per INDIVIDUAL residue (chain + sequence number + insertion
+        code), not per (resname, chain) — a glycan chain of many same-named
+        sugar residues must not merge into one pseudo-ligand that outsizes the
+        drug, and sugars/ions/buffers are excluded outright (``_NON_DRUG_HETATM``).
+        """
         try:
             from rdkit import Chem  # noqa: PLC0415
         except ImportError:
             return None, None
 
-        residues: dict[tuple[str, str], list[str]] = {}
+        residues: dict[tuple[str, str, str, str], list[str]] = {}
         for line in raw_text.splitlines():
             if not line.startswith("HETATM"):
                 continue
             resname = line[17:20].strip()
-            if not resname or resname in {"HOH", "WAT", "H2O", "DOD", "SOL"}:
+            if not resname or resname in _NON_DRUG_HETATM:
                 continue
             chain = line[21:22].strip() or " "
-            residues.setdefault((resname, chain), []).append(line)
+            resseq = line[22:26].strip()
+            icode = line[26:27].strip() or " "
+            residues.setdefault((resname, chain, resseq, icode), []).append(line)
 
         if not residues:
             return None, None
-        (name, _chain), lines = max(residues.items(), key=lambda kv: len(kv[1]))
+        (name, _chain, _resseq, _icode), lines = max(residues.items(), key=lambda kv: len(kv[1]))
         het_pdb = work_dir / f"reference_{name}.pdb"
         het_pdb.write_text("\n".join(lines) + "\nEND\n")
         sdf = work_dir / f"reference_{name}.sdf"

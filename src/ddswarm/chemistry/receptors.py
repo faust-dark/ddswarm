@@ -348,6 +348,27 @@ RECEPTOR_REGISTRY: dict[str, dict] = {
         "pdb_id": "8WEA",
         "reference": "Gao et al. 2023 (human Cav1.2, pinaverium-bound)",
     },
+    # --- GABA-A (Cys-loop ligand-gated ion channel) subunits ---
+    "GABRA1": {
+        "name": "GABRA1", "gene": "GABRA1", "family": "GABA-A receptor alpha1 subunit (Cys-loop LGIC)",
+        "pdb_id": "6X3X",
+        "reference": "Kim et al. 2020 (human alpha1-beta2-gamma2, diazepam-bound)",
+    },
+    "GABRA2": {
+        "name": "GABRA2", "gene": "GABRA2", "family": "GABA-A receptor alpha2 subunit (Cys-loop LGIC)",
+        "pdb_id": "9QK0",
+        "reference": "Gonzalez-Prada et al. 2026 (human alpha2-beta3-gamma2)",
+    },
+    "GABRA3": {
+        "name": "GABRA3", "gene": "GABRA3", "family": "GABA-A receptor alpha3 subunit (Cys-loop LGIC)",
+        "pdb_id": "9TNB",
+        "reference": "Gonzalez-Prada et al. 2026 (human alpha3-beta3-gamma2, bicuculline-bound)",
+    },
+    "GABRA5": {
+        "name": "GABRA5", "gene": "GABRA5", "family": "GABA-A receptor alpha5 subunit (Cys-loop LGIC)",
+        "pdb_id": "8BHK",
+        "reference": "Kasaragod et al. 2023 (human alpha5 homomer, diazepam-bound)",
+    },
     "CHRNA4B2": {
         "name": "nAChR_a4b2", "gene": "CHRNA4/CHRNB2", "family": "nicotinic alpha4beta2 receptor (LGIC)",
         "pdb_id": None,
@@ -390,6 +411,9 @@ _RECEPTOR_ALIASES: dict[str, str] = {
     # channels
     "HERG": "KCNH2", "KV111": "KCNH2",
     "NAV15": "SCN5A", "CAV12": "CACNA1C",
+    # GABA-A subunits — bare alphaN = GABA-A alphaN subunit (adrenergic subtypes
+    # stay subtyped ALPHA1A/1B/2A/2B/2C, so the bare forms never collide)
+    "ALPHA1": "GABRA1", "ALPHA2": "GABRA2", "ALPHA3": "GABRA3", "ALPHA5": "GABRA5",
     # melatonin
     "MT1": "MTNR1A", "MT2": "MTNR1B",
 }

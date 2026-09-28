@@ -13,6 +13,7 @@ from pathlib import Path
 
 from rdkit import rdBase
 
+from ..chemistry.receptors import canonical_receptor_name, registry_entry
 from ..contracts.agent_result import AgentResult
 from ..contracts.docking_result import (
     DockedPose,
@@ -54,20 +55,16 @@ class DockingMinion(Agent):
                 reproducibility={"reason": "engine_unavailable"},
             )
 
-        # receptor source
-        receptor_cfg = ctx.params.get("receptor") or {}
-        if not receptor_cfg.get("identifier") and not receptor_cfg.get("kind"):
+        # receptor source: explicit params['receptor'] wins; otherwise resolve the
+        # primary target (spec.targets[0]) through the registry (Increment 39 —
+        # docking is always-on, so it resolves a generic default receptor).
+        source = self._receptor_source(ctx)
+        if source is None:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
-                warnings=["no receptor configured (params['receptor'].identifier/kind missing)"],
+                warnings=["no receptor resolved (no params['receptor'] and the primary target has no registry PDB)"],
                 reproducibility={"reason": "no_receptor"},
             )
-        from ..docking.base import ReceptorSource
-        source = ReceptorSource(
-            kind=receptor_cfg.get("kind", "pdb_id"),
-            identifier=str(receptor_cfg.get("identifier", "")),
-            url=receptor_cfg.get("url"),
-        )
 
         molecules = self._collect_molecules(ctx)
         if not molecules:
@@ -200,6 +197,41 @@ class DockingMinion(Agent):
             margin = float(ctx.params.get("box_margin", 11.25))
             return box_from_reference_mol(receptor.reference_ligand_mol, margin=margin)
         return (None, None)
+
+    @staticmethod
+    def _default_receptor(ctx: AgentContext) -> dict | None:
+        """Resolve spec.targets[0] to a receptor config through the registry.
+
+        Returns {name, pdb_id} when the primary target has a registry entry with
+        a PDB id, else None (the caller degrades to a non-blocking gap).
+        """
+        targets = [canonical_receptor_name(str(t)) for t in (ctx.spec.targets or [])]
+        if not targets:
+            return None
+        entry = registry_entry(targets[0])
+        if not entry or not entry.get("pdb_id"):
+            return None
+        return {"name": entry["name"], "pdb_id": entry["pdb_id"]}
+
+    def _receptor_source(self, ctx: AgentContext):
+        """Build a ReceptorSource from explicit params['receptor'] or the target.
+
+        Accepts both "identifier" (engine shape) and "pdb_id" (registry shape) —
+        ``_default_receptor`` returns the registry shape, so reading only
+        "identifier" produced an empty id and a malformed RCSB URL (".pdb").
+        Returns None when no receptor can be resolved (caller reports a gap).
+        """
+        receptor_cfg = ctx.params.get("receptor") or {}
+        if not receptor_cfg.get("identifier") and not receptor_cfg.get("pdb_id") and not receptor_cfg.get("kind"):
+            receptor_cfg = self._default_receptor(ctx) or {}
+        if not receptor_cfg:
+            return None
+        from ..docking.base import ReceptorSource
+        return ReceptorSource(
+            kind=receptor_cfg.get("kind", "pdb_id"),
+            identifier=str(receptor_cfg.get("identifier") or receptor_cfg.get("pdb_id") or ""),
+            url=receptor_cfg.get("url"),
+        )
 
     @staticmethod
     def _receptor_info(receptor, source) -> ReceptorInfo:

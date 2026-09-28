@@ -43,7 +43,7 @@ def test_init_writes_project(tmp_path):
     assert rc == 0
     req = RunRequest.model_validate_json(out.read_text())
     assert req.project.project_id == "x1"
-    assert len(req.tasks) == 16  # safety, research, overview, design, screen, predict, retrosynth, tox, cyp, herg, formulation, patent, report, export, validation, report_pdf
+    assert len(req.tasks) == 18  # safety, research, overview, design, screen, docking, selectivity, predict, retrosynth, tox, cyp, herg, formulation, patent, report, export, validation, report_pdf
     assert req.reasoning is None
 
 
@@ -108,7 +108,7 @@ def test_receptors_list_and_lookup(capsys):
     assert cli.main(["receptors", "list"]) == 0
     out = capsys.readouterr().out
     assert "SERT" in out and "5I73" in out
-    assert "61 target(s) shown (59 with pdb_id, 2 without)" in out
+    assert "65 target(s) shown (63 with pdb_id, 2 without)" in out
 
     assert cli.main(["receptors", "list", "--family", "enzyme"]) == 0
     out = capsys.readouterr().out

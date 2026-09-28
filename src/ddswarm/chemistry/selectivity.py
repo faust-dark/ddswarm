@@ -44,6 +44,13 @@ EFFICACY_RETENTION_FRACTION = 0.8
 # Documented modeling choice, not a clinical GI-risk prediction.
 COX2_SELECTIVE_SI = 30.0
 
+# GABA-A anxiolytic-sedation threshold on SI = Ki(alpha1)/Ki(alpha2). alpha2/3-
+# selective benzodiazepine PAMs spare alpha1 (sedation/ataxia/amnesia) while
+# retaining anxiolysis; a SI >= this marks the candidate alpha2-preferring.
+# Documented modeling choice on a relative (Vina) ranking, not a clinical
+# sedation prediction.
+GABAA_ALPHA2_SELECTIVE_SI = 10.0
+
 # Default occupancy threshold for the "antitarget" ADR profiles: half-maximal
 # occupancy at the reference concentration (~Ki <= C_ref). Documented modeling
 # choice; occupancy is a calibrated ranking estimate, not a measured affinity.
@@ -52,6 +59,7 @@ DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD = 0.5
 # id of the SSRI sexual-ADR profile (kept for backward-compatible lookups).
 SSRI_SEXUAL_ADR_PROFILE = "sert_5ht2c_sexual_adr"
 COX_GI_PROFILE = "cox_gi_risk"
+GABAA_ANXIOLYTIC_PROFILE = "gabaa_alpha2_anxiolytic"
 
 # Registry of off-target "antitarget" ADR profiles. Each entry maps an
 # off-target receptor (canonical registry key) to a mechanistic adverse effect,
@@ -140,6 +148,17 @@ SPECIAL_ADR_PROFILES: dict[str, dict] = {
                      "mucosal barrier; non-selective COX-1/COX-2 inhibition strips that "
                      "protection while retaining anti-inflammatory effect",
         "citation": "Vane 1971 (Nature); Wallace 2008 (Physiol Rev) — NSAID GI toxicity",
+    },
+    GABAA_ANXIOLYTIC_PROFILE: {
+        "primary": "GABRA2", "off_targets": ["GABRA1", "GABRA5"],
+        "adr": "sedation / ataxia / anterograde amnesia (alpha1/alpha5 engagement)",
+        "mechanism": "alpha2/alpha3-containing GABA-A receptors mediate benzodiazepine "
+                     "anxiolysis; alpha1-containing receptors mediate sedation, ataxia, "
+                     "and anterograde amnesia (blackout), and alpha5 contributes to "
+                     "memory/amnesia (alpha1 and alpha5 knock-in point-mutation studies). "
+                     "An alpha2-selective PAM retains anxiolysis while sparing the "
+                     "alpha1/alpha5 side effects",
+        "citation": "Rudolph et al. 1999 (Nature); McKernan et al. 2000 (Nat Neurosci); Atack 2011 (Curr Top Med Chem)",
     },
 }
 
@@ -283,8 +302,54 @@ def classify_cox_gi(cox1_ki: float | None, cox2_ki: float | None) -> tuple[str, 
                 "NSAID — GI ulcer/bleed risk from COX-1 inhibition")
     return ("cox1_preferring",
             f"COX-1 preferred over COX-2 (SI = {si:.2f}); elevated GI risk from "
-            "strong COX-1 inhibition (and likely weak COX-2 anti-inflammatory "
-            "efficacy)")
+            f"strong COX-1 inhibition (and likely weak COX-2 anti-inflammatory "
+            f"efficacy)")
+
+
+def classify_gabaa_adr(
+    *,
+    alpha1_ki: float | None,
+    alpha2_ki: float | None,
+    alpha5_occupancy: float | None = None,
+    alpha2_selective_si: float = GABAA_ALPHA2_SELECTIVE_SI,
+    amnesia_occupancy_threshold: float = DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD,
+) -> tuple[str, str]:
+    """Deterministic GABA-A sedation/amnesia label + rationale.
+
+    Mechanistic basis: benzodiazepine anxiolysis is mediated by alpha2/alpha3-
+    containing GABA-A receptors; alpha1-containing receptors mediate sedation,
+    ataxia, and anterograde amnesia (blackout); alpha5 contributes to
+    memory/amnesia (knock-in point-mutation studies). The relevant quantity on
+    the sedation axis is SI = Ki(alpha1)/Ki(alpha2): larger SI = more
+    alpha2-selective = anxiolysis retained with less sedation.
+
+    label ∈ {alpha2_selective, non_selective, alpha1_preferring,
+    insufficient_data}. Thresholds are documented modeling choices on a relative
+    (Vina) ranking, not a clinical prediction.
+    """
+    si = selectivity_index(alpha1_ki, alpha2_ki)
+    if si is None:
+        return ("insufficient_data",
+                "no alpha1 and/or alpha2 affinity available to judge the "
+                "sedation-vs-anxiolysis selectivity")
+    amnesia_note = ""
+    if alpha5_occupancy is not None and alpha5_occupancy >= amnesia_occupancy_threshold:
+        amnesia_note = (
+            f" alpha5 occupancy {alpha5_occupancy:.0%} (>= {amnesia_occupancy_threshold:.0%} "
+            "threshold) adds an amnesia/cognitive liability independent of the sedation axis.")
+    if si >= alpha2_selective_si:
+        return ("alpha2_selective",
+                f"alpha2-preferring (SI = Ki(alpha1)/Ki(alpha2) = {si:.0f}); anxiolytic "
+                f"alpha2 engagement is retained while alpha1 sedation/ataxia/amnesia is "
+                f"spared — reduced sedation and blackout liability.{amnesia_note}")
+    if si >= 1.0:
+        return ("non_selective",
+                f"comparable alpha1/alpha2 binding (SI = {si:.1f}); non-selective "
+                f"benzodiazepine — alpha1-mediated sedation/ataxia/amnesia liability "
+                f"persists.{amnesia_note}")
+    return ("alpha1_preferring",
+            f"alpha1 preferred over alpha2 (SI = {si:.2f}); sedation/ataxia/amnesia "
+            f"dominant with weak anxiolytic selectivity.{amnesia_note}")
 
 
 def classify_occupancy_adr(profile_id: str, occupancy: float | None) -> tuple[str, str]:
