@@ -18,10 +18,19 @@ Accessibility = Literal["easy", "moderate", "hard"]
 
 
 class SynthesisRoute(BaseModel):
-    """An LLM-proposed synthesis route (hypothetical, not demonstrated)."""
+    """An LLM-proposed synthesis route (hypothetical, not demonstrated).
+
+    `procedure` is a human-readable, verbatim synthesis METHOD — a short
+    narrative a bench chemist could start from, naming the starting material
+    (a pre-existing derivative of the same therapeutic/chemical class when one
+    exists, otherwise simpler/commercially-available precursors) and the
+    literature-confirmed reactions/conditions. It is LLM-recalled
+    (evidence_level=hypothetical), never a validated protocol."""
 
     steps: list[str] = Field(default_factory=list)
     key_reagents: list[str] = Field(default_factory=list)
+    procedure: str | None = None
+    references: list[str] = Field(default_factory=list)
     feasibility_note: str | None = None
     evidence_level: EvidenceLevel = EvidenceLevel.hypothetical
 

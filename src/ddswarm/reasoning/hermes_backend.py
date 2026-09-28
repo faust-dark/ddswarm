@@ -64,15 +64,27 @@ Project objective: {objective}
 Molecule(s) to plan (id: SMILES):
 {molecules}
 
-For each molecule propose 1-2 viable synthesis routes. Each route is an ordered
-list of synthetic steps plus the key reagents. Be honest about feasibility; if
-a step is speculative, say so in the feasibility note.
+For each molecule propose 1-2 viable synthesis routes. Each route has an ordered
+list of synthetic steps, the key reagents, and — crucially — a human-readable
+synthesis METHOD (a short narrative a bench chemist could start from). In the
+method, name the starting material explicitly: prefer a pre-existing derivative
+of the same therapeutic/chemical class when one exists (e.g. a marketed
+glucocorticoid such as hydrocortisone or methylprednisolone), otherwise simpler
+or commercially-available precursors. Name the reactions and conditions (e.g.
+"selective 11-beta oxidation with Dess-Martin periodinane", "9-alpha fluorination
+with Selectfluor") and use only well-established, literature-known
+transformations. Be honest about feasibility; if a step is speculative, say so.
+The method is a proposal, not a validated protocol — do not present it as
+demonstrated chemistry.
 
 Respond with ONLY a single JSON array of objects — no markdown, no prose, no
 code fences. Each object must have exactly these keys:
   "molecule_id": the id from the list above,
   "steps": [ordered synthetic/retrosynthetic steps as strings],
   "key_reagents": [reagent names],
+  "procedure": a concise human-readable synthesis method (3-6 sentences) as a
+               single string, stating the starting material and the reactions,
+  "references": [literature references for the key reactions/methods],
   "feasibility_note": one-sentence feasibility assessment.
 """
 
@@ -274,7 +286,7 @@ def extract_json_list(text: str) -> list | None:
 class HermesSubprocessBackend(ReasoningBackend):
     name = "hermes"
 
-    def __init__(self, command: str = "hermes", max_turns: int = 30, run_budget: int = 300):
+    def __init__(self, command: str = "hermes", max_turns: int = 30, run_budget: int = 600):
         self.command = command
         self.max_turns = max_turns
         self.run_budget = run_budget

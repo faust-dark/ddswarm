@@ -86,6 +86,8 @@ class RetrosynthesisMinion(Agent):
                         route = SynthesisRoute(
                             steps=[str(x) for x in (raw.get("steps") or [])],
                             key_reagents=[str(x) for x in (raw.get("key_reagents") or [])],
+                            procedure=(raw.get("procedure") or None),
+                            references=[str(x) for x in (raw.get("references") or []) if x],
                             feasibility_note=raw.get("feasibility_note"),
                         )
                         by_id.setdefault(str(mid), []).append(route)
@@ -187,7 +189,7 @@ class RetrosynthesisMinion(Agent):
                 name,
                 command=ctx.params.get("reasoning_command"),
                 max_turns=ctx.params.get("reasoning_max_turns", 30),
-                run_budget=ctx.params.get("reasoning_run_budget", 300),
+                run_budget=ctx.params.get("reasoning_run_budget", 600),
             )
         except KeyError as exc:
             return None, str(exc)

@@ -248,7 +248,7 @@
       "type": "object"
     },
     "SynthesisRoute": {
-      "description": "An LLM-proposed synthesis route (hypothetical, not demonstrated).",
+      "description": "An LLM-proposed synthesis route (hypothetical, not demonstrated).\n\n`procedure` is a human-readable, verbatim synthesis METHOD \u2014 a short\nnarrative a bench chemist could start from, naming the starting material\n(a pre-existing derivative of the same therapeutic/chemical class when one\nexists, otherwise simpler/commercially-available precursors) and the\nliterature-confirmed reactions/conditions. It is LLM-recalled\n(evidence_level=hypothetical), never a validated protocol.",
       "properties": {
         "steps": {
           "items": {
@@ -262,6 +262,25 @@
             "type": "string"
           },
           "title": "Key Reagents",
+          "type": "array"
+        },
+        "procedure": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Procedure"
+        },
+        "references": {
+          "items": {
+            "type": "string"
+          },
+          "title": "References",
           "type": "array"
         },
         "feasibility_note": {

@@ -138,7 +138,7 @@ class ResearcherMinion(Agent):
                 name,
                 command=ctx.params.get("reasoning_command"),
                 max_turns=ctx.params.get("reasoning_max_turns", 30),
-                run_budget=ctx.params.get("reasoning_run_budget", 300),
+                run_budget=ctx.params.get("reasoning_run_budget", 600),
             )
         except KeyError as exc:
             return None, str(exc)

@@ -213,7 +213,7 @@
           "type": "integer"
         },
         "run_budget": {
-          "default": 300,
+          "default": 600,
           "title": "Run Budget",
           "type": "integer"
         }

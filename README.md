@@ -1,4 +1,4 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 34: Prompt + Overview intro in the PDF report)
+# ddswarm — drug discovery multi-agent swarm (Increment 35: human-readable synthesis method)
 
 A reproducible, traceable, verifiable agentic drug-discovery pipeline.
 
@@ -363,6 +363,19 @@ report on a missing backend. The PDF renderer puts a verbatim **Prompt** section
 section (MoA / structure / uses / own-DB facts / references) at the very top,
 before "Reasoning and plan". `ProjectSpec` gains the optional `user_prompt`
 field; `ReasoningBackend.overview()` is the new delegation hook.
+
+**Increment 35** makes retrosynthesis emit a human-readable synthesis METHOD, not
+just a bare step list. `SynthesisRoute` gains `procedure` (a verbatim narrative a
+bench chemist could start from — it names the starting material, preferring a
+pre-existing derivative of the same therapeutic/chemical class when one exists,
+otherwise simpler/commercially-available precursors, and the literature-confirmed
+reactions/conditions) and `references` (literature citations for the key
+transformations). The `_SYNTHESIS_PROMPT` now requests both; the PDF's Synthesis
+section renders the procedure, literature basis, and feasibility note instead of
+the previous "N LLM-proposed route(s)" placeholder. The richer output needs more
+than the old 300 s reasoning budget, so the default `run_budget` is raised to
+600 s everywhere (config, backend, registry, and every reasoning agent's
+fallback). Honesty unchanged: routes stay `evidence_level=hypothetical`.
 
 ## Architecture
 

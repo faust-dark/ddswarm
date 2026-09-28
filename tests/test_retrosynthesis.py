@@ -88,7 +88,11 @@ def test_retrosynth_no_molecules_insufficient(tmp_path):
 
 def test_retrosynth_with_reasoning_routes(tmp_path):
     payload = [{"molecule_id": "m0", "steps": ["alkylate", "cyclize"],
-                "key_reagents": ["K2CO3"], "feasibility_note": "feasible"}]
+                "key_reagents": ["K2CO3"],
+                "procedure": "Starting from hydrocortisone, oxidize the 11-hydroxy "
+                             "with Dess-Martin periodinane, then methylate C6.",
+                "references": ["J. Med. Chem. 1990, 33, 1234"],
+                "feasibility_note": "feasible"}]
     script = tmp_path / "fake_hermes.sh"
     script.write_text(f"#!/bin/sh\necho '{json.dumps(payload)}'\n")
     script.chmod(0o755)
@@ -100,8 +104,11 @@ def test_retrosynth_with_reasoning_routes(tmp_path):
     plan = _plan(store, result)
     e = plan.molecules[0]
     assert len(e.routes) == 1
-    assert e.routes[0].steps == ["alkylate", "cyclize"]
-    assert e.routes[0].evidence_level.value == "hypothetical"
+    r = e.routes[0]
+    assert r.steps == ["alkylate", "cyclize"]
+    assert r.procedure and "hydrocortisone" in r.procedure
+    assert r.references == ["J. Med. Chem. 1990, 33, 1234"]
+    assert r.evidence_level.value == "hypothetical"
     assert e.evidence_level.value == "calculated"  # SA score stays calculated
     assert plan.summary.molecules_with_routes == 1
     assert any("hypothetical" in w for w in result.warnings)

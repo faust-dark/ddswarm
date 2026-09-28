@@ -820,6 +820,18 @@ def _narrative_retrosynthesis(rps, para, fig) -> None:
                         para(d.note)
                 if m.routes:
                     para(f"{len(m.routes)} LLM-proposed synthesis route(s) (hypothetical).")
+                    for i, r in enumerate(m.routes, 1):
+                        if r.procedure:
+                            para(f"Proposed synthesis method {i} (theoretical, LLM-recalled): {r.procedure}")
+                        else:
+                            if r.steps:
+                                para(f"Steps: {'; '.join(r.steps)}.")
+                            if r.key_reagents:
+                                para(f"Key reagents: {', '.join(r.key_reagents)}.")
+                        if r.references:
+                            para(f"Literature basis: {'; '.join(r.references)}.")
+                        if r.feasibility_note:
+                            para(f"Feasibility: {r.feasibility_note}")
 
 
 def _narrative_tox(tps, para) -> None:

@@ -23,7 +23,7 @@ class ReasoningConfig(BaseModel):
     backend: str = "hermes"         # "hermes" (standard) | "none"
     command: str | None = None     # override the hermes binary / script (default "hermes")
     max_turns: int = 30
-    run_budget: int = 300          # seconds
+    run_budget: int = 600          # seconds; the synthesis-method narrative needs more than the old 300
 
 
 class RunRequest(BaseModel):

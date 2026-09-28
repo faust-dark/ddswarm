@@ -11,7 +11,7 @@ def make_reasoning_backend(
     name: str = "none",
     command: str | None = None,
     max_turns: int = 30,
-    run_budget: int = 300,
+    run_budget: int = 600,
 ) -> ReasoningBackend:
     if name in (None, "", "none"):
         return NullReasoningBackend()
