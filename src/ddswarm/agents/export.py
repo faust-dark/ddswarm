@@ -129,11 +129,14 @@ class ExportMinion(Agent):
                 if f.level == "block":
                     safety[f.subject] = safety.get(f.subject, 0) + 1
 
-        # Ranking order from the report (survivors only).
+        # Ranking order + IUPAC labels from the report (survivors only).
         rank_by_smiles: dict[str, int] = {}
+        iupac_by_smiles: dict[str, str] = {}
         for rep in by_kind.get("report", []):
             for c in rep.ranked_candidates:
                 rank_by_smiles[c.smiles] = c.rank
+                if c.iupac_name:
+                    iupac_by_smiles[c.smiles] = c.iupac_name
 
         rows: list[CandidateRow] = []
         for sb in batches:
@@ -174,6 +177,7 @@ class ExportMinion(Agent):
                     herg_flag=herg.get(smi, False),
                     safety_flags=safety.get(m.id, 0),
                     verdict=verdict, reasons=reasons,
+                    iupac_name=iupac_by_smiles.get(smi),
                 ))
 
         summary = ExportSummary(
@@ -187,7 +191,7 @@ class ExportMinion(Agent):
             kind: [a.model_dump(mode="json", exclude={"provenance", "run_id"}) for a in arts]
             for kind, arts in sorted(by_kind.items())
         })
-        output_hash = hash_jsonable([r.model_dump() for r in rows])
+        output_hash = hash_jsonable([r.model_dump(exclude={"iupac_name"}) for r in rows])
 
         table = CandidateTable(
             project_id=ctx.project_id,
@@ -231,14 +235,15 @@ class ExportMinion(Agent):
     def _to_csv(rows: list[CandidateRow]) -> str:
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["rank", "molecule_id", "canonical_smiles", "screening_status", "verdict",
+        w.writerow(["rank", "molecule_id", "canonical_smiles", "iupac_name", "screening_status", "verdict",
                     "molecular_weight", "logp", "hbd", "hba", "tpsa", "qed", "ro5_violations",
                     "bcs_class", "sa_score", "pains_alerts", "brenk_alerts", "tox_alerts",
                     "cyp_flags", "herg_flag", "safety_flags", "reasons"])
         for r in rows:
             w.writerow([
                 r.rank if r.rank is not None else "",
-                r.molecule_id, r.canonical_smiles or "", r.screening_status, r.verdict,
+                r.molecule_id, r.canonical_smiles or "", r.iupac_name or "",
+                r.screening_status, r.verdict,
                 r.molecular_weight if r.molecular_weight is not None else "",
                 r.logp if r.logp is not None else "",
                 r.hbd if r.hbd is not None else "",
@@ -264,6 +269,8 @@ class ExportMinion(Agent):
                     continue
                 mol.SetProp("molecule_id", r.molecule_id)
                 mol.SetProp("verdict", r.verdict)
+                if r.iupac_name:
+                    mol.SetProp("iupac_name", r.iupac_name)
                 mol.SetProp("rank", str(r.rank) if r.rank is not None else "")
                 mol.SetProp("screening_status", r.screening_status)
                 mol.SetProp("qed", f"{r.qed:.3f}" if r.qed is not None else "")

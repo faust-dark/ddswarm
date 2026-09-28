@@ -778,9 +778,11 @@ recalled PubChem ID or patent number is not experimental evidence.
 IUPAC names for the ranked candidates are fetched from the NIH CACTUS web
 service **by default** and printed in the report as a readability label
 (alongside the 2D structure, SMILES and InChIKey); pass `--no-iupac` to disable
-(e.g. for fully-offline deterministic runs). It is network-dependent and
+(e.g. for fully-offline deterministic runs). The same labels flow into the
+candidate export (`CandidateRow.iupac_name` — CSV column, SDF property, and the
+PDF's ranked-candidate table). It is network-dependent and
 third-party: the names are non-deterministic across time and not authoritative,
-so they are excluded from the report's reproducibility hash.
+so they are excluded from the report's and export's reproducibility hashes.
 Canonical SMILES + InChIKey remain the identifiers of record.
 
 ## Run

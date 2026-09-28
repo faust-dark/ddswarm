@@ -611,10 +611,10 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
                 para("Ranking criteria: " + "; ".join(cand.criteria) + ".")
             if len(report.ranked_candidates) > 1:
                 para("Full ranked list of surviving candidates:")
-                rows = [["rank", "score", "SMILES"]]
+                rows = [["rank", "score", "SMILES", "IUPAC name"]]
                 for c in report.ranked_candidates:
-                    rows.append([str(c.rank), f"{c.score:.4f}", c.smiles])
-                story.append(_table(rows[0], rows[1:], [1.2, 2.0, 12.3], styles))
+                    rows.append([str(c.rank), f"{c.score:.4f}", c.smiles, c.iupac_name or "—"])
+                story.append(_table(rows[0], rows[1:], [1.2, 2.0, 12.3, 12.0], styles))
 
         # ---- evidence and confidence ----
         section("Evidence and confidence")

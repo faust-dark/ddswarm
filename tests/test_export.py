@@ -38,6 +38,17 @@ def test_to_csv_headers_and_row():
     assert "molecule_id" in out
     assert "m0" in out
     assert "verdict" in out
+    assert "iupac_name" in out
+
+
+def test_to_csv_includes_iupac_name():
+    rows = [CandidateRow(
+        rank=1, molecule_id="m0", input_smiles="CC", canonical_smiles="CC",
+        screening_status="passed", verdict="go",
+        iupac_name="ethane",
+    )]
+    out = ExportMinion._to_csv(rows)
+    assert "ethane" in out
 
 
 def test_to_sdf_writes_molecule_and_props():
@@ -57,3 +68,32 @@ def test_default_pipeline_has_export_after_report():
     assert ids.index("export") == ids.index("report") + 1
     report_pdf = next(t for t in cli.DEFAULT_PIPELINE if t.task_id == "report_pdf")
     assert "export" in report_pdf.depends_on
+
+
+def test_export_propagates_iupac_from_report(tmp_path, monkeypatch):
+    from ddswarm.contracts import ProjectSpec
+    from ddswarm.contracts.candidate_table import CandidateTable
+    from ddswarm.orchestrator import Runner, Store, TaskDefinition
+
+    monkeypatch.setattr("ddswarm.agents.report.fetch_iupac_name",
+                        lambda smi: f"IUPAC({smi})")
+    store = Store(tmp_path)
+    runner = Runner(store, cli.build_agents(store))
+    tasks = []
+    for t in cli.DEFAULT_PIPELINE:
+        params = dict(t.params or {})
+        if t.task_id == "report":
+            params["iupac"] = True
+        tasks.append(TaskDefinition(task_id=t.task_id, agent=t.agent,
+                                    depends_on=t.depends_on, params=params))
+    spec = ProjectSpec(project_id="p", input_type="mixed", objective="inhibit X",
+                       targets=["X"], starting_materials=["c1ccccc1"], status="approved")
+    manifest = runner.create_run(spec, tasks)
+    final = runner.run(manifest.run_id, project_id="p")
+    assert final.status.value == "completed"
+
+    exp = store.load_latest_agent_result("p", manifest.run_id, "export")
+    table = store.load_artifact(exp.artifacts[0].uri, CandidateTable)
+    ranked_iupacs = [r.iupac_name for r in table.rows if r.rank is not None]
+    assert ranked_iupacs, "expected ranked survivors to carry IUPAC names"
+    assert all(n and n.startswith("IUPAC(") for n in ranked_iupacs)

@@ -47,6 +47,10 @@ class CandidateRow(BaseModel):
     safety_flags: int = 0
     verdict: Verdict
     reasons: list[str] = Field(default_factory=list)
+    # IUPAC readability label (NIH CACTUS, network-fetched) for the ranked
+    # survivors — None for screening rejects. Non-deterministic, so it is
+    # excluded from the export's reproducibility hash.
+    iupac_name: str | None = None
 
 
 class ExportSummary(BaseModel):
