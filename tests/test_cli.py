@@ -86,6 +86,12 @@ def test_inject_reasoning():
     assert all(t.params == {} for t in out2)
 
 
+def test_reasoning_config_defaults_to_none():
+    # platform-agnostic skeleton: no LLM backend unless explicitly opted in
+    from ddswarm.contracts import ReasoningConfig
+    assert ReasoningConfig().backend == "none"
+
+
 def test_run_iterations_two_generations(tmp_path):
     f = _write_project(tmp_path, project_id="piter")
     store = tmp_path / "store"

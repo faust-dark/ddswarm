@@ -191,7 +191,7 @@
     "ReasoningConfig": {
       "properties": {
         "backend": {
-          "default": "hermes",
+          "default": "none",
           "title": "Backend",
           "type": "string"
         },

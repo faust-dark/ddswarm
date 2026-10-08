@@ -263,10 +263,11 @@ def _inject_resume(tasks: list[RunTask]) -> list[RunTask]:
 
 def cmd_run(args) -> int:
     req = RunRequest.model_validate_json(Path(args.project_file).read_text())
-    # Hermes reasoning is the project standard: default ON unless the JSON sets
-    # an explicit backend or the user passes --reasoning none.
+    # Platform-agnostic default: deterministic reasoning (no LLM). Hermes is an
+    # explicit opt-in via 'reasoning.backend = "hermes"' in the JSON, or
+    # --reasoning hermes on the command line.
     if req.reasoning is None:
-        req.reasoning = ReasoningConfig()  # backend default "hermes"
+        req.reasoning = ReasoningConfig()  # backend default "none"
     if args.reasoning is not None:
         req.reasoning.backend = args.reasoning
 
@@ -462,7 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="run a pipeline from a project.json file")
     pr.add_argument("project_file")
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
-                    help="override reasoning backend for the reasoning agents (research/overview/design/retrosynth/patent/clinical/regulatory)")
+                    help="override reasoning backend for the reasoning agents (default: none — deterministic, platform-agnostic; hermes = opt-in LLM for research/overview/design/retrosynth/patent/clinical/regulatory)")
     pr.add_argument("--no-iupac", action="store_true",
                     help="disable IUPAC name fetching for the ranked candidates (default: fetch from the NIH CACTUS web service as a readability label — non-deterministic, network-dependent, never authoritative)")
     pr.add_argument("--grounding", action="store_true",

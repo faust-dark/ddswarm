@@ -20,7 +20,7 @@ class RunTask(BaseModel):
 
 
 class ReasoningConfig(BaseModel):
-    backend: str = "hermes"         # "hermes" (standard) | "none"
+    backend: str = "none"          # "none" (deterministic, platform-agnostic) | "hermes" (opt-in LLM)
     command: str | None = None     # override the hermes binary / script (default "hermes")
     max_turns: int = 30
     run_budget: int = 600          # seconds; the synthesis-method narrative needs more than the old 300

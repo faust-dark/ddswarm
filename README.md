@@ -764,9 +764,10 @@ next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
 `retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/
 `clinical_minion`/`regulatory_minion` delegate to one-shot Hermes subagents
 (`hermes chat -q`), merging the LLM output with the deterministic baseline.
-This is now the **default**: `reasoning.backend` defaults to `hermes`, so
-`ddswarm run` delegates by default; pass `--reasoning none` (or
-`"reasoning": {"backend": "none"}`) to run the deterministic baseline only.
+Hermes is **opt-in**: `reasoning.backend` defaults to `none`, so `ddswarm run`
+is platform-agnostic and runs the deterministic baseline by default. Pass
+`--reasoning hermes` (or `"reasoning": {"backend": "hermes"}`) to enable the
+LLM backend.
 When the backend is unavailable the deterministic agents fall
 back to their baseline — seed assembly, transformation labels, SA score — while
 `clinical_minion`/`regulatory_minion` return `insufficient_evidence` (no offline
@@ -794,19 +795,19 @@ python3 -m venv .venv
 .venv/bin/pip install pytest          # for tests
 .venv/bin/python -m pytest -q         # run the test suite
 .venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" --smiles "COC1=..."
-.venv/bin/ddswarm run p.json          # default pipeline (hermes reasoning)
-.venv/bin/ddswarm run p.json --reasoning none --no-iupac   # strictly offline / deterministic
+.venv/bin/ddswarm run p.json          # default pipeline (deterministic, platform-agnostic)
+.venv/bin/ddswarm run p.json --no-iupac   # fully offline (no LLM by default + no name lookup)
 .venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking + dynamics + validation
 .venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
 .venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
 ```
 
-Strictly offline run: `--reasoning none` disables the LLM (hermes) so every
-agent falls back to its deterministic rules; `--no-iupac` skips the network
-CACTUS/PubChem name lookup. Docking and target-selectivity (always-on) download
-receptor PDBs from RCSB at runtime, so offline they degrade to a non-blocking
-"receptor unavailable" gap — the run still completes and the report says so
-honestly.
+The default run is deterministic and platform-agnostic (no LLM). For a fully
+offline run, add `--no-iupac` to skip the network CACTUS/PubChem name lookup.
+Docking and target-selectivity (always-on) download receptor PDBs from RCSB at
+runtime, so offline they degrade to a non-blocking "receptor unavailable" gap —
+the run still completes and the report says so honestly. Opt into the LLM
+backend with `--reasoning hermes` when running under Hermes.
 
 ## Layout
 
