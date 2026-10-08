@@ -794,11 +794,19 @@ python3 -m venv .venv
 .venv/bin/pip install pytest          # for tests
 .venv/bin/python -m pytest -q         # run the test suite
 .venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" --smiles "COC1=..."
-.venv/bin/ddswarm run p.json          # default pipeline (null reasoning)
+.venv/bin/ddswarm run p.json          # default pipeline (hermes reasoning)
+.venv/bin/ddswarm run p.json --reasoning none --no-iupac   # strictly offline / deterministic
 .venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking + dynamics + validation
 .venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
 .venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
 ```
+
+Strictly offline run: `--reasoning none` disables the LLM (hermes) so every
+agent falls back to its deterministic rules; `--no-iupac` skips the network
+CACTUS/PubChem name lookup. Docking and target-selectivity (always-on) download
+receptor PDBs from RCSB at runtime, so offline they degrade to a non-blocking
+"receptor unavailable" gap — the run still completes and the report says so
+honestly.
 
 ## Layout
 
