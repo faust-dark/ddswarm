@@ -1,815 +1,360 @@
-# ddswarm — drug discovery multi-agent swarm (Increment 39: docking + target-selectivity always-on)
+# ddswarm
 
-A reproducible, traceable, verifiable agentic drug-discovery pipeline.
+> A reproducible, traceable, verifiable multi-agent drug-discovery pipeline.
+
+**ddswarm** turns a therapeutic target and a starting molecule into a ranked set
+of candidate analogs — each with a full characterization dossier (docking,
+selectivity, ADMET, PK/PD, toxicology, synthesis) and a plain-language PDF
+report — from a single command. Every step is deterministic and auditable by
+default, with an optional LLM reasoning layer for literature recall and
+structure proposal.
+
+---
+
+## What it does
+
+Give it a target (e.g. EGFR, SERT, a GABA-A subunit) and one or more starting
+molecules (SMILES). The swarm:
+
+1. **Designs** new analog molecules — offline via a deterministic RDKit
+   transformation library (halogen swaps, homologation, N-demethylation), or via
+   an LLM when a reasoning backend is enabled.
+2. **Screens** them against medicinal-chemistry filters (PAINS, rule-of-five,
+   Brenk).
+3. **Characterizes** every survivor: molecular docking and target-selectivity
+   scoring, ADMET prediction, PK/PD simulation, retrosynthetic accessibility,
+   structural toxicology (CYP, hERG, tox), and developability (formulation/BCS).
+4. **Ranks** the survivors with a deterministic composite score and names the
+   top molecule the *identified candidate*.
+5. **Reports** the whole run as a self-contained PDF essay plus machine-readable
+   exports (CSV / JSON / SDF).
+
+Everything is stored as versioned, hashed JSON artifacts, so a run can be
+replayed, audited, and reproduced.
+
+---
 
 ## Design principles
 
 Modeling is **mechanistically constrained by default**. Wherever domain
-knowledge supplies governing equations (compartmental PK mass balance,
-receptor-occupancy saturation, turnover kinetics), those equations are the
-model. Machine-learning predictions are only admissible when they do **not**
+knowledge supplies governing equations — compartmental PK mass balance,
+receptor-occupancy saturation, turnover kinetics — those equations *are* the
+model. Machine-learning predictions are admissible only when they do **not**
 violate conservation laws, mass balance, stoichiometry, thermodynamic
-relationships, or monotonicity constraints — and any such relaxation requires
-explicit, cited justification, never silent.
-
-When sufficient mechanistic structure exists, ddswarm uses a **hybrid
-mechanistic/ML** approach rather than a purely data-driven one: ML components
-may estimate unknown parameters, residuals, or latent relationships, while the
-mechanistic model enforces the physical constraints.
-
-These principles are enforced, not aspirational: `validation_minion` runs a
-`mechanistic_constraints` check that (a) verifies the linear-compartment
-mass-balance identity `AUC = Cmax·V/CL`, (b) requires the systemic
-concentration curve to be monotonically non-increasing (no spurious
-re-absorption), and (c) flags any ADMET endpoint labelled `predicted` without
-a citable rule. Today every computational model is deterministic and rule- or
-physics-based (published QSAR rules, AutoDock Vina scoring, OpenMM force
-fields, exact PK/PD ODEs); no unconstrained ML exists in the pipeline.
-
-**Increment 9** replaces the no-op ADMET provider with a **deterministic
-rule-based provider** (`rule_admet`): five published QSAR rules computed from
-RDKit descriptors — ESOL aqueous solubility (Delaney 2004), QED drug-likeness
-(Bickerton 2012), Lipinski rule-of-5 violations, Veber bioavailability, and
-Egan passive absorption — each with an exact formula/threshold and a literature
-citation. No ML model, no torch/CUDA. On top of Increments 0-8 (contracts +
-orchestrator + logging + research/design/screen/predict/docking/dynamics/
-retrosynthesis/tox/formulation + memory + report + feedback loop + safety gate +
-validation + knowledge agents + CLI + Hermes reasoning).
-
-**Increment 10** adds a deterministic **PDF report export**: every run ends in a
-self-contained, human-readable "scientific essay" PDF (reportlab + matplotlib,
-both deterministic and headless). The body is narrative prose — a verbose
-interpretation of every result in plain language — with figures kept only as
-auxiliary aids to the text. The PDF is a binary artifact alongside the JSON
-artifacts (a `ReportDocument` metadata contract references it and is
-versioned/hashed like any other artifact), and a copy is exported to
-`reports/<project_id>.pdf` for easy access.
-
-**Increment 11** turns ddswarm into a *discovery* pipeline, not just a
-characterization one. `designer_minion` now generates genuinely NEW analog
-molecules offline through a deterministic RDKit transformation library
-(`chemistry/analog_generator.py`: Cl→F/Br/I halogen swaps, methyl→ethyl
-homologation, N-demethylation) — real SMILES, not label-only copies of the
-input. `report_minion` ranks the screening survivors by a deterministic
-composite (QED + BCS bonus − 0.1·SA − 0.2·tox alerts) and names the top one the
-`identified_candidate`; the PDF report draws its 2D structure (RDKit) with
-SMILES + InChIKey, plus a ranked candidate table. A reasoning backend still
-proposes LLM analogs; offline, the generator is the deterministic path.
-
-**Increment 12** makes the report readable and complete. `retrosynthesis_minion`
-now computes a deterministic **BRICS retrosynthetic disconnection** — the
-theoretical building blocks the molecule breaks into (or an honest "no simple
-disconnection" for fused/aromatic scaffolds) — alongside the SA score. The PDF
-report labels every stage as "Stage — agent" (e.g. "Synthesis —
-retrosynthesis_minion"), and the Methodology section lists, in plain language,
-what each agent does.
-
-**Increment 13** adds an **IUPAC name** as a human-readability label
-alongside the canonical identifiers. SMILES + InChIKey remain the machine
-backbone (every compute step consumes SMILES); the IUPAC name is fetched from
-the NIH CACTUS web service by default (disable with `--no-iupac`), and is
-clearly marked non-deterministic + non-authoritative — it is excluded from the
-report's reproducibility hash.
-
-**Increment 14** adds deterministic **PK/PD** and turns Hermes reasoning on by
-default. `clinical_minion` now emits a `ClinicalSimulation` artifact alongside
-its clinical knowledge: a deterministic one-compartment PK model (t1/2, Cmax,
-AUC, concentration-time curve) computed from clearance + volume of distribution
-(or t1/2 + one of them), supplied explicitly or recalled by the reasoning
-backend. It runs only when sufficient inputs exist — otherwise it reports
-`insufficient_inputs`. The `predictor_minion` gained a `BBB_Permeability` rule
-(Pajouhesh & Lenz 2005) and honestly reports the PK endpoints that need a QSPR
-model (clearance, Vd, t1/2, protein binding) as `not_available`. The project
-input now carries `mechanism_of_action`, `indication`, `existing_drugs`,
-`chemical_scaffold`, `adme_issue`, `dose_mg`, `route_of_administration` — the
-swarm workflow schema's primary-input fields. **Hermes reasoning is now the
-default** (`reasoning.backend` defaults to `hermes`); `--reasoning none` opts
-out.
-
-**Increment 15** adds PK/PD model *complexity selection* and mechanism-based PD
-models, per the schema's 7C requirement to not assume the simplest model is
-correct:
-
-- **PK**: `one_compartment` (existing) + `two_compartment` (new; analytic
-  biexponential solution with distribution α / terminal β half-lives, V1/Q/V2).
-- **PD**: `emax` and `hill` (sigmoid-Emax) direct-effect models on the PK
-  concentration curve.
-- **Model selection** is two-level: `mechanism_hint` (explicit
-  `params.pk_model`/`params.pd_model`, or a documented keyword match against
-  `mechanism_of_action`/`adme_issue`), then `data_driven` (goodness-of-fit
-  RSS/AIC/BIC + a parameter-identifiability note against supplied observed
-  concentration/effect data), else a labelled `default` (never claimed as
-  validated). Parameters (V1/Q/V2, Emax/EC50/Hill-n) come from `params`
-  (user) or LLM recall (inferred); the math is always `calculated`.
-- `indirect_response`, `effect_compartment`, `receptor_occupancy` PD models and
-  the tissue/organ PBPK models (well-stirred, blood-flow-limited,
-  permeability-limited) are deferred to later increments.
-
-**Increment 16** adds the mechanism-based PD model families, selected by
-mechanism (explicit `params.pd_model` or a keyword match on
-`mechanism_of_action`/`adme_issue`):
-
-- `indirect_response` — turnover model (Dayneka Type I, inhibition of kin):
-  dR/dt = kin·(1 − Imax·C/(IC50+C)) − kout·R, R(0) = baseline; integrated with a
-  fixed-step RK4 ODE solver (deterministic, no scipy).
-- `effect_compartment` — link model for delayed response: dCe/dt = ke0·(Cp − Ce),
-  E = E0 + Emax·Ce/(EC50+Ce); RK4-integrated.
-- `receptor_occupancy` — fractional target engagement RO = C/(C + Kd), algebraic.
-
-`params.pd_model` (and `pk_model`) may be a single string for all molecules or a
-`{molecule_id: model}` map for per-molecule overrides. The PD model is still
-selected by mechanism — the goodness-of-fit/AIC-BIC data-driven comparison
-remains within the direct-effect family (emax vs hill) only, since the other
-families have incommensurate output scales.
-
-**Increment 17** completes the PK/PD complexity axis with multi-compartment and
-tissue-level (organ) models:
-
-- `multi_compartment` — mammillary N-compartment model (central + N peripheral
-  compartments, explicit `peripheral_compartments` list of {V, Q}), integrated
-  with a vector fixed-step RK4; AUC via the mass-balance identity D/CL_total,
-  terminal t1/2 from a log-linear least-squares tail fit.
-- Organ/tissue models (single target tissue, opt-in via `params.tissue_model`
-  or a keyword match; layered on the systemic PK curve):
-  - `well_stirred` — Ct = Kp·C_plasma (algebraic).
-  - `blood_flow_limited` — dCt/dt = (Qt/Vt)·(C − Ct/Kp) (perfusion-limited, RK4).
-  - `permeability_limited` — dCt/dt = (PS/Vt)·(C − Ct/Kp) (membrane barrier, RK4).
-
-`PKModelKind` now covers systemic models only (one/two/multi-compartment);
-`TissueSimulation`/`TissueParameters` hold the optional tissue-level model. The
-data-driven model selection compares ALL feasible systemic models (1 vs 2 vs N)
-via a total-order fit key (perfect fit < BIC < RSS); whole-body multi-organ PBPK
-is deliberately out of scope (no deterministic parameter source).
-
-**Increment 18** ties the remaining schema items together — orchestration,
-iteration, and memory as one linked loop:
-
-- `orchestrator_minion` runs first and emits an `ExecutionPlan` (ordered
-  stages + roles + convergence config + a deterministic prose rationale) — the
-  auditable record of *why* and *how* the pipeline was assembled.
-- `memory_minion` runs after report and distils the generation into a
-  `GenerationMemory` (best candidates, avoided scaffolds, insights), also
-  written as a durable `generation` memory entry for the next cycle.
-- Iteration loop: `ddswarm run --iterations N` runs N generations (each a full
-  run); the designer already consumes prior survivors via the feedback loop,
-  and the CLI stops early when no new candidate emerges (convergence).
-- `dynamics_minion` gains an opt-in four-branch gate (`params.gate_branches=true`):
-  receptor MD runs only when predictor + docking + tox + formulation all produced
-  results for at least one candidate.
-- `regulatory_minion` now also emits a seven-dimension `RegulatoryChecklist`
-  (quality/CMC, nonclinical tox, efficacy, safety, PK-PD, IP/FTO, pathway).
-- The PDF opens with a "Reasoning and plan" section (why/how we reached the
-  candidates, from the plan + generation memory + ranking rationale) and a
-  "Workflow schema" section that reflects the exact stage -> agent -> role
-  mapping (single source of truth in `agents/roles.py`).
-
-Single-generation runs are unchanged (backward compatible); orchestration +
-memory agents are injected only when `--iterations >= 2`.
-
-**Increment 19** adds mechanistic **target-selectivity / sexual-adverse-effect
-scoring** (`selectivity_minion`, opt-in). Each candidate is docked against SERT,
-5-HT2A and 5-HT2C (AutoDock Vina); the docking free energy is converted to a
-dissociation constant via the Gibbs identity (ΔG = RT·ln Ki), a fractional
-receptor occupancy is computed at a fixed reference concentration
-(C/(C+Ki), saturable and monotonic), and a selectivity index
-(Ki_5HT2C/Ki_SERT, Ki_5HT2A/Ki_SERT) plus a deterministic sexual-ADR risk label
-are derived. The classification encodes the SSRI mechanism — sexual dysfunction
-is an *indirect* effect driven by SERT occupancy (elevated synaptic 5-HT
-activating 5-HT2A/2C), so a candidate with negligible direct 5-HT2C binding
-keeps the class effect (`class_effect`); a drop in SERT occupancy gives a
-reduced ADR only via reduced efficacy (`efficacy_tradeoff`); and a candidate
-that gains direct 5-HT2C binding (`direct_5ht2c_engagement`) is flagged as of
-unknown sign because docking reports binding, not agonist/antagonist function.
-
-Two honesty constraints are built in: Vina scores are relative, so every
-Ki/occupancy is a *ranking* estimate (never an absolute affinity), and the
-reference concentration (default 10 nM) is a documented modeling assumption
-whose choice affects occupancy magnitude but not the monotonic ordering.
-
-**Increment 20** adds **functional-sign resolution** for direct 5-HT2C/5-HT2A
-engagement (`chemistry/ht2_function.py`). Docking reports *binding*, not
-*function*; to resolve whether a directly-engaging candidate is a potential
-5-HT2C antagonist (protective) or agonist (worsening), `classify_ht2_function`
-matches the molecule against a curated, cited library of documented antagonist
-chemotypes (4-aroyl-piperidine/ketanserin, mianserin/mirtazapine tetracyclic,
-clozapine/olanzapine dibenzodiazepine) and agonist chemotypes
-(tryptamine/indole-ethylamine, 2,5-dimethoxy-phenethylamine). A match refines
-`direct_5ht2c_engagement` into `direct_5ht2c_antagonism` /
-`direct_5ht2c_agonism`; an unmatched chemotype stays of unknown sign. The label
-is "antagonist-like"/"agonist-like" — structural similarity to a documented
-class, never a functional-assay verdict (the same honesty standard as the tox
-toxicophore library).
-
-**Increment 21** adds a **hybrid Vina-score calibration** (`chemistry/
-vina_calibration.py`): the docking score is corrected against a fixed, committed
-literature-Ki set (NIMH PDSP) with a per-receptor intercept (slope fixed at
-a = 1, so the Vina→Ki mapping stays monotonic), then converted to Ki/occupancy
-via the unchanged Gibbs identity. The mechanistic model enforces the physics;
-the statistical component estimates only the systematic energy-scale offset.
-The calibrated Ki is a *calculated estimate* (residual RMSE carried on the
-artifact), not an experimental affinity, and the selectivity index
-(Ki_off/Ki_on) is approximately calibration-invariant because the per-receptor
-offsets cancel in the ratio.
-
-**Increment 22** adds **CYP450 drug-drug-interaction flags** (`cyp_minion`, in
-the default pipeline). `chemistry/cyp_alerts.py` matches candidates against a
-curated, cited chemotype library — CYP inhibition (azole→3A4, sulfonamide→2C9,
-aryloxy-alkylamine→2D6, benzimidazole→2C19, purine→1A2) and CYP3A4 induction
-(barbiturate, hydantoin, dibenzoazepine). Same honesty standard as tox: a SMARTS
-match is a deterministic fact, but the label is "potential inhibitor/inducer"
-(predicted), never a functional enzyme assay; induction is explicitly flagged as
-a weak 2D-structure signal (PXR/CAR/AhR-driven).
-
-**Increment 23** adds the **hERG (Kv11.1) cardiotoxicity flag** (`herg_minion`,
-in the default pipeline). Hybrid mechanistic + descriptor rule: a protonatable
-basic amine + >=2 aromatic rings (the Y652/F656 pore pharmacophore) gated by
-lipophilicity (cLogP >= 3.0). A flag is a *predicted* liability, not a
-patch-clamp assay, and potency (IC50) is not ranked from a 2D pharmacophore.
-
-**Increment 24** adds **external-database grounding** (`grounding_minion`,
-opt-in via `--grounding`). Each molecule is resolved by standard InChIKey
-against ChEMBL REST, PubChem PUG-REST, and PubMed E-utilities (DrugBank
-identifier via PubChem xref), recording every hit as an *observed* entry with an
-external ID + URL + retrieval timestamp — the first machine-readable link to
-live external records in the pipeline. Grounding is opt-in because live APIs are
-non-deterministic across time, so grounded entries are excluded from the
-reproducibility hash. Since Increment 32, setting `params["affinities"]` on the
-grounding task additionally resolves each molecule's binding-affinity profile
-(best Ki/Kd/IC50 per target from ChEMBL, capped at 10) as an on-demand
-medicinal-chemistry baseline.
-
-**Increment 25** adds the **machine-readable candidate export** (`export_minion`,
-in the default pipeline, after report). One flat row per screened molecule with
-every computed/predicted score plus a deterministic go/no-go verdict — no-go
-(screening reject or safety block), review (advisory liability: tox/CYP/hERG/
-Brenk/BCS IV), go (clean) — written as CSV + JSON + SDF sidecars into the store
-and copied into `reports/`.
-
-**Increment 26** generalizes `selectivity_minion` from the hard-coded
-SERT/5-HT2A/5-HT2C triad to a **configurable target panel**: any receptor list
-(`{name, pdb_id}`, expanded from a curated registry of SERT/5-HT*/DRD/CHRM/COX
-targets), one designated *primary* (on-target) with general selectivity indices
-`Ki(off)/Ki(primary)` for every off-target. The sexual-ADR interpretation is now
-a pluggable profile that fires only for the SERT+5-HT2C panel; any other panel
-reports pure affinity + selectivity with no invented ADR label.
-
-**Increment 27** adds a **content-addressed result cache** for docking (and
-selectivity re-docking): an opt-in `--resume` flag that reuses results cached
-under `store/checkpoints/<kind>/<key>.json`, keyed by a content hash of the
-inputs (receptor, ligand SMILES, search box, protocol, engine). Deterministic by
-construction — a cache hit reproduces the exact result and introduces no new
-non-determinism.
-
-**Increment 28** adds **MD trajectory checkpoint/resume**: at the end of a
-successful receptor MD run the OpenMM State (positions/velocities/integrator RNG)
-is written to `store/checkpoints/md_state/<key>/state.xml`, keyed by the physics
-inputs (excluding `steps`), so a later `--resume` run CONTINUES the simulation by
-`steps` more steps instead of restarting. `loadState` restores the integrator
-RNG, so the continuation is deterministic *given the checkpoint*; the
-minimization reference is saved alongside the State so the RMSD is always
-measured against the same minimized structure. Honest caveat: the base MD is
-chaotic and not bit-reproducible across *fresh* runs, and resumed metrics cover
-the continued segment only (prior/total steps are tracked for audit).
-
-**Increment 29** populates the two selectivity libraries as *data* so they serve
-any future query:
-
-- **`chemistry/receptors.py`** — a curated registry of ~61 dockable targets
-  across GPCRs (serotonergic/dopaminergic/adrenergic/muscarinic/histamine/
-  opioid/cannabinoid/adenosine/melatonin receptors plus GLP-1R/CCR5/MC4R),
-  monoamine transporters, enzymes (COX-1/2, PDE5, ACE, HMG-CoA reductase,
-  MAO-A/B, AChE, DPP4) and ion channels (hERG/Nav1.5/Cav1.2). Every `pdb_id`
-  was verified against the RCSB PDB data API (no invented ids; uncurated targets
-  stay `pdb_id: None`), and `canonical_receptor_name` resolves aliases
-  (`PTGS2`→`COX2`, `M1`→`CHRM1`, `5-HT2C`→`HTR2C`, `mu`→`OPRM1`, ...) so panels
-  may name a target several ways.
-
-- **`chemistry/selectivity.py`** — a pluggable ADR profile library: the SSRI
-  sexual-ADR profile, the NSAID COX-2/COX-1 GI-risk profile (tiered on the
-  selectivity index Ki(COX-1)/Ki(COX-2)), and 7 off-target "antitarget" ADR
-  profiles (M1 anticholinergic, H1 sedation, D2 extrapyramidal/prolactin,
-  α1A/α1B orthostatic hypotension, 5-HT2B valvulopathy, κ dysphoria) tiered on
-  occupancy at the reference concentration. Each profile is mechanistic and
-  citable; sign-dependent (agonism) profiles stay "engagement" because docking
-  reports binding, not function. A panel can match several profiles at once, so
-  `MoleculeSelectivity.adr_interpretations` is now a list (schema 1.2).
-
-**Increment 30** makes the two libraries queryable from the terminal:
-`ddswarm receptors {list,lookup,adr,match}` — a deterministic, offline CLI over
-`RECEPTOR_REGISTRY` + the ADR profile library (alias resolution, dry-run profile
-matching, no docking). The SSRI + COX "special" ADR profiles became data
-(`SPECIAL_ADR_PROFILES`) so `select_adr_profiles` matches them generically.
-
-**Increment 31** adds an **on-demand ChEMBL literature layer**
-(`chemistry/chembl_client.py`) so per-compound literature data is fetched at
-query time rather than committed as a large static dataset. `search_target(gene)`
-resolves a gene to its human ChEMBL target id; `compound_affinities(inchi_key)`
-returns a molecule's best Ki/Kd/IC50 per target; `receptor_reference_ligands
-(target)` returns reference ligands + measured Ki (median across assays) for
-fitting the Vina→Ki offset. `selectivity_minion` now falls back to this
-on-demand source when a receptor is absent from the fixed `CALIBRATION_SET` and
-`params["chembl_calibration"]` is set — so docking calibration works for ANY
-panel, not just SERT/5-HT2A/5-HT2C. This layer is network-dependent and
-non-deterministic: it is opt-in, and the fetched reference ligands are re-hashed
-into the input hash (never silently folded into a reproducible score).
-
-**Increment 32** wires the on-demand affinity profile into `grounding_minion`.
-When `params["affinities"]` is set on the grounding task, each grounded molecule
-also gets a `binding_affinities` list (its strongest Ki/Kd/IC50 per target from
-ChEMBL, capped at the top 10). This is the medicinal-chemistry baseline for any
-structure: a run on fluoxetine resolves SERT Kd 0.81 nM ≫ NET 240 nM ≫ DAT
-3600 nM, i.e. its known SERT-selectivity, from literature alone. PK parameters
-were evaluated as an on-demand ChEMBL ADMET fetch and found empty for common
-drugs (fluoxetine/citalopram: zero half-life/clearance records; DrugBank content
-is license-gated 403) — so PK stays the reasoning-backend recall that was already
-wired, and there is no fake ChEMBL-PK fetcher.
-
-**Increment 33** expands the deterministic medicinal-chemistry SMARTS libraries
-(the class-agnostic static baseline — every rule applies to any structure, and
-every SMARTS was derived from a reference compound and verified against both the
-class reference and a negative control before shipping):
-
-- `tox_alerts.py` 7 → 22 toxicophores (aromatic amine/azo/azide/hydrazide/
-  isocyanate/isothiocyanate/acyl halide/acrolein/α-halo-carbonyl/sulfonate
-  ester/C-nitroso/vinyl halide/β-lactone/catechol/glyoxal).
-- `cyp_alerts.py` now covers CYP2A6 (coumarin), 2B6 (thienopyridine), 2C8
-  (2,4-diaminopyrimidine), 2E1 (pyrazole) and a second 2D6 motif
-  (1,3-benzodioxole), plus a 4th 3A4 inducer (thiazolidinedione).
-- `herg_alerts.py` gains `HERG_CHEMOTYPES` (aryl-piperazine, phenothiazine,
-  butyrophenone, methanesulfonanilide) that enrich the reason when the
-  descriptor pharmacophore fires — a structural class label, not a new gate.
-- `functional_sign.py` (new): a general functional-sign library for D2, H1, M1,
-  α1A, μ-opioid and κ-opioid (agonist/antagonist by documented chemotype), the
-  same honesty contract as tox/CYP. Distinct μ agonist (N-methyl morphinan,
-  4-phenylpiperidine) vs antagonist (N-allyl / N-cyclopropylmethyl morphinan).
-
-The honesty standard is unchanged: a SMARTS match is a structural fact, the
-label is "potential"/"-like", never a functional-assay verdict.
-
-**Increment 34** opens the final PDF with the user's own prompt and a
-plain-language overview. `overview_minion` (new, in DEFAULT_PIPELINE) emits an
-`OverviewReport` with two kinds of content, kept distinct:
-
-- **deterministic own-database facts** — the curated receptor registry entry
-  (gene / family / PDB / reference) for each named target plus the starting
-  materials (evidence_level `observed`); always present.
-- **LLM-recalled narrative** — mechanism of action, chemical structure, and
-  therapeutic uses from the reasoning backend (`inferred`), present only when a
-  backend is configured.
-
-The agent always succeeds (deterministic baseline), so it never gates the
-report on a missing backend. The PDF renderer puts a verbatim **Prompt** section
-(the `ProjectSpec.user_prompt`, falling back to `objective`) and an **Overview**
-section (MoA / structure / uses / own-DB facts / references) at the very top,
-before "Reasoning and plan". `ProjectSpec` gains the optional `user_prompt`
-field; `ReasoningBackend.overview()` is the new delegation hook.
-
-**Increment 35** makes retrosynthesis emit a human-readable synthesis METHOD, not
-just a bare step list. `SynthesisRoute` gains `procedure` (a verbatim narrative a
-bench chemist could start from — it names the starting material, preferring a
-pre-existing derivative of the same therapeutic/chemical class when one exists,
-otherwise simpler/commercially-available precursors, and the literature-confirmed
-reactions/conditions) and `references` (literature citations for the key
-transformations). The `_SYNTHESIS_PROMPT` now requests both; the PDF's Synthesis
-section renders the procedure, literature basis, and feasibility note instead of
-the previous "N LLM-proposed route(s)" placeholder. The richer output needs more
-than the old 300 s reasoning budget, so the default `run_budget` is raised to
-600 s everywhere (config, backend, registry, and every reasoning agent's
-fallback). Honesty unchanged: routes stay `evidence_level=hypothetical`.
-
-**Increment 36** makes the IUPAC name of the identified candidate part of the
-standard report rather than an opt-in. The NIH CACTUS lookup (which generates a
-de-novo IUPAC name from the structure, not just a database match) now runs **by
-default** in `report_minion`; the `--iupac` flag is replaced by `--no-iupac` to
-disable it for fully-offline/deterministic runs. The "Identified candidate"
-section already rendered `CandidateSelection.iupac_name` when present, so this
-increment wires the fetch to be unconditional; the label stays marked
-"readability-only, not authoritative" and is still excluded from the report's
-reproducibility hash. Caveat: CACTUS can fail to name a few structures (some
-novel scaffolds, specific stereochemistries) and then the section falls back to
-SMILES + InChIKey — the machine identifiers always remain.
-
-**Increment 37** brings the patent / freedom-to-operate landscape into the
-default pipeline so every run reports whether the candidate may already be
-claimed (a competitor's pipeline). `patent_minion` is added to
-`DEFAULT_PIPELINE` (depends on `screen`, feeds `report`) with a NON-GATING
-baseline: without `reasoning.backend=hermes` it returns `success` with an empty
-landscape and an explicit "patent status UNKNOWN — this run does NOT establish
-novelty or freedom-to-operate" note (in the executive summary, gaps, caveats,
-and the PDF's Patent-landscape section), so it never fabricates a "clear" and
-never gates the report. With hermes it delegates to the reasoning backend as
-before. Honesty unchanged: every entry is LLM recall forced to `inferred` and
-tagged "verify against primary source"; the agent is a research aid, not a legal
-FTO/novelty opinion.
-
-**Increment 38** makes every agent NON-BLOCKING except the safety gate. The
-runner's result gating no longer stops downstream on `failed` or
-`insufficient_evidence` — only `blocked` (a safety verdict) still propagates.
-`insufficient_evidence` is now a reported gap: the run completes and the report
-lists what an agent could not compute (no backend, no molecules) instead of
-dying on it. `failed` (a crashed agent) still marks the run `failed` but does
-not gate downstream — the report surfaces the error text. `safety_minion`
-remains the single hard gate: a controlled-substance/dual-use `block` still
-halts every downstream task and marks the run `blocked`. The report's
-`run_status` derivation mirrors the runner.
-
-**Increment 39** makes **docking** and **target-selectivity** ALWAYS ON in the
-default pipeline (16 → 18 tasks). Both now resolve their receptor(s) from the
-project targets (`spec.targets[0]` through the registry) instead of requiring an
-explicit `params.receptor` / `params.receptors`, so every run attempts a real
-AutoDock Vina dock and an off-target/ADR panel. Both remain non-blocking: a
-receptor with no PDB (or no search box) degrades to a reported gap, never a
-crash. The registry gains the **GABA-A α1/α2/α3/α5** subunits (RCSB-verified
-PDBs) plus a `gabaa_alpha2_anxiolytic` ADR profile (α2/α3 on-target, α1
-sedation + α5 amnesia off-target) and a GABA-A ADR classifier. Reference-ligand
-selection in the Vina engine was fixed to exclude glycans/ions/buffers and to
-group HETATM per individual residue, so a glycosylated receptor (GABA-A) picks
-the co-crystal drug (diazepam) — not a mannose glycan — as its redocking
-reference and search box. Known limitation: the α2 (9QK0) and α3 (9TNB)
-structures carry no benzodiazepine co-crystal, so their BZD-site box cannot be
-auto-derived yet (they fall back to a gap / orthosteric ligand); α1 (6X3X) and
-α5 (8BHK) dock at the diazepam-defined BZD site.
-
-## Architecture
-
-- **Harness**: Hermes (this agent's runtime) drives execution.
-  `ddswarm` provides the contract + state-machine layer that Hermes invokes.
-- **Runner** (`orchestrator/runner.py`): the state machine — task graph, gating,
-  retry, idempotent versioning, resume. Produces no chemistry.
-- **Agents**:
-  - `orchestrator_minion` — runs first; emits the ExecutionPlan (stages, roles,
-    convergence, deterministic rationale).
-  - `memory_minion` — runs after report; emits the GenerationMemory and writes a
-    durable `generation` memory entry for the next cycle.
-  - `researcher_minion` — KnowledgePack from ProjectSpec + seed, plus optional
-    delegation to a reasoning backend (Hermes subagent) for literature research.
-  - `designer_minion` — DesignBatch. Offline: deterministic analog generation
-    via an RDKit transformation library (halogen swaps, homologation,
-    N-demethylation) — real new SMILES. With a reasoning backend: LLM-proposed
-    analog SMILES (hypothetical).
-  - `screener_minion` — deterministic structural + physicochemical screening (RDKit).
-  - `predictor_minion` — ADMET/PK predictions through pluggable providers
-    (default: deterministic `rule_admet` rules; `null_admet` for an explicit
-    no-model run).
-  - `docking_minion` — receptor prep + QC, docking (AutoDock Vina), redocking RMSD.
-  - `retrosynthesis_minion` — RDKit synthetic-accessibility score per candidate
-    (calculated) + easy/moderate/hard classification; a deterministic BRICS
-    retrosynthetic disconnection (building blocks, or an honest "no simple
-    disconnection" for fused scaffolds); optional LLM-proposed synthesis routes
-    (hypothetical) via the reasoning backend.
-  - `tox_minion` — deterministic, sourced structural toxicophore alerts (SMARTS),
-    reported as *predicted* potential liabilities, never experimental evidence.
-  - `dynamics_minion` — receptor molecular dynamics (OpenMM, amber14 + OBC2 GBSA
-    implicit solvent, Langevin NVT): backbone-RMSD stability + potential-energy
-    fluctuation, reported as *calculated*. A short ps-scale relaxation snapshot,
-    NOT production MD and never a binding free energy. Ligand MD is deferred
-    (openff-toolkit is unavailable on Python 3.14).
-  - `formulation_minion` — deterministic developability estimate per molecule:
-    aqueous-solubility class, permeability class, BCS classification, ionizable
-    groups, and salt/prodrug suggestions. All *predicted* rule-based estimates
-    from RDKit logP/TPSA — never measured properties.
-  - `safety_minion` — deterministic gating: controlled substances (exact
-    canonical-SMILES match) and dual-use/biosafety targets (name match) against
-    a curated, non-exhaustive list. A `block` verdict stops every downstream
-    task via the orchestrator's result gating.
-  - `validation_minion` — audits a finished run from the store: artifact schema
-    validity, provenance completeness, hash integrity (anti-tamper), cross-agent
-    consistency, evidence-level sanity, numeric sanity, and report-breakdown
-    consistency. Reports per-check pass/fail/warn; never a scientific judgment.
-  - `patent_minion` — patent / freedom-to-operate landscape for the candidates
-    and/or target, delegated to the Hermes reasoning backend; every entry is LLM
-    recall forced to `inferred` + "verify against primary source". A research
-    aid, NOT a legal freedom-to-operate opinion. In the default pipeline since
-    Increment 37: without a backend it returns an empty landscape with an
-    explicit "patent status UNKNOWN" note (non-gating), never a fabricated clear.
-  - `clinical_minion` — clinical-stage knowledge (known drugs, trial phase,
-    indication, status) for the target/candidates, delegated to the reasoning
-    backend; every entry `inferred`.
-  - `regulatory_minion` — regulatory knowledge (agency designations, approval
-    status, scheduling), delegated to the reasoning backend; every entry
-    `inferred`.
-  - `report_minion` — aggregates a finished run into a structured Report
-    (executive summary, per-stage findings, evidence-level breakdown, gaps,
-    next steps, caveats), ranks the screening survivors by a deterministic
-    composite score, and names the top one the `identified_candidate`; also
-    writes `finding` + `feedback` to project memory.
-  - `report_pdf_minion` — renders the finished run into a self-contained PDF in
-    plain, verbose human language: every stage is a labeled subsection
-    ("Synthesis — retrosynthesis_minion"), the Methodology lists what each agent
-    does, and figures are only auxiliary aids; runs last and persists the PDF as
-    a binary sidecar plus a `ReportDocument` metadata artifact, and the CLI
-    copies it to `reports/<project_id>.pdf`.
-- **Project memory** (`orchestrator/memory.py`): an append-only, cross-run log
-  under `store/<project_id>/memory.json`. Conclusions are `inferred` (the
-  swarm's reasoning), never observed data.
-- **Feedback loop**: report_minion records survivors + gaps to memory; in the
-  next run, `designer_minion` adds prior survivors as design scaffolds and
-  `researcher_minion` re-seeds prior findings (evidence_level=inferred).
-- **Reasoning layer** (`reasoning/`): a pluggable backend that the reasoning
-  agents use. `NullReasoningBackend` (offline, deterministic baseline) and
-  `HermesSubprocessBackend` (shells out to `hermes chat -q`). LLM output is
-  never trusted as observed data — the agents force `evidence_level` to
-  `inferred`/`hypothetical` and tag provenance accordingly.
-- **CLI** (`ddswarm`): `run`/`runs`/`report`/`init` — see below.
-- **Chemistry layer** (`chemistry/rdkit_ops.py`, `chemistry/pdb_utils.py`):
-  sanitization, canonicalization, descriptors, PAINS/Brenk alerts, and pure-Python
-  PDB structural analysis (missing residues/atoms, waters, heterogens, hydrogens).
-  The agent reasons; these modules compute.
-
-## Contracts (JSON, versioned, validated)
-
-| Contract | Purpose |
-|---|---|
-| `ProjectSpec` | normalized input, objectives, constraints, success criteria |
-| `AgentResult` | per-agent outcome: status, findings, warnings, errors, provenance |
-| `RunManifest` | run-level state + task DAG |
-| `TaskSpec` | execution ledger for one task (attempts, retries) |
-| `EventLog` | append-only JSONL with input/output hashes |
-| `KnowledgePack` | researcher output (targets/ligands/references with evidence levels) |
-| `DesignBatch` | designer output (candidates with transformation + rationale) |
-| `ScreenedBatch` | screener output (per-molecule validity, properties, alerts, verdicts) |
-| `AdmetPrediction` | predictor output (per-molecule, per-endpoint: model/version/AD/uncertainty) |
-| `DockingResult` | docking output (receptor QC, protocol, ranked poses, redocking RMSD) |
-| `RetrosynthesisPlan` | SA score + accessibility per molecule, optional synthesis routes |
-| `ToxProfile` | per-molecule structural toxicophore alerts (predicted liabilities) |
-| `DynamicsResult` | receptor MD run: protocol, backbone-RMSD + energy metrics (calculated) |
-| `FormulationAssessment` | per-molecule solubility/permeability/BCS + salt/prodrug suggestions |
-| `SafetyAssessment` | safety gate: flags (controlled substance / dual-use) + verdict pass/flag/block |
-| `ValidationReport` | per-check reproducibility/consistency audit of one run |
-| `PatentLandscape` | patent/FTO entries (LLM-recalled, inferred) + relevance summary |
-| `ClinicalAssessment` | clinical findings (LLM-recalled, inferred) + phase counts |
-| `RegulatoryAssessment` | regulatory findings (LLM-recalled, inferred) + agency counts |
-| `Report` | structured run summary (exec summary, evidence breakdown, gaps, next steps) |
-| `ProjectMemory` | cross-run conclusions (finding/decision/lesson/constraint/feedback) |
-| `RunRequest` | project.json: ProjectSpec + task DAG + optional reasoning config |
-
-Every artifact carries `evidence_level` (`observed|calculated|predicted|inferred|hypothetical`)
-and provenance (source, URL/identifier, timestamps, tool versions, hashes).
-
-## Screening (Increment 1)
-
-Hard elimination (default, all configurable via `params.filters`):
-1. invalid SMILES (sanitization/canonicalization failed)
-2. MW > 500
-3. logP > 5 (Crippen)
-4. HBD > 5
-5. HBA > 10
-6. any PAINS match (RDKit FilterCatalog)
-
-Advisory (reported, not eliminating): TPSA > 140, rotatable bonds > 10,
-|formal charge| > 1, and any Brenk match (RDKit FilterCatalog, reported in
-`brenk_alerts`).
-
-Strict Ro5: any single violation eliminates (approved default).
-
-Brenk is advisory by default: its "unwanted functionality" alerts are
-liability flags, not kill criteria — e.g. it flags the approved drug gefitinib
-as `Aliphatic_long_chain` on the OCCCN propyl-morpholine chain. Restore hard
-Brenk per-project with `params.filters.brenk_hard=true`.
-
-Screen is a soft gate: downstream agents consume screened_batch survivors
-(`passed=true`); when none pass they fall back to the starting material(s), so
-ADMET/tox/formulation/knowledge still run on the parent scaffold rather than
-the pipeline stalling on zero survivors.
-
-## Prediction (Increment 2)
-
-`predictor_minion` runs ADMET/PK predictions through a pluggable provider
-interface (`predictors/`). Each endpoint prediction carries:
-
-- `model` + `model_version` (documented)
-- `predicted_value` + `units` (continuous) and/or `predicted_label` (categorical)
-- `citation` (literature source for the rule/model)
-- `prediction_status` (`predicted|not_available|out_of_domain|error`)
-- `evidence_level` = `predicted` (a computational score is never experimental evidence)
-- `applicability_domain` (status/method/note)
-- `uncertainty` (type/value/note)
-
-Providers are registered in `predictors/registry.py`. The default is
-`RuleBasedAdmetProvider` (`rule_admet`), a deterministic RDKit-descriptor
-provider with five cited rules — every output `evidence_level = predicted`:
-
-- `LogS_ESOL` (Delaney 2004): LogS = 0.16 - 0.63·clogP - 0.0062·MW + 0.066·RB - 0.74·AP (continuous, std 0.75)
-- `QED` (Bickerton 2012): RDKit `QED.default()`, 0-1
-- `Lipinski_Violations` (Lipinski 1997): rule-of-5 violation count
-- `Veber_Bioavailability` (Veber 2002): good/poor (RB <= 10 and TPSA <= 140 A^2)
-- `Egan_Absorption` (Egan 2000): good/poor (box approximation, TPSA < 131.6 and 0.4 < clogP < 5.88)
-
-`NullAdmetProvider` (`null_admet`) stays registered for tests and explicit
-no-model runs, returning `not_available` for the admet_ai-style canonical set.
-A heavier ML model (e.g. `admet_ai`, torch+CUDA) can still be dropped in later
-behind the same interface. BBB / hERG / CYP / Ames / half-life / clearance are
-deferred — they need trained models, not precise RDKit rules.
-
-No provider configured, or no molecules => `insufficient_evidence`.
-
-## Docking (Increment 3)
-
-`docking_minion` runs a real AutoDock Vina engine (`docking/vina_engine.py`):
-
-1. **Receptor**: raw PDB -> `PDBFixer` (clean, add hydrogens) -> Open Babel `-xr`
-   (rigid PDBQT). Structural QC runs on the *raw* structure and reports, as
-   observed facts: missing residues (SEQRES vs observed), missing backbone
-   atoms, waters, heterogens, hydrogens.
-2. **Ligand**: SMILES -> `Meeko` -> PDBQT with a `REMARK SMILES IDX` table
-   (maps SMILES atom order to PDBQT serials).
-3. **Docking**: the Vina binary via subprocess; poses/affinities are parsed
-   straight from Vina's output — nothing is invented.
-4. **Redocking validation**: when the source PDB carries a co-crystal ligand
-   (e.g. gefitinib `IRE` in 2ITY), the rank-1 docked pose is compared to it
-   with a symmetry-aware heavy-atom RMSD (`rdMolAlign.CalcRMS`, no
-   pre-alignment). Threshold is 2.0 A by default.
-
-Every pose carries rank/affinity/rmsd-lb/rmsd-ub; the result carries receptor
-QC, the search box, engine version, and redocking RMSD. Docking scores are
-`evidence_level = calculated` — in-silico, never experimental evidence.
-
-Honest result (this increment's demo): gefitinib redocks into 2ITY with RMSD
-~3.5 A (above the 2 A success threshold). The protocol reproduces the pocket
-(centroid ~1 A) but not the exact pose; that is reported as-is, not polished.
-
-The engine needs the AutoDock Vina binary (not on PyPI). Download it to
-`tools/vina` (gitignored):
-
-```bash
-curl -sL https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.7/vina_1.2.7_linux_x86_64 -o tools/vina
-chmod +x tools/vina
-# plus: .venv/bin/pip install -e '.[docking]'   # meeko, pdbfixer, openbabel-wheel, scipy, gemmi
+relationships, or monotonicity constraints; any such relaxation requires
+explicit, cited justification, never a silent override.
+
+When enough mechanistic structure exists, ddswarm uses a **hybrid
+mechanistic/ML** approach: ML components may estimate unknown parameters,
+residuals, or latent relationships, while the mechanistic model enforces the
+physical constraints. This is not aspirational — the `validation_minion`
+auditor enforces it with a `mechanistic_constraints` check that verifies the
+mass-balance identity, requires systemic concentration curves to be monotonically
+non-increasing, and flags any `predicted` endpoint lacking a citable rule.
+
+Every computational model in the pipeline today is deterministic and rule- or
+physics-based (published QSAR rules, AutoDock Vina scoring, OpenMM force fields,
+exact PK/PD ODEs); there is no unconstrained ML.
+
+---
+
+## The pipeline
+
+The default pipeline is 18 agents, wired as a task graph and executed by a
+deterministic state machine (the **Runner**) that handles gating, retries,
+versioning, and resume:
+
+```
+safety → research → overview → design → screen → docking → selectivity →
+predict → retrosynth → tox → cyp → herg → formulation → patent →
+report → export → validation → report_pdf
 ```
 
-Or point the agent at it with `params.vina_binary` / the `VINA_BINARY` env var.
+Two more agents are injected automatically when you ask for iteration
+(`--iterations N`): `orchestrator` (first — writes the execution plan) and
+`memory` (after report — distils the generation for the next cycle). Several
+more are opt-in (see below).
 
-## Dynamics (Increment 6)
+### Gating
 
-`dynamics_minion` runs real receptor MD through a pluggable `MdEngine`
-(`dynamics/`), mirroring the docking engine pattern:
+- **Input validity** — objective must be non-empty; target/ligand inputs must
+  match the declared `input_type`; the spec must be `approved`.
+- **Chemical validity** — every molecule must sanitize and canonicalize; invalid
+  SMILES are eliminated with a reason, never silently dropped.
+- **Result gating** — only a `blocked` verdict (a safety hit) stops downstream
+  tasks. A `failed` agent still marks the run `failed` but does not block
+  downstream (the error is surfaced in the report); `insufficient_evidence` is a
+  reported gap, not a crash.
 
-- **`NullMdEngine`** — deterministic no-op: reports `not_run` with an honest
-  note (no MD engine configured). The offline default.
-- **`OpenMMMdEngine`** — real: `PDBFixer` prep (the same receptor QC as
-  docking) -> `amber14-all.xml` + OBC2 GBSA implicit solvent -> Langevin NVT
-  (fixed seed) -> bounded minimization + a short trajectory. Reports, per
-  receptor run: backbone heavy-atom (N/CA/C) RMSD (mean/max, Kabsch-aligned)
-  and potential-energy mean/std. All `evidence_level = calculated`.
+The `safety_minion` is the single hard gate: a controlled-substance or
+dual-use/biosafety hit halts every downstream task and marks the run `blocked`.
 
-Honesty rules: this is a **short ps-scale relaxation snapshot**, not production
-MD; backbone RMSD is never presented as a converged stability verdict, and no
-MM/PBSA-style binding free energy is computed or implied. **Ligand MD is
-explicitly deferred** — it needs a small-molecule force field (openff-toolkit),
-which is not installable on Python 3.14; the `MdEngine` abstraction makes it a
-drop-in when available.
+---
 
-The engine needs OpenMM + PDBFixer (already pulled in by the `[docking]` extra).
-A receptor is configured via `params.receptor` (`{kind: pdb_id, identifier: 2ITY}`
-downloads from RCSB; `{kind: file, path: ...}` uses a local PDB). Note: GBSA on
-a ~330-residue receptor is genuinely expensive (~5 min for a bounded run) —
-see `scripts/demo_egfr.py`, which uses `steps=200, minimize_max_iterations=100`.
+## Agents
 
-## Formulation (Increment 6)
+### Default pipeline
 
-`formulation_minion` is deterministic and offline (RDKit only). Per molecule it
-reports, from `logP`/`TPSA` heuristics (documented in `chemistry/formulation.py`):
+| Agent | Role |
+|---|---|
+| `safety_minion` | Hard gate: exact-SMILES controlled substances + name-matched dual-use targets. |
+| `researcher_minion` | Assembles a KnowledgePack (targets, ligands, references) from the spec; optional LLM literature research. |
+| `overview_minion` | Overview report — deterministic receptor-registry facts plus an optional LLM narrative (mechanism, structure, uses). |
+| `designer_minion` | Proposes new analog molecules (RDKit transformations offline; LLM proposals with a backend). |
+| `screener_minion` | Structural + physicochemical screening (PAINS, Ro5, Brenk). |
+| `docking_minion` | Receptor prep + AutoDock Vina docking + redocking RMSD validation. |
+| `selectivity_minion` | Docks an off-target panel; derives Ki/occupancy/selectivity index and ADR risk. |
+| `predictor_minion` | ADMET/PK prediction through a pluggable provider (default: cited RDKit rules). |
+| `retrosynthesis_minion` | Synthetic-accessibility score + deterministic BRICS disconnection (+ optional LLM routes). |
+| `tox_minion` | Structural toxicophore alerts (SMARTS). |
+| `cyp_minion` | CYP inhibition / induction flags. |
+| `herg_minion` | hERG (Kv11.1) cardiotoxicity flag. |
+| `formulation_minion` | Solubility / permeability / BCS class + salt and prodrug suggestions. |
+| `patent_minion` | Patent / freedom-to-operate landscape (non-gating "UNKNOWN" baseline without a backend). |
+| `report_minion` | Aggregates the run into a structured Report; ranks survivors; names the identified candidate. |
+| `export_minion` | Machine-readable candidate export (CSV + JSON + SDF) with a go/no-go verdict. |
+| `validation_minion` | Terminal audit: schema, provenance, hash integrity, consistency, evidence-level sanity. |
+| `report_pdf_minion` | Renders the run into a self-contained plain-language PDF. |
 
-- **aqueous-solubility class** (`high|moderate|low`, crude logP heuristic)
-- **permeability class** (`high|moderate|low`, TPSA/logP; Veber TPSA<=140 A^2)
-- **BCS class** (`I|II|III|IV`, the 2x2 solubility x permeability grid)
-- **ionizable groups** (acidic: COOH/SO3H/tetrazole; basic: non-amide amine +
-  pyridine-like aromatic N), plus **salt** and **prodrug** suggestions
+### Opt-in
 
-Every field is `evidence_level = predicted` — a rule-based estimate, explicitly
-not a measured solubility/permeability.
+| Agent | Role |
+|---|---|
+| `dynamics_minion` | Receptor molecular dynamics (OpenMM, implicit solvent). |
+| `grounding_minion` | Resolves molecules against ChEMBL / PubChem / PubMed (live, network). |
+| `clinical_minion` | Clinical-stage knowledge + deterministic PK/PD simulation. |
+| `regulatory_minion` | Regulatory knowledge + a seven-dimension regulatory checklist. |
 
-## Safety gate (Increment 7)
+---
 
-`safety_minion` is a deterministic gate over two curated lists
-(`chemistry/safety.py`): controlled substances (matched by EXACT canonical
-SMILES — fentanyl, methamphetamine, MDMA) and dual-use/biosafety targets
-(matched by name — ricin, botulinum toxin, anthrax, variola, ebola, sarin,
-sulfur mustard). A match is an *observed* fact against that list, and it
-returns `verdict=block` -> `AgentResultStatus.blocked`, which the orchestrator
-propagates to every downstream task. Since Increment 38 this is the ONLY
-remaining hard gate — every other agent is non-blocking. The list is
-deliberately small and non-exhaustive, and the note on every flag says so —
-this is a policy aid, NOT a legal determination and NOT a database.
+## Capabilities
 
-## Validation (Increment 7)
+### Molecular design & screening
 
-`validation_minion` reads a finished run straight from the store and emits a
-`ValidationReport` with one check per concern (each pass/fail/warn):
+`designer_minion` generates genuinely **new** analogs offline through a
+deterministic RDKit transformation library (`Cl→F/Br/I` halogen swap,
+methyl→ethyl homologation, N-demethylation) — real new SMILES, not copies of the
+input. With a reasoning backend it can also accept LLM-proposed analogs.
 
-- `artifact_schema` — every artifact re-validates against its contract model
-- `provenance_complete` — every artifact carries >= 1 provenance entry
-- `hash_integrity` — `ArtifactRef.hash` equals a fresh hash of the file
-- `cross_agent_consistency` — screened survivors appear in retrosynth/tox/formulation
-- `evidence_level_sanity` — computed/predicted values are never labelled `observed`
-- `numeric_sanity` — finite, plausible docking affinity / SA score / RMSD
-- `report_breakdown` — `Report.evidence_breakdown` matches a recount of the artifacts
+Screening eliminates on hard filters — invalid SMILES, MW > 500, logP > 5,
+HBD > 5, HBA > 10, any PAINS match — and reports (without eliminating) TPSA >
+140 Å², rotatable bonds > 10, formal charge outside ±1, and Brenk "unwanted
+functionality" alerts. Brenk is advisory by default: it flags the approved drug
+gefitinib as `Aliphatic_long_chain`, so it is a liability flag, not a kill
+criterion (`filters.brenk_hard=true` restores hard Brenk per project).
 
-A failed check means the run's own bookkeeping is inconsistent; the report
-status is `success` when no check fails, else `partial` (it never fabricates a
-green result, and it never blocks the run — it is an audit, not a gate).
+### Structure-based modeling
 
-## Knowledge agents (Increment 8)
+- **Docking** (`docking_minion`) runs a real AutoDock Vina engine: `PDBFixer`
+  receptor prep → Open Babel rigid PDBQT, `Meeko` ligand prep, Vina subprocess
+  docking, and — when the source PDB carries a co-crystal ligand — a
+  symmetry-aware redocking RMSD against it (2.0 Å success threshold). Receptor
+  quality (missing residues/atoms, waters, heterogens) is reported from the raw
+  structure as observed facts.
+- **Target selectivity** (`selectivity_minion`) docks a configurable panel and
+  derives mechanistic metrics: docking free energy → dissociation constant via
+  the Gibbs identity, fractional occupancy at a reference concentration, and a
+  selectivity index `Ki(off)/Ki(primary)`. A pluggable ADR-profile library
+  interprets the panel (SSRI sexual-ADR, NSAID COX-2/COX-1 GI risk, and
+  antitarget profiles for M1/H1/D2/α1/5-HT2B/κ), including a GABA-A profile
+  (α2/α3 anxiolytic on-target; α1 sedation + α5 amnesia off-target).
+- **Vina calibration** corrects docking scores against a fixed, committed
+  literature-Ki set (NIMH PDSP) with a per-receptor intercept (slope fixed at
+  1, so the Vina→Ki mapping stays monotonic); the selectivity ratio is
+  approximately calibration-invariant. A ~61-target receptor registry
+  (RCSB-verified PDBs) serves any panel.
+- **Molecular dynamics** (`dynamics_minion`, opt-in) runs receptor MD with
+  OpenMM (amber14 + OBC2 GBSA implicit solvent, Langevin NVT), reporting
+  backbone RMSD stability and potential-energy fluctuation. This is a short
+  ps-scale relaxation snapshot, not production MD, and never a binding free
+  energy. Both docking and MD support content-addressed caching / checkpoint
+  resume (`--resume`).
 
-`patent_minion`, `clinical_minion`, and `regulatory_minion` are *knowledge*
-agents with no deterministic offline source. `patent_minion` sits in the default
-pipeline (its novelty check is wanted on every run) with a NON-GATING baseline:
-without `reasoning.backend=hermes` it returns `success` with an empty
-`PatentLandscape` and a "patent status UNKNOWN" note — never a fabricated clear,
-and never `insufficient_evidence` (which would gate the report). `clinical_minion`
-and `regulatory_minion` remain opt-in and still return `insufficient_evidence`
-without a backend. Each delegates through a `ReasoningBackend` method
-(`patent_landscape`, `clinical_assessment`, `regulatory_assessment`) and
-validates the returned raw dicts against its contract.
+### ADMET & PK/PD
 
-Every entry is forced to `evidence_level='inferred'` and tagged "verify against
-primary source": an LLM-recalled patent number is not an observed fact. The
-patent agent only counts relevance (how many entries the LLM labelled
-`covers_candidate`); it does NOT render a freedom-to-operate or infringement
-opinion. To run them, add the tasks with `params.reasoning_backend = "hermes"`
-(plus `reasoning_command`), or set the top-level `reasoning.backend`, which the
-CLI propagates to every task.
+- **ADMET prediction** (`predictor_minion`) ships five cited, exact RDKit rules:
+  ESOL solubility (Delaney 2004), QED drug-likeness (Bickerton 2012), Lipinski
+  rule-of-five, Veber bioavailability, Egan absorption — plus a BBB permeability
+  rule (Pajouhesh & Lenz 2005). Every prediction carries its model, version,
+  citation, applicability domain, and uncertainty, and is labelled `predicted`
+  (never experimental evidence). A heavier ML provider can be dropped in behind
+  the same interface.
+- **PK/PD simulation** (`clinical_minion`, hybrid) integrates exact ODEs with a
+  deterministic fixed-step RK4 solver (no SciPy): one-, two-, and
+  multi-compartment PK; `emax`, `hill`, indirect-response (turnover),
+  effect-compartment (link), and receptor-occupancy PD models; and single-tissue
+  organ models (well-stirred, blood-flow-limited, permeability-limited). Model
+  complexity is selected by mechanism hint, by fit against observed data
+  (RSS/AIC/BIC), or by a labelled default — never claimed as validated.
 
-## CLI & reasoning backend
+### Safety & toxicology
 
-The `ddswarm` console script runs a whole pipeline from one versioned file:
+- **Structural toxicology** matches candidates against curated, cited SMARTS
+  libraries: 22 toxicophores (aromatic amine, azide, acyl halide, catechol,
+  glyoxal, …), CYP inhibition/induction chemotypes, and hERG pharmacophores
+  (protonatable basic amine + ≥2 aromatic rings, gated by cLogP ≥ 3.0). A SMARTS
+  match is a deterministic structural fact; the label is always
+  "potential"/"-like" (`predicted`), never a functional-assay verdict.
+- **Safety gate** (`safety_minion`) blocks on exact-canonical-SMILES controlled
+  substances (fentanyl, methamphetamine, MDMA) and name-matched dual-use
+  targets. The list is deliberately small and non-exhaustive — a policy aid, not
+  a database or a legal determination.
+
+### Retrosynthesis
+
+`retrosynthesis_minion` scores each candidate for synthetic accessibility and
+computes a deterministic **BRICS retrosynthetic disconnection** (building
+blocks, or an honest "no simple disconnection" for fused/aromatic scaffolds).
+With a reasoning backend it also proposes a human-readable synthesis *method* —
+a narrative a bench chemist could start from, with literature references.
+
+### Knowledge & grounding
+
+- **Knowledge agents** (`patent_minion`, `clinical_minion`, `regulatory_minion`)
+  have no deterministic offline source, so they delegate to the reasoning
+  backend. Patent/FTO sits in the default pipeline with a non-gating baseline:
+  without a backend it returns an empty landscape with an explicit "patent
+  status UNKNOWN" note — never a fabricated clear, never a legal opinion. Every
+  entry is forced to `inferred` and tagged "verify against primary source".
+- **Grounding** (`grounding_minion`, opt-in) resolves each molecule by standard
+  InChIKey against ChEMBL, PubChem, and PubMed, recording observed external
+  records with IDs, URLs, and retrieval timestamps — the first machine-readable
+  link to live databases — and optionally a binding-affinity profile.
+- **On-demand ChEMBL layer** fetches per-compound literature at query time
+  (target resolution, affinity, reference ligands) rather than committing a
+  large static dataset.
+
+### Reporting & export
+
+- **PDF report** (`report_pdf_minion`) renders every finished run into a
+  self-contained, plain-language "scientific essay": the user's prompt, an
+  overview, the reasoning and plan, every stage as a labelled subsection,
+  a "Structural modifications rationale" (what was changed on the parent
+  scaffold and why), the identified candidate with its 2D structure, and an
+  evidence-and-confidence discussion. Figures are auxiliary aids to the prose,
+  never a data dump.
+- **Candidate export** (`export_minion`) writes one flat row per screened
+  molecule with every score plus a deterministic go/no-go verdict (no-go =
+  screening reject or safety block; review = advisory liability; go = clean) as
+  CSV, JSON, and SDF.
+- **IUPAC names** are fetched (NIH CACTUS, then PubChem by InChIKey) for the
+  ranked candidates as readability labels alongside SMILES + InChIKey — the
+  machine identifiers of record. Names are non-authoritative and excluded from
+  the reproducibility hashes; disable with `--no-iupac`.
+
+---
+
+## Reasoning backends
+
+The swarm is **platform-agnostic by default**: `reasoning.backend` defaults to
+`none`, so a bare `ddswarm run` executes the deterministic baseline with no LLM
+or harness dependency. The reasoning layer is a pluggable backend:
+
+- `NullReasoningBackend` — offline, deterministic fallback.
+- `HermesSubprocessBackend` — shells out to `hermes chat -q` for one-shot LLM
+  recall.
+
+Opt into the LLM with `--reasoning hermes` (or `"reasoning": {"backend":
+"hermes"}` in the project file), which makes the researcher, designer,
+retrosynthesis (routes), and knowledge agents (patent/clinical/regulatory)
+delegate to one-shot subagents and merge LLM output with the deterministic
+baseline. LLM output is never trusted as observed data — those agents force
+`evidence_level` to `inferred`/`hypothetical` and tag provenance accordingly.
+When the backend is unavailable, deterministic agents fall back to their
+baseline, the knowledge agents return `insufficient_evidence`, and patent
+returns its non-gating "UNKNOWN" state.
+
+---
+
+## Reproducibility & traceability
+
+Every artifact is a versioned, hashed JSON contract under the store, and every
+value carries an **evidence level** — `observed` (a fact), `calculated`
+(in-silico math), `predicted` (model/heuristic), `inferred`/`hypothetical`
+(LLM recall) — plus provenance (source, identifier, timestamps, tool versions,
+hashes). Input/output hashes fingerprint deterministic content (never run IDs or
+timestamps), an append-only event log records each step, and two deterministic
+runs produce identical fingerprints. Network-sourced labels (IUPAC names,
+grounded records) are explicitly excluded from the hashes so they can't break
+reproducibility.
+
+---
+
+## Installation
+
+Requires Python ≥ 3.11 (developed on 3.14).
 
 ```bash
-ddswarm init project.json --project-id egfr --objective "inhibit EGFR" \
-    --targets "EGFR" --smiles "COC1=..."       # scaffold (default pipeline)
-ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--store ./store] [--reports-dir reports/]
-ddswarm runs [project_id]                       # list runs
-ddswarm report project_id [run_id]              # per-task report
-ddswarm memory project_id                       # cross-run conclusions
-ddswarm receptors list [--family GPCR]          # list the ~61-target registry
-ddswarm receptors lookup SERT                   # resolve a name/alias to its entry
-ddswarm receptors adr                           # list the ADR profile library
+git clone <this repo> && cd ddswarm
+python3 -m venv .venv
+.venv/bin/pip install -e .            # core: pydantic + rdkit + reportlab + matplotlib
+.venv/bin/pip install pytest          # to run the test suite
+```
+
+Optional extras:
+
+- **Docking / MD** — `.venv/bin/pip install -e '.[docking]'` (meeko, pdbfixer,
+  openbabel-wheel, scipy, gemmi; OpenMM for MD), plus the AutoDock Vina binary:
+
+  ```bash
+  curl -sL https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.7/vina_1.2.7_linux_x86_64 -o tools/vina
+  chmod +x tools/vina
+  ```
+
+  (or point the agent at it via `params.vina_binary` / the `VINA_BINARY` env var).
+
+## Quick start
+
+```bash
+# scaffold a project file
+.venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" \
+    --targets "EGFR" --smiles "COC1=..."
+
+# run the default deterministic pipeline
+.venv/bin/ddswarm run p.json
+
+# fully offline (also skips the network IUPAC name lookup)
+.venv/bin/ddswarm run p.json --no-iupac
+
+# with the LLM reasoning layer (when running under Hermes)
+.venv/bin/ddswarm run p.json --reasoning hermes
+```
+
+The run writes its report PDF to `reports/<project_id>.pdf`, the candidate
+exports alongside it, and the full artifact ledger under `store/`. Docking and
+target-selectivity (always-on) download receptor PDBs from RCSB at runtime, so
+fully offline they degrade to a non-blocking "receptor unavailable" gap — the
+run still completes and says so honestly.
+
+## CLI
+
+```bash
+ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
+ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
+                         [--iterations N] [--resume] [--store DIR] [--reports-dir DIR]
+ddswarm runs [project_id]                 # list runs
+ddswarm report project_id [run_id]        # per-task report
+ddswarm memory project_id                 # cross-run conclusions
+ddswarm receptors list [--family GPCR]    # the ~61-target registry
+ddswarm receptors lookup SERT             # resolve a name/alias
+ddswarm receptors adr                     # the ADR-profile library
 ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile match
 ```
 
-`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...], reasoning: {...}}`.
-If `tasks` is omitted a default pipeline runs (safety -> research -> overview ->
-design -> screen -> docking -> selectivity -> predict -> retrosynth -> tox ->
-cyp -> herg -> formulation -> patent -> report -> export -> validation ->
-report_pdf);
-docking and target-selectivity are ALWAYS ON (Increment 39) and resolve their
-receptor(s) from the project targets; dynamics and grounding remain opt-in
-(OpenMM + network / live APIs).
-`report` writes `finding` + `feedback` to project memory, closing the loop: the
-next run's designer/researcher read it. `report_pdf` exports the run as a PDF;
-`ddswarm run` copies it to `reports/<project_id>.pdf` (override with
-`--reports-dir DIR` or the `DDSWARM_REPORTS_DIR` env var).
+## Configuration (`project.json`)
 
-`"reasoning": {"backend": "hermes"}` makes `researcher_minion`, `designer_minion`,
-`retrosynthesis_minion` (routes only), and the knowledge agents `patent_minion`/
-`clinical_minion`/`regulatory_minion` delegate to one-shot Hermes subagents
-(`hermes chat -q`), merging the LLM output with the deterministic baseline.
-Hermes is **opt-in**: `reasoning.backend` defaults to `none`, so `ddswarm run`
-is platform-agnostic and runs the deterministic baseline by default. Pass
-`--reasoning hermes` (or `"reasoning": {"backend": "hermes"}`) to enable the
-LLM backend.
-When the backend is unavailable the deterministic agents fall
-back to their baseline — seed assembly, transformation labels, SA score — while
-`clinical_minion`/`regulatory_minion` return `insufficient_evidence` (no offline
-baseline) and `patent_minion` returns an empty landscape with a "patent status
-UNKNOWN" note. LLM-contributed entries are forced to `evidence_level`
-`inferred`/`hypothetical` and tagged "verify against primary source", because a
-recalled PubChem ID or patent number is not experimental evidence.
+`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...],
+reasoning: {...}}`.
 
-IUPAC names for the ranked candidates are fetched from the NIH CACTUS web
-service **by default** and printed in the report as a readability label
-(alongside the 2D structure, SMILES and InChIKey); pass `--no-iupac` to disable
-(e.g. for fully-offline deterministic runs). The same labels flow into the
-candidate export (`CandidateRow.iupac_name` — CSV column, SDF property, and the
-PDF's ranked-candidate table). It is network-dependent and
-third-party: the names are non-deterministic across time and not authoritative,
-so they are excluded from the report's and export's reproducibility hashes.
-Canonical SMILES + InChIKey remain the identifiers of record.
+- `project` — the normalized spec: objective, targets, starting materials,
+  `input_type`, success criteria, and optional context fields
+  (`mechanism_of_action`, `indication`, `existing_drugs`, `chemical_scaffold`,
+  `adme_issue`, `dose_mg`, `route_of_administration`).
+- `tasks` — an optional task DAG; omitted (or `[]`) runs the default pipeline.
+- `reasoning` — `{"backend": "none"|"hermes", "command", "max_turns",
+  "run_budget"}`; optional.
 
-## Run
-
-```bash
-cd ddswarm
-python3 -m venv .venv
-.venv/bin/pip install -e .            # ddswarm + pydantic + rdkit + the ddswarm CLI
-.venv/bin/pip install pytest          # for tests
-.venv/bin/python -m pytest -q         # run the test suite
-.venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" --smiles "COC1=..."
-.venv/bin/ddswarm run p.json          # default pipeline (deterministic, platform-agnostic)
-.venv/bin/ddswarm run p.json --no-iupac   # fully offline (no LLM by default + no name lookup)
-.venv/bin/python scripts/demo_egfr.py # full pipeline incl. docking + dynamics + validation
-.venv/bin/python scripts/demo_screen.py # one molecule per screening outcome
-.venv/bin/python scripts/demo_docking.py # docking + redocking showcase (needs vina + network)
-```
-
-The default run is deterministic and platform-agnostic (no LLM). For a fully
-offline run, add `--no-iupac` to skip the network CACTUS/PubChem name lookup.
-Docking and target-selectivity (always-on) download receptor PDBs from RCSB at
-runtime, so offline they degrade to a non-blocking "receptor unavailable" gap —
-the run still completes and the report says so honestly. Opt into the LLM
-backend with `--reasoning hermes` when running under Hermes.
-
-## Layout
+## Store layout
 
 ```
 store/<project_id>/runs/<run_id>/
@@ -821,36 +366,22 @@ store/<project_id>/runs/<run_id>/
 schemas/*.schema.json                  # exported JSON Schema for every contract
 ```
 
-## Gating
+---
 
-- **Gate A — input validity**: objective non-empty; target/ligand inputs match
-  `input_type`; ProjectSpec must be `approved`.
-- **Gate C — chemical validity**: molecules must sanitize + canonicalize
-  (invalid SMILES are eliminated with a reason, not silently dropped).
-- **Result gating**: only `blocked` (a safety verdict) stops downstream tasks;
-  `failed` marks the run failed but downstream still runs (error surfaced in the
-  report); `insufficient_evidence` is a reported gap; `success`/`partial` let
-  downstream proceed.
+## Verification
 
-## Verification status
+Run `pytest -q` — **323 tests** pass, covering every agent offline with a fake
+`hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
+Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
+selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /
+CYP / hERG matchers, the safety gate, the validation audit (including tamper
+detection), the knowledge agents, project memory, report aggregation, and the
+CLI. Real-Vina and real-OpenMM tests auto-skip when the binaries/engines are
+absent; an end-to-end reproducibility test locks in identical artifact
+fingerprints across two deterministic runs.
 
-Run `pytest -q` — 310 tests pass. The real-Vina smoke test auto-skips when the
-binary is absent, and the real OpenMM MD tests auto-skip when OpenMM/PDBFixer
-are absent. Receptor QC, PDBQT parsing, RMSD, docking gating, reasoning
-backends (with a fake `hermes` script), the CLI, SA-score classification, the
-toxicophore matcher, project memory, report aggregation, the feedback loop,
-MD-engine metrics (real MD on a small peptide fixture), the formulation rules,
-the rule-based ADMET provider (exact ESOL/QED/Ro5/Veber/Egan values on aspirin,
-hexadecane and sucrose + out-of-domain + determinism), the safety gate (controlled-substance + dual-use matching), the validation
-audit (all checks + tamper detection), and the knowledge agents
-(patent/clinical/regulatory delegation via a fake `hermes` script +
-insufficient_evidence without a backend) are tested offline. Real
-Hermes-subagent delegation was verified once manually (researcher returned 24
-sourced entries, designer 8 analog SMILES); real receptor MD was verified on
-the 2ITY kinase domain (backbone RMSD ~0.19 A over a 0.4 ps bounded relaxation).
+---
 
-Hardening (point 4) adds: filesystem-ID validation (project/task/artifact IDs
-reject path traversal at both the contract and Store layers), CLI error
-handling (missing file / bad JSON / bad IDs exit 1 with a clean message), and
-an end-to-end reproducibility test (two runs of the default pipeline produce
-identical artifact fingerprints, excluding timestamp/run_id metadata).
+## License
+
+[MIT](LICENSE) — © 2026 faust-dark.
