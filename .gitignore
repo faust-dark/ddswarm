@@ -3,6 +3,15 @@ __pycache__/
 *.pyc
 *.egg-info/
 store/
+store_*/
 .pytest_cache/
 tools/
 reports/
+dist/
+build/
+*.tar.gz
+*.bundle
+
+# local smoke-test inputs (not part of the source tree)
+clonazolam_anxiolytic.json
+gr_mp_derivative.json
