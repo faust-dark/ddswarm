@@ -13,6 +13,26 @@ structure proposal.
 
 ---
 
+## Contents
+
+- [What it does](#what-it-does)
+- [Quick start](#quick-start)
+- [Installation](#installation)
+- [Usage (CLI)](#usage-cli)
+- [Configuration](#configuration)
+- [Workflow & pipeline](#workflow--pipeline)
+- [Agents](#agents)
+- [Capabilities](#capabilities)
+- [Reasoning backends](#reasoning-backends)
+- [Reproducibility & traceability](#reproducibility--traceability)
+- [Use as an MCP server](#use-as-an-mcp-server)
+- [Scenarios](#scenarios)
+- [Verification](#verification)
+- [Store layout](#store-layout)
+- [License](#license)
+
+---
+
 ## What it does
 
 Give it a target (e.g. EGFR, SERT, a GABA-A subunit) and one or more starting
@@ -36,31 +56,89 @@ replayed, audited, and reproduced.
 
 ---
 
-## Design principles
+## Quick start
 
-Modeling is **mechanistically constrained by default**. Wherever domain
-knowledge supplies governing equations — compartmental PK mass balance,
-receptor-occupancy saturation, turnover kinetics — those equations *are* the
-model. Machine-learning predictions are admissible only when they do **not**
-violate conservation laws, mass balance, stoichiometry, thermodynamic
-relationships, or monotonicity constraints; any such relaxation requires
-explicit, cited justification, never a silent override.
+```bash
+# scaffold a project file (diazepam -> GABA-A alpha2 anxiolytic analogs)
+.venv/bin/ddswarm init anxiolytic.json \
+    --project-id anxiolytic \
+    --objective "design an anxiolytic with reduced sedation" \
+    --targets GABRA2 \
+    --smiles "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21"
 
-When enough mechanistic structure exists, ddswarm uses a **hybrid
-mechanistic/ML** approach: ML components may estimate unknown parameters,
-residuals, or latent relationships, while the mechanistic model enforces the
-physical constraints. This is not aspirational — the `validation_minion`
-auditor enforces it with a `mechanistic_constraints` check that verifies the
-mass-balance identity, requires systemic concentration curves to be monotonically
-non-increasing, and flags any `predicted` endpoint lacking a citable rule.
+# run the default deterministic pipeline (no network, no LLM)
+.venv/bin/ddswarm run anxiolytic.json
+```
 
-Every computational model in the pipeline today is deterministic and rule- or
-physics-based (published QSAR rules, AutoDock Vina scoring, OpenMM force fields,
-exact PK/PD ODEs); there is no unconstrained ML.
+The run writes its report PDF to `reports/anxiolytic.pdf`, the candidate
+exports (CSV/JSON/SDF) alongside it, and the full artifact ledger under
+`store/`. Docking and target-selectivity (always-on) download receptor PDBs
+from RCSB at runtime, so fully offline they degrade to a non-blocking
+"receptor unavailable" gap — the run still completes and says so honestly.
+Skip the network IUPAC name lookup with `--no-iupac`.
 
 ---
 
-## The pipeline
+## Installation
+
+Requires Python ≥ 3.11 (developed on 3.14).
+
+```bash
+git clone https://github.com/faust-dark/ddswarm.git
+cd ddswarm
+python3 -m venv .venv
+.venv/bin/pip install -e .          # core: pydantic + rdkit + reportlab + matplotlib
+```
+
+Optional extras:
+
+- **Docking / MD** — `.venv/bin/pip install -e '.[docking]'` (meeko, pdbfixer,
+  openbabel-wheel, scipy, gemmi; OpenMM for MD), plus the AutoDock Vina binary:
+
+  ```bash
+  curl -sL https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.7/vina_1.2.7_linux_x86_64 -o tools/vina
+  chmod +x tools/vina
+  ```
+
+  (or point the agent at it via `params.vina_binary` / the `VINA_BINARY` env var).
+
+- **Tests** — `.venv/bin/pip install pytest`, then `.venv/bin/python -m pytest -q`.
+
+---
+
+## Usage (CLI)
+
+```bash
+ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
+ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
+                         [--iterations N] [--resume] [--store DIR] [--reports-dir DIR]
+ddswarm runs [project_id]                 # list runs
+ddswarm report project_id [run_id]        # per-task report
+ddswarm memory project_id                 # cross-run conclusions
+ddswarm receptors list [--family GPCR]    # the ~61-target registry
+ddswarm receptors lookup SERT             # resolve a name/alias
+ddswarm receptors adr                     # the ADR-profile library
+ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile match
+```
+
+---
+
+## Configuration
+
+`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...],
+reasoning: {...}}`.
+
+- `project` — the normalized spec: objective, targets, starting materials,
+  `input_type`, success criteria, and optional context fields
+  (`mechanism_of_action`, `indication`, `existing_drugs`, `chemical_scaffold`,
+  `adme_issue`, `dose_mg`, `route_of_administration`).
+- `tasks` — an optional task DAG; omitted (or `[]`) runs the default pipeline.
+- `reasoning` — `{"backend": "none"|"hermes", "command", "max_turns",
+  "run_budget"}`; optional.
+
+---
+
+## Workflow & pipeline
 
 The default pipeline is 18 agents, wired as a task graph and executed by a
 deterministic state machine (the **Runner**) that handles gating, retries,
@@ -75,7 +153,7 @@ report → export → validation → report_pdf
 Two more agents are injected automatically when you ask for iteration
 (`--iterations N`): `orchestrator` (first — writes the execution plan) and
 `memory` (after report — distils the generation for the next cycle). Several
-more are opt-in (see below).
+more are opt-in (see [Agents](#agents)).
 
 ### Gating
 
@@ -95,7 +173,9 @@ dual-use/biosafety hit halts every downstream task and marks the run `blocked`.
 
 ## Agents
 
-### Default pipeline
+24 agents, three tiers.
+
+### Default pipeline (18)
 
 | Agent | Role |
 |---|---|
@@ -118,7 +198,14 @@ dual-use/biosafety hit halts every downstream task and marks the run `blocked`.
 | `validation_minion` | Terminal audit: schema, provenance, hash integrity, consistency, evidence-level sanity. |
 | `report_pdf_minion` | Renders the run into a self-contained plain-language PDF. |
 
-### Opt-in
+### Iteration (2, injected by `--iterations N`)
+
+| Agent | Role |
+|---|---|
+| `orchestrator_minion` | Runs first in a cycle: writes the execution plan. |
+| `memory_minion` | Runs after report: distils the generation into memory for the next cycle (design feedback loop). |
+
+### Opt-in (4)
 
 | Agent | Role |
 |---|---|
@@ -282,92 +369,6 @@ reproducibility.
 
 ---
 
-## Installation
-
-Requires Python ≥ 3.11 (developed on 3.14).
-
-```bash
-git clone <this repo> && cd ddswarm
-python3 -m venv .venv
-.venv/bin/pip install -e .            # core: pydantic + rdkit + reportlab + matplotlib
-.venv/bin/pip install pytest          # to run the test suite
-```
-
-Optional extras:
-
-- **Docking / MD** — `.venv/bin/pip install -e '.[docking]'` (meeko, pdbfixer,
-  openbabel-wheel, scipy, gemmi; OpenMM for MD), plus the AutoDock Vina binary:
-
-  ```bash
-  curl -sL https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.7/vina_1.2.7_linux_x86_64 -o tools/vina
-  chmod +x tools/vina
-  ```
-
-  (or point the agent at it via `params.vina_binary` / the `VINA_BINARY` env var).
-
-## Quick start
-
-```bash
-# scaffold a project file
-.venv/bin/ddswarm init p.json --project-id egfr --objective "inhibit EGFR" \
-    --targets "EGFR" --smiles "COC1=..."
-
-# run the default deterministic pipeline
-.venv/bin/ddswarm run p.json
-
-# fully offline (also skips the network IUPAC name lookup)
-.venv/bin/ddswarm run p.json --no-iupac
-
-# with the LLM reasoning layer (when running under Hermes)
-.venv/bin/ddswarm run p.json --reasoning hermes
-```
-
-The run writes its report PDF to `reports/<project_id>.pdf`, the candidate
-exports alongside it, and the full artifact ledger under `store/`. Docking and
-target-selectivity (always-on) download receptor PDBs from RCSB at runtime, so
-fully offline they degrade to a non-blocking "receptor unavailable" gap — the
-run still completes and says so honestly.
-
-## CLI
-
-```bash
-ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
-ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
-                         [--iterations N] [--resume] [--store DIR] [--reports-dir DIR]
-ddswarm runs [project_id]                 # list runs
-ddswarm report project_id [run_id]        # per-task report
-ddswarm memory project_id                 # cross-run conclusions
-ddswarm receptors list [--family GPCR]    # the ~61-target registry
-ddswarm receptors lookup SERT             # resolve a name/alias
-ddswarm receptors adr                     # the ADR-profile library
-ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile match
-```
-
-## Configuration (`project.json`)
-
-`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...],
-reasoning: {...}}`.
-
-- `project` — the normalized spec: objective, targets, starting materials,
-  `input_type`, success criteria, and optional context fields
-  (`mechanism_of_action`, `indication`, `existing_drugs`, `chemical_scaffold`,
-  `adme_issue`, `dose_mg`, `route_of_administration`).
-- `tasks` — an optional task DAG; omitted (or `[]`) runs the default pipeline.
-- `reasoning` — `{"backend": "none"|"hermes", "command", "max_turns",
-  "run_budget"}`; optional.
-
-## Store layout
-
-```
-store/<project_id>/runs/<run_id>/
-  run_manifest.json
-  tasks/<task_id>.json                 # TaskSpec ledger
-  tasks/<task_id>.result.v<N>.json     # versioned AgentResult
-  artifacts/<id>.<kind>.v<N>.json      # versioned artifacts (never overwritten)
-  events.jsonl                         # append-only event log
-schemas/*.schema.json                  # exported JSON Schema for every contract
-```
-
 ## Use as an MCP server
 
 The swarm is also an **MCP (Model Context Protocol) server**, so any agentic
@@ -481,6 +482,76 @@ degrade non-blocking (`insufficient_evidence`) when a PDB is unavailable.
 
 ---
 
+## Scenarios
+
+### 1. Design anxiolytic analogs (full pipeline, one command)
+
+Start from diazepam and ask for GABA-A α2-selective anxiolytics with reduced
+sedation (α2 = anxiolytic on-target; α1 sedation / α5 amnesia are off-targets
+the selectivity agent will score against):
+
+```bash
+.venv/bin/ddswarm init anxiolytic.json \
+    --project-id anxiolytic \
+    --objective "design an anxiolytic with reduced sedation" \
+    --targets GABRA2 \
+    --smiles "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21"
+
+.venv/bin/ddswarm run anxiolytic.json
+```
+
+You get: `reports/anxiolytic.pdf` (the essay — identified candidate, 2D
+structure, structural-modifications rationale, evidence discussion), the
+candidate table as `CSV`/`JSON`/`SDF`, and the full hashed artifact ledger under
+`store/`.
+
+### 2. Fully offline run
+
+Same project, no network at all — deterministic, reproducible, and honest about
+what it could not compute:
+
+```bash
+.venv/bin/ddswarm run anxiolytic.json --no-iupac
+```
+
+Docking/selectivity report a non-blocking "receptor unavailable" gap instead of
+failing; the run completes. (To dock offline, download the receptor PDBs once,
+or pass a local PDB via the MCP `receptor` source.)
+
+### 3. Iterative optimization with the LLM layer
+
+Loop the design→screen→characterize cycle three times, distilling each
+generation into memory and using Hermes for literature recall and structure
+proposal:
+
+```bash
+.venv/bin/ddswarm run anxiolytic.json --iterations 3 --reasoning hermes
+```
+
+### 4. Drive it from any agent (MCP)
+
+The same tools are available to a calling LLM. Here, a client screens two
+molecules and looks up a receptor in one flow:
+
+```json
+{"tool": "screen_molecules", "args": {"smiles": ["c1ccccc1", "O=C1CSC(=S)N1"]}}
+{"tool": "receptor_lookup", "args": {"name": "GABRA2"}}
+```
+
+Or run the entire pipeline from a `ProjectSpec` dict via `run_pipeline`.
+
+### 5. Selectivity dry-run (registry + ADR library)
+
+Explore the receptor registry and the ADR profiles before committing to a run:
+
+```bash
+.venv/bin/ddswarm receptors lookup SERT
+.venv/bin/ddswarm receptors match --primary GABRA2 --off-targets GABRA1,GABRA5
+.venv/bin/ddswarm receptors adr
+```
+
+---
+
 ## Verification
 
 Run `pytest -q` — **351 tests** pass, covering every agent offline with a fake
@@ -492,6 +563,20 @@ detection), the knowledge agents, project memory, report aggregation, and the
 CLI. Real-Vina and real-OpenMM tests auto-skip when the binaries/engines are
 absent; an end-to-end reproducibility test locks in identical artifact
 fingerprints across two deterministic runs.
+
+---
+
+## Store layout
+
+```
+store/<project_id>/runs/<run_id>/
+  run_manifest.json
+  tasks/<task_id>.json                 # TaskSpec ledger
+  tasks/<task_id>.result.v<N>.json     # versioned AgentResult
+  artifacts/<id>.<kind>.v<N>.json      # versioned artifacts (never overwritten)
+  events.jsonl                         # append-only event log
+schemas/*.schema.json                  # exported JSON Schema for every contract
+```
 
 ---
 
