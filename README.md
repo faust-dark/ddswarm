@@ -395,7 +395,7 @@ Tools (16):
 | `dock_molecule` | Dock against a receptor (registry name or explicit PDB). |
 | `selectivity_profile` | Selectivity/ADR profile (docking → Ki → occupancy → SI). |
 | `receptor_list` / `receptor_lookup` / `adr_profiles` | Registry + ADR-library data. |
-| `run_pipeline` | Run the full 18-agent pipeline from a ProjectSpec dict and return the report. |
+| `run_pipeline` | Run the full 18-agent pipeline from a ProjectSpec dict and return the report (set `iupac=true` to also fetch IUPAC names for the ranked candidates). |
 
 Docking and selectivity accept an `allow_download` flag. With
 `allow_download=false`, a receptor that needs a PDB download returns
@@ -404,6 +404,11 @@ file instead — unless the PDB was already downloaded once, in which case the
 local cache is used (no network). Downloaded PDBs are cached under
 `~/.cache/ddswarm/pdbs` (override with `$DDWARM_PDB_CACHE`), so a receptor is
 only fetched from RCSB the first time it is used.
+
+A complete, runnable client is in
+[`examples/mcp_client_demo.py`](examples/mcp_client_demo.py) — it launches the
+server over stdio and drives both the granular tools and `run_pipeline`
+end-to-end. Run it with `python -u examples/mcp_client_demo.py`.
 
 Connect from your agent stack — the server speaks stdio, so any MCP client
 launches it as a subprocess. Use the absolute path to the venv binary (or just
@@ -554,7 +559,7 @@ Explore the receptor registry and the ADR profiles before committing to a run:
 
 ## Verification
 
-Run `pytest -q` — **351 tests** pass, covering every agent offline with a fake
+Run `pytest -q` — **353 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /

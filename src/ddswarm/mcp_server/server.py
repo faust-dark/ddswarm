@@ -171,13 +171,14 @@ def adr_profiles() -> dict[str, Any]:
 # ---- aggregate pipeline ----
 
 @server.tool()
-def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:
+def run_pipeline(project: dict[str, Any], iupac: bool = False) -> dict[str, Any]:
     """Run the full deterministic 18-agent pipeline from a ProjectSpec dict
     (project_id, objective, targets, starting_materials, ...). Returns the run
     status plus the structured report (ranked candidates, identified candidate,
     gaps). Docking/selectivity resolve their receptor from the targets and
-    degrade non-blocking when unavailable."""
-    return tools.run_pipeline(project)
+    degrade non-blocking when unavailable. Set iupac=true to also fetch IUPAC
+    names for the ranked candidates (network; ~15s each; labels only)."""
+    return tools.run_pipeline(project, iupac)
 
 
 def main() -> None:

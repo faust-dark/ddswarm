@@ -214,6 +214,34 @@ def test_run_pipeline_tool():
     assert "executive_summary" in out["report"]
 
 
+def test_run_pipeline_exposes_iupac_flag():
+    async def run():
+        result = await server.list_tools()
+        tool = next(t for t in result if t.name == "run_pipeline")
+        props = tool.input_schema.get("properties", {})
+        assert props.get("iupac", {}).get("type") == "boolean"
+    anyio.run(run)
+
+
+def test_build_task_defs_iupac_opt_in():
+    from ddswarm.mcp_server.tools import _build_task_defs
+    from ddswarm.cli import DEFAULT_PIPELINE
+
+    off = _build_task_defs(False)
+    assert all("iupac" not in (t.params or {}) for t in off)
+    # the default DAG is preserved (same tasks, order, and dependencies)
+    assert [(t.task_id, t.agent, list(t.depends_on)) for t in off] == \
+        [(t.task_id, t.agent, list(t.depends_on)) for t in DEFAULT_PIPELINE]
+
+    on = _build_task_defs(True)
+    report_tasks = [t for t in on if t.agent == "report_minion"]
+    assert report_tasks, "report_minion must be in the default pipeline"
+    assert all(t.params.get("iupac") is True for t in report_tasks)
+    # only report_minion opts in
+    others = [t for t in on if t.agent != "report_minion"]
+    assert all("iupac" not in (t.params or {}) for t in others)
+
+
 # ---- in-process MCP round-trip ----
 
 def test_mcp_roundtrip_call_tool():

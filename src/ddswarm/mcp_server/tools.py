@@ -272,14 +272,35 @@ def adr_profiles() -> dict[str, Any]:
 
 # ---- aggregate pipeline ----
 
-def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:
+def _build_task_defs(iupac: bool) -> list[Any]:
+    """Build the default 18-task pipeline DAG; ``iupac=True`` opts the
+    report_minion into the IUPAC name fetch (network readability labels)."""
+    from ..cli import DEFAULT_PIPELINE
+    from ..orchestrator import TaskDefinition
+
+    task_defs: list[Any] = []
+    for t in DEFAULT_PIPELINE:
+        params = dict(t.params or {})
+        if iupac and t.agent == "report_minion":
+            params["iupac"] = True
+        task_defs.append(TaskDefinition(task_id=t.task_id, agent=t.agent,
+                                        depends_on=t.depends_on, params=params))
+    return task_defs
+
+
+def run_pipeline(project: dict[str, Any], iupac: bool = False) -> dict[str, Any]:
     """Run the full deterministic 18-agent pipeline from a ProjectSpec dict.
 
     Docking and target-selectivity resolve their receptor(s) from the project
     targets and degrade non-blocking when unavailable (no PDB / no network).
+
+    With ``iupac=True`` the report agent fetches IUPAC names for the ranked
+    candidates (NIH CACTUS -> PubChem fallback, ~15s timeout each); names are
+    readability labels only and never affect the scores or reproducibility
+    hashes. Defaults to False (offline-first).
     """
-    from ..cli import DEFAULT_PIPELINE, build_agents
-    from ..orchestrator import Runner, TaskDefinition
+    from ..cli import build_agents
+    from ..orchestrator import Runner
     from ..orchestrator.gates import BlockedByGate
 
     store = _fresh_store()
@@ -294,10 +315,7 @@ def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:
 
     try:
         runner = Runner(store, build_agents(store))
-        task_defs = [TaskDefinition(task_id=t.task_id, agent=t.agent,
-                                    depends_on=t.depends_on, params=t.params)
-                     for t in DEFAULT_PIPELINE]
-        manifest = runner.create_run(spec, task_defs)
+        manifest = runner.create_run(spec, _build_task_defs(iupac))
     except BlockedByGate as exc:
         return {"status": "blocked", "errors": [str(exc)], "report": None}
 
