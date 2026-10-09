@@ -112,7 +112,8 @@ def test_pkpd_simulate_tool():
 
 # ---- docking / selectivity (download-gated) ----
 
-def test_dock_molecule_offline_gap():
+def test_dock_molecule_offline_gap(monkeypatch, tmp_path):
+    monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))  # nothing cached
     out = tools.dock_molecule(["c1ccccc1"], target="GABRA1", allow_download=False)
     assert out["status"] == "insufficient_evidence"
     assert any("local PDB" in w for w in out["warnings"])
@@ -124,11 +125,45 @@ def test_dock_molecule_requires_receptor():
     assert any("no receptor" in w for w in out["warnings"])
 
 
-def test_selectivity_offline_gap():
+def test_selectivity_offline_gap(monkeypatch, tmp_path):
+    monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))  # nothing cached
     out = tools.selectivity_profile(["c1ccccc1"], primary="GABRA1",
                                     allow_download=False)
     assert out["status"] == "insufficient_evidence"
     assert any("local PDB" in w for w in out["warnings"])
+
+
+# ---- local PDB cache ----
+
+def test_pdb_cache_path(monkeypatch, tmp_path):
+    from ddswarm.docking.base import pdb_cache_dir, pdb_cache_path
+    monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))
+    assert pdb_cache_dir() == tmp_path
+    assert pdb_cache_path("6X3X") == tmp_path / "6X3X.pdb"
+
+
+def test_offline_ok_cache_aware(monkeypatch, tmp_path):
+    monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))
+    # local file -> always usable offline
+    assert tools._offline_ok({"kind": "file", "identifier": "/x/y.pdb"})
+    # pdb_id not cached -> needs download
+    assert not tools._offline_ok({"kind": "pdb_id", "pdb_id": "6X3X"})
+    (tmp_path / "6X3X.pdb").write_text("FAKE")
+    assert tools._offline_ok({"kind": "pdb_id", "pdb_id": "6X3X"})
+    # name-only resolves through the registry (GABRA1 -> 6X3X)
+    assert tools._receptor_identifier({"name": "GABRA1"}) == "6X3X"
+    assert tools._offline_ok({"name": "GABRA1"})
+    # unknown name -> no resolvable PDB -> not a download gap
+    assert tools._offline_ok({"name": "NOT_A_RECEPTOR"})
+
+
+def test_dock_molecule_cached_not_offline_gap(monkeypatch, tmp_path):
+    monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))
+    (tmp_path / "6X3X.pdb").write_text("FAKE")  # already downloaded once
+    out = tools.dock_molecule(["c1ccccc1"], target="GABRA1", allow_download=False)
+    # cached -> no longer the offline hint; proceeds (result is whatever the
+    # fake PDB produces downstream, never the "local PDB" prompt)
+    assert not any("local PDB" in w for w in out["warnings"])
 
 
 # ---- registry / ADR data ----

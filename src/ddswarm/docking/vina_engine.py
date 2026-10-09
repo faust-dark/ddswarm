@@ -8,6 +8,7 @@ Docking:  the AutoDock Vina binary (subprocess). Poses/affinities are parsed
 from __future__ import annotations
 
 import importlib.metadata
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ from .base import (
     PreparedReceptor,
     QCResult,
     ReceptorSource,
+    pdb_cache_path,
 )
 from .rmsd import parse_affinity_modes, parse_model_atoms, parse_smiles_idx
 
@@ -99,11 +101,20 @@ class VinaEngine(DockingEngine):
             if url is None:
                 rec.note = f"no receptor URL for source kind '{source.kind}'"
                 return rec
-            raw_path = work_dir / f"{source.identifier}_raw.pdb"
-            r = subprocess.run(["curl", "-sL", url, "-o", str(raw_path)], capture_output=True, text=True)
-            if r.returncode != 0 or not raw_path.exists() or raw_path.stat().st_size == 0:
-                rec.note = f"could not download receptor ({r.stderr.strip() or 'empty file'})"
-                return rec
+            cache_path = pdb_cache_path(source.identifier)
+            if cache_path.exists() and cache_path.stat().st_size > 0:
+                raw_path = cache_path  # already downloaded once
+            else:
+                raw_path = work_dir / f"{source.identifier}_raw.pdb"
+                r = subprocess.run(["curl", "-sL", url, "-o", str(raw_path)], capture_output=True, text=True)
+                if r.returncode != 0 or not raw_path.exists() or raw_path.stat().st_size == 0:
+                    rec.note = f"could not download receptor ({r.stderr.strip() or 'empty file'})"
+                    return rec
+                try:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(raw_path, cache_path)
+                except OSError:
+                    pass  # cache is best-effort, never blocks docking
             raw_text = raw_path.read_text()
 
         # structural QC on the raw structure

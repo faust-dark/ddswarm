@@ -34,6 +34,7 @@ from ..chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES
 from ..contracts.enums import InputType, ProjectStatus
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.report import Report
+from ..docking.base import pdb_cache_path
 from ..orchestrator.runner import ARTIFACT_MODELS
 from ..orchestrator.store import Store
 
@@ -170,8 +171,24 @@ def pkpd_simulate(smiles: list[str], pk_parameters: list[dict[str, Any]] | None 
 
 # ---- docking / selectivity (receptor-driven, download-gated) ----
 
-def _needs_download(rc: dict[str, Any]) -> bool:
-    return rc.get("kind", "pdb_id") != "file"
+def _receptor_identifier(rc: dict[str, Any]) -> str:
+    """Resolve the cache key (pdb_id) for a receptor config, or '' if unknown."""
+    ident = rc.get("identifier") or rc.get("pdb_id")
+    if ident:
+        return str(ident)
+    name = str(rc.get("name", ""))
+    entry = registry_entry(name) if name else None
+    return str(entry.get("pdb_id", "")) if entry else ""
+
+
+def _offline_ok(rc: dict[str, Any]) -> bool:
+    """True when a receptor needs no download: a local file, an already-cached
+    PDB, or no resolvable PDB at all (downstream reports no_receptor, not a
+    download gap)."""
+    if rc.get("kind", "pdb_id") == "file":
+        return True
+    ident = _receptor_identifier(rc)
+    return not ident or pdb_cache_path(ident).exists()
 
 
 def dock_molecule(smiles: list[str], receptor: dict[str, Any] | None = None,
@@ -184,7 +201,8 @@ def dock_molecule(smiles: list[str], receptor: dict[str, Any] | None = None,
         return _gap("no receptor configured — pass 'receptor' ({kind, identifier/pdb_id}) "
                     "or 'target' (registry name)")
     receptor_cfg = receptor or {}
-    if not allow_download and _needs_download(receptor_cfg):
+    check_rc = receptor_cfg if receptor is not None else {"name": target}
+    if not allow_download and not _offline_ok(check_rc):
         return _gap(_OFFLINE_HINT)
     params: dict[str, Any] = {
         "exhaustiveness": exhaustiveness, "num_modes": num_modes, "seed": seed,
@@ -208,7 +226,7 @@ def selectivity_profile(smiles: list[str], primary: str,
     """Compute selectivity/ADR profile (docking -> Ki -> occupancy -> SI)."""
     if receptors is None:
         receptors = [{"name": primary}] + [{"name": o} for o in (off_targets or [])]
-    if not allow_download and any(_needs_download(rc) for rc in receptors):
+    if not allow_download and not all(_offline_ok(rc) for rc in receptors):
         return _gap(_OFFLINE_HINT)
     params: dict[str, Any] = {
         "receptors": receptors,

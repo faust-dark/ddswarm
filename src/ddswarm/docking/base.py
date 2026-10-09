@@ -4,9 +4,26 @@ agent reasons over those results and builds the DockingResult artifact."""
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def pdb_cache_dir() -> Path:
+    """Directory for cached RCSB PDB downloads (override with ``$DDWARM_PDB_CACHE``,
+    default ``~/.cache/ddswarm/pdbs`` or ``$XDG_CACHE_HOME/ddswarm/pdbs``)."""
+    env = os.environ.get("DDWARM_PDB_CACHE")
+    if env:
+        return Path(env)
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "ddswarm" / "pdbs"
+
+
+def pdb_cache_path(identifier: str) -> Path:
+    """Cache path for a receptor PDB, keyed by its identifier/pdb_id."""
+    return pdb_cache_dir() / f"{identifier}.pdb"
 
 
 @dataclass

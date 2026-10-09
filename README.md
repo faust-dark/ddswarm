@@ -396,9 +396,13 @@ Tools (16):
 | `receptor_list` / `receptor_lookup` / `adr_profiles` | Registry + ADR-library data. |
 | `run_pipeline` | Run the full 18-agent pipeline from a ProjectSpec dict and return the report. |
 
-Docking and selectivity accept an `allow_download` flag: with `allow_download=false`,
-a receptor that needs a PDB download returns `insufficient_evidence` with a
-message telling the caller to pass a local PDB file instead.
+Docking and selectivity accept an `allow_download` flag. With
+`allow_download=false`, a receptor that needs a PDB download returns
+`insufficient_evidence` with a message telling the caller to pass a local PDB
+file instead — unless the PDB was already downloaded once, in which case the
+local cache is used (no network). Downloaded PDBs are cached under
+`~/.cache/ddswarm/pdbs` (override with `$DDWARM_PDB_CACHE`), so a receptor is
+only fetched from RCSB the first time it is used.
 
 Connect from your agent stack — the server speaks stdio, so any MCP client
 launches it as a subprocess. Use the absolute path to the venv binary (or just
@@ -453,7 +457,7 @@ degrade non-blocking (`insufficient_evidence`) when a PDB is unavailable.
 
 ## Verification
 
-Run `pytest -q` — **344 tests** pass, covering every agent offline with a fake
+Run `pytest -q` — **347 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /
