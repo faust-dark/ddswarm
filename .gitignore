@@ -15,3 +15,6 @@ build/
 # local smoke-test inputs (not part of the source tree)
 clonazolam_anxiolytic.json
 gr_mp_derivative.json
+
+# Hermes session cache (scratch scripts)
+.hermes/
