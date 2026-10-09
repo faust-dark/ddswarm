@@ -14,8 +14,23 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..agents import DesignerMinion, ScreenerMinion
+from ..agents import (
+    ClinicalMinion,
+    CypMinion,
+    DesignerMinion,
+    DockingMinion,
+    FormulationMinion,
+    HergMinion,
+    PredictorMinion,
+    RetrosynthesisMinion,
+    SafetyMinion,
+    ScreenerMinion,
+    SelectivityMinion,
+    ToxMinion,
+)
 from ..agents.base import AgentContext
+from ..chemistry.receptors import RECEPTOR_REGISTRY, registry_entry
+from ..chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES
 from ..contracts.enums import InputType, ProjectStatus
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.report import Report
@@ -23,6 +38,11 @@ from ..orchestrator.runner import ARTIFACT_MODELS
 from ..orchestrator.store import Store
 
 _PROJECT_ID = "mcp"
+_OFFLINE_HINT = (
+    "receptor unavailable offline — provide a local PDB "
+    '("receptor": {"kind": "file", "identifier": "/path/to/receptor.pdb"}) '
+    "or set allow_download=true"
+)
 
 
 def _fresh_store() -> Store:
@@ -42,6 +62,8 @@ def _spec(**overrides: Any) -> ProjectSpec:
 
 
 def _ctx(spec: ProjectSpec, params: dict[str, Any]) -> AgentContext:
+    params = dict(params)
+    params.setdefault("reasoning_backend", "none")
     return AgentContext(
         project_id=spec.project_id, run_id="mcp", task_id="tool",
         spec=spec, params=params,
@@ -64,27 +86,173 @@ def _result_payload(result: Any) -> dict[str, Any]:
     return payload
 
 
+def _gap(message: str) -> dict[str, Any]:
+    return {
+        "status": "insufficient_evidence",
+        "findings": [], "warnings": [message], "errors": [],
+        "artifacts": {},
+    }
+
+
+def _run(agent_cls: Any, smiles: list[str], params: dict[str, Any] | None = None,
+         targets: list[str] | None = None) -> dict[str, Any]:
+    """Run one agent against ``smiles`` (passed as starting_materials, the
+    universal molecule fallback for every agent) and return its payload."""
+    try:
+        store = _fresh_store()
+        spec = _spec(starting_materials=list(smiles), targets=list(targets or []))
+        result = agent_cls(store).run(_ctx(spec, params or {}))
+        return _result_payload(result)
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "failed", "findings": [], "warnings": [],
+                "errors": [f"{agent_cls.__name__} raised: {exc}"], "artifacts": {}}
+
+
+# ---- design / screening ----
+
 def design_analogs(starting_materials: list[str]) -> dict[str, Any]:
     """Generate new analog molecules from starting SMILES (deterministic)."""
-    store = _fresh_store()
-    spec = _spec(starting_materials=starting_materials)
-    result = DesignerMinion(store).run(_ctx(spec, {"reasoning_backend": "none"}))
-    return _result_payload(result)
+    return _run(DesignerMinion, starting_materials)
 
 
 def screen_molecules(smiles: list[str], filters: dict[str, Any] | None = None) -> dict[str, Any]:
     """Screen molecules against hard + advisory filters (deterministic)."""
-    store = _fresh_store()
-    spec = _spec()
-    params: dict[str, Any] = {
-        "reasoning_backend": "none",
-        "molecules": [{"id": f"mol_{i}", "smiles": s} for i, s in enumerate(smiles)],
-    }
-    if filters:
-        params["filters"] = filters
-    result = ScreenerMinion(store).run(_ctx(spec, params))
-    return _result_payload(result)
+    return _run(ScreenerMinion, smiles, {"filters": filters} if filters else None)
 
+
+# ---- ADMET / structure / toxicology / formulation / safety ----
+
+def predict_admet(smiles: list[str], providers: list[str] | None = None) -> dict[str, Any]:
+    """Predict ADMET endpoints (default: the deterministic rule_admet provider)."""
+    return _run(PredictorMinion, smiles, {"providers": providers or ["rule_admet"]})
+
+
+def retrosynthesis(smiles: list[str]) -> dict[str, Any]:
+    """Propose retrosynthetic disconnections (SA + BRICS, deterministic)."""
+    return _run(RetrosynthesisMinion, smiles)
+
+
+def toxicity_alerts(smiles: list[str]) -> dict[str, Any]:
+    """Flag toxicophore alerts (deterministic SMARTS)."""
+    return _run(ToxMinion, smiles)
+
+
+def cyp_alerts(smiles: list[str]) -> dict[str, Any]:
+    """Flag CYP-interaction alerts (deterministic SMARTS)."""
+    return _run(CypMinion, smiles)
+
+
+def herg_flag(smiles: list[str]) -> dict[str, Any]:
+    """Flag hERG liability (deterministic SMARTS)."""
+    return _run(HergMinion, smiles)
+
+
+def formulation_assess(smiles: list[str]) -> dict[str, Any]:
+    """Assess formulation/biopharmaceutics (BCS etc.)."""
+    return _run(FormulationMinion, smiles)
+
+
+def safety_check(smiles: list[str], targets: list[str] | None = None) -> dict[str, Any]:
+    """Run the hard safety gate (controlled substances + dual-use targets)."""
+    return _run(SafetyMinion, smiles, targets=targets)
+
+
+def pkpd_simulate(smiles: list[str], pk_parameters: list[dict[str, Any]] | None = None,
+                  dose_mg: float | None = None, route: str = "oral") -> dict[str, Any]:
+    """Run the deterministic PK/PD simulation (RK4, mechanistic PD)."""
+    params: dict[str, Any] = {"route": route}
+    if pk_parameters:
+        params["pk_parameters"] = pk_parameters
+    if dose_mg is not None:
+        params["dose_mg"] = dose_mg
+    return _run(ClinicalMinion, smiles, params)
+
+
+# ---- docking / selectivity (receptor-driven, download-gated) ----
+
+def _needs_download(rc: dict[str, Any]) -> bool:
+    return rc.get("kind", "pdb_id") != "file"
+
+
+def dock_molecule(smiles: list[str], receptor: dict[str, Any] | None = None,
+                  target: str | None = None, allow_download: bool = True,
+                  box: dict[str, Any] | None = None,
+                  exhaustiveness: int = 8, num_modes: int = 9,
+                  seed: int = 42) -> dict[str, Any]:
+    """Dock molecules against a receptor (registry name or explicit source)."""
+    if receptor is None and target is None:
+        return _gap("no receptor configured — pass 'receptor' ({kind, identifier/pdb_id}) "
+                    "or 'target' (registry name)")
+    receptor_cfg = receptor or {}
+    if not allow_download and _needs_download(receptor_cfg):
+        return _gap(_OFFLINE_HINT)
+    params: dict[str, Any] = {
+        "exhaustiveness": exhaustiveness, "num_modes": num_modes, "seed": seed,
+    }
+    if box:
+        params["box"] = box
+    if receptor is not None:
+        params["receptor"] = receptor_cfg
+    targets: list[str] = []
+    if receptor is None:
+        assert target is not None  # guarded by the early return above
+        targets = [target]
+    return _run(DockingMinion, smiles, params, targets=targets)
+
+
+def selectivity_profile(smiles: list[str], primary: str,
+                        off_targets: list[str] | None = None,
+                        receptors: list[dict[str, Any]] | None = None,
+                        allow_download: bool = True,
+                        reference_concentration_molar: float = 1e-8) -> dict[str, Any]:
+    """Compute selectivity/ADR profile (docking -> Ki -> occupancy -> SI)."""
+    if receptors is None:
+        receptors = [{"name": primary}] + [{"name": o} for o in (off_targets or [])]
+    if not allow_download and any(_needs_download(rc) for rc in receptors):
+        return _gap(_OFFLINE_HINT)
+    params: dict[str, Any] = {
+        "receptors": receptors,
+        "primary": primary,
+        "reference_concentration_molar": reference_concentration_molar,
+    }
+    return _run(SelectivityMinion, smiles, params, targets=[primary])
+
+
+# ---- registry / ADR data (deterministic, no agent) ----
+
+def receptor_list(family: str | None = None) -> dict[str, Any]:
+    """List the built-in receptor registry (RCSB-verified PDB entries)."""
+    rows = []
+    for _name, e in sorted(RECEPTOR_REGISTRY.items()):
+        if family and family.lower() not in str(e.get("family", "")).lower():
+            continue
+        rows.append({
+            "name": e["name"], "gene": e.get("gene"), "family": e.get("family"),
+            "pdb_id": e.get("pdb_id"), "reference": e.get("reference"),
+        })
+    return {"status": "success", "findings": [f"{len(rows)} receptor(s)"],
+            "warnings": [], "errors": [], "artifacts": {"receptors": rows}}
+
+
+def receptor_lookup(name: str) -> dict[str, Any]:
+    """Resolve a receptor name/alias to its registry entry."""
+    entry = registry_entry(name)
+    if entry is None:
+        return _gap(f"unknown receptor {name!r} — not in the registry")
+    return {"status": "success", "findings": [], "warnings": [], "errors": [],
+            "artifacts": {"receptor": dict(entry)}}
+
+
+def adr_profiles() -> dict[str, Any]:
+    """Return the built-in ADR profiles (special + antitarget)."""
+    return {"status": "success", "findings": [], "warnings": [], "errors": [],
+            "artifacts": {
+                "special_adr_profiles": SPECIAL_ADR_PROFILES,
+                "antitarget_profiles": ANTITARGET_PROFILES,
+            }}
+
+
+# ---- aggregate pipeline ----
 
 def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:
     """Run the full deterministic 18-agent pipeline from a ProjectSpec dict.

@@ -17,14 +17,15 @@ server = MCPServer(
     title="ddswarm — deterministic drug-discovery swarm",
     description=(
         "Reproducible, traceable, verifiable multi-agent drug-discovery tools: "
-        "analog design, molecular screening, and a full end-to-end pipeline "
-        "(design -> screen -> docking -> selectivity -> ADMET -> PK/PD -> "
-        "toxicology -> retrosynthesis -> report). Deterministic by default; no "
-        "LLM or harness dependency."
+        "analog design, molecular screening, docking, selectivity, ADMET, PK/PD, "
+        "toxicology, retrosynthesis, safety, formulation, and a full end-to-end "
+        "pipeline. Deterministic by default; no LLM or harness dependency."
     ),
     version="0.1.0",
 )
 
+
+# ---- design / screening ----
 
 @server.tool()
 def design_analogs(starting_materials: list[str]) -> dict[str, Any]:
@@ -41,6 +42,133 @@ def screen_molecules(smiles: list[str], filters: dict[str, Any] | None = None) -
     per-molecule properties, alerts, and pass/reject verdicts."""
     return tools.screen_molecules(smiles, filters)
 
+
+# ---- ADMET / structure / toxicology / formulation / safety ----
+
+@server.tool()
+def predict_admet(smiles: list[str], providers: list[str] | None = None) -> dict[str, Any]:
+    """Predict ADMET endpoints (solubility, logP, QED, Ro5, Veber, Egan) with the
+    deterministic rule_admet provider. Returns per-molecule endpoint predictions."""
+    return tools.predict_admet(smiles, providers)
+
+
+@server.tool()
+def retrosynthesis(smiles: list[str]) -> dict[str, Any]:
+    """Propose retrosynthetic disconnections (synthetic accessibility + BRICS).
+    Returns disconnection trees with synthon SMILES."""
+    return tools.retrosynthesis(smiles)
+
+
+@server.tool()
+def toxicity_alerts(smiles: list[str]) -> dict[str, Any]:
+    """Flag toxicophore alerts (deterministic SMARTS). Returns per-molecule
+    matched alerts with severity."""
+    return tools.toxicity_alerts(smiles)
+
+
+@server.tool()
+def cyp_alerts(smiles: list[str]) -> dict[str, Any]:
+    """Flag CYP-interaction alerts (deterministic SMARTS). Returns per-molecule
+    CYP liabilities."""
+    return tools.cyp_alerts(smiles)
+
+
+@server.tool()
+def herg_flag(smiles: list[str]) -> dict[str, Any]:
+    """Flag hERG (cardiotoxicity) liability (deterministic SMARTS). Returns
+    per-molecule hERG risk flags."""
+    return tools.herg_flag(smiles)
+
+
+@server.tool()
+def formulation_assess(smiles: list[str]) -> dict[str, Any]:
+    """Assess formulation/biopharmaceutics (BCS class, solubility-driven risks)."""
+    return tools.formulation_assess(smiles)
+
+
+@server.tool()
+def safety_check(smiles: list[str], targets: list[str] | None = None) -> dict[str, Any]:
+    """Run the hard safety gate (controlled-substance + dual-use target matching,
+    exact canonical-SMILES). Returns a pass/flag/block verdict. This is the only
+    hard gate in the pipeline."""
+    return tools.safety_check(smiles, targets)
+
+
+@server.tool()
+def pkpd_simulate(
+    smiles: list[str],
+    pk_parameters: list[dict[str, Any]] | None = None,
+    dose_mg: float | None = None,
+    route: str = "oral",
+) -> dict[str, Any]:
+    """Run the deterministic PK/PD simulation (1/2/multi-compartment RK4 with
+    mechanistic PD). Pass pk_parameters per molecule (clearance + Vd, or t1/2 +
+    one of them); otherwise they are predicted/inferred."""
+    return tools.pkpd_simulate(smiles, pk_parameters, dose_mg, route)
+
+
+# ---- docking / selectivity (receptor-driven, download-gated) ----
+
+@server.tool()
+def dock_molecule(
+    smiles: list[str],
+    receptor: dict[str, Any] | None = None,
+    target: str | None = None,
+    allow_download: bool = True,
+    box: dict[str, Any] | None = None,
+    exhaustiveness: int = 8,
+    num_modes: int = 9,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Dock molecules (Vina) against a receptor. Receptor is either an explicit
+    source ({kind: pdb_id/file, identifier/pdb_id}) or a registry 'target' name.
+    With allow_download=false, a pdb_id that needs downloading returns
+    insufficient_evidence (pass a local PDB file instead)."""
+    return tools.dock_molecule(smiles, receptor, target, allow_download, box,
+                               exhaustiveness, num_modes, seed)
+
+
+@server.tool()
+def selectivity_profile(
+    smiles: list[str],
+    primary: str,
+    off_targets: list[str] | None = None,
+    receptors: list[dict[str, Any]] | None = None,
+    allow_download: bool = True,
+    reference_concentration_molar: float = 1e-8,
+) -> dict[str, Any]:
+    """Compute selectivity/ADR profile (docking -> Ki -> occupancy -> selectivity
+    index + ADR library). 'primary' is the on-target; 'off_targets' the
+    antitargets. With allow_download=false, receptors needing download return
+    insufficient_evidence."""
+    return tools.selectivity_profile(smiles, primary, off_targets, receptors,
+                                     allow_download, reference_concentration_molar)
+
+
+# ---- registry / ADR data ----
+
+@server.tool()
+def receptor_list(family: str | None = None) -> dict[str, Any]:
+    """List the built-in receptor registry (~61 RCSB-verified entries). Optionally
+    filter by family substring (e.g. 'GABA', 'serotonin', 'dopamine')."""
+    return tools.receptor_list(family)
+
+
+@server.tool()
+def receptor_lookup(name: str) -> dict[str, Any]:
+    """Resolve a receptor name/alias (e.g. 'GABRA1', 'PTGS2', '5-HT2C') to its
+    registry entry (gene, PDB id, reference)."""
+    return tools.receptor_lookup(name)
+
+
+@server.tool()
+def adr_profiles() -> dict[str, Any]:
+    """Return the built-in ADR profiles (special profiles + antitarget profiles)
+    used by the selectivity agent for adverse-effect classification."""
+    return tools.adr_profiles()
+
+
+# ---- aggregate pipeline ----
 
 @server.tool()
 def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:

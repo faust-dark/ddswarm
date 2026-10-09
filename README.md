@@ -379,13 +379,26 @@ calling LLM as the orchestrator.
 .venv/bin/ddswarm-mcp          # starts the server on stdio
 ```
 
-Tools (Phase 1):
+Tools (16):
 
 | Tool | Description |
 |---|---|
 | `design_analogs` | Generate analog molecules from starting SMILES (deterministic RDKit transformations). |
 | `screen_molecules` | Screen molecules (rule-of-five, PAINS, Brenk) with pass/reject verdicts. |
+| `predict_admet` | Predict ADMET endpoints (rule-based provider). |
+| `retrosynthesis` | Propose retrosynthetic disconnections (SA + BRICS). |
+| `toxicity_alerts` / `cyp_alerts` / `herg_flag` | Flag toxicophore / CYP / hERG liabilities (SMARTS). |
+| `formulation_assess` | Assess formulation/biopharmaceutics (BCS). |
+| `safety_check` | Hard safety gate (controlled substances + dual-use targets). |
+| `pkpd_simulate` | Deterministic PK/PD simulation (RK4, mechanistic PD). |
+| `dock_molecule` | Dock against a receptor (registry name or explicit PDB). |
+| `selectivity_profile` | Selectivity/ADR profile (docking → Ki → occupancy → SI). |
+| `receptor_list` / `receptor_lookup` / `adr_profiles` | Registry + ADR-library data. |
 | `run_pipeline` | Run the full 18-agent pipeline from a ProjectSpec dict and return the report. |
+
+Docking and selectivity accept an `allow_download` flag: with `allow_download=false`,
+a receptor that needs a PDB download returns `insufficient_evidence` with a
+message telling the caller to pass a local PDB file instead.
 
 Example MCP client config (stdio):
 
@@ -410,7 +423,7 @@ degrade non-blocking (`insufficient_evidence`) when a PDB is unavailable.
 
 ## Verification
 
-Run `pytest -q` — **328 tests** pass, covering every agent offline with a fake
+Run `pytest -q` — **344 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /
