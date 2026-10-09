@@ -400,18 +400,48 @@ Docking and selectivity accept an `allow_download` flag: with `allow_download=fa
 a receptor that needs a PDB download returns `insufficient_evidence` with a
 message telling the caller to pass a local PDB file instead.
 
-Example MCP client config (stdio):
+Connect from your agent stack — the server speaks stdio, so any MCP client
+launches it as a subprocess. Use the absolute path to the venv binary (or just
+`ddswarm-mcp` once the venv is activated / on `PATH`):
+
+**Claude Desktop / Cursor / Gemini CLI / VS Code** (standard `mcpServers` JSON):
 
 ```json
 {
   "mcpServers": {
     "ddswarm": {
-      "command": "ddswarm-mcp",
+      "command": "/home/faust/ddswarm/.venv/bin/ddswarm-mcp",
       "args": []
     }
   }
 }
 ```
+
+**Hermes Agent** (`~/.hermes/config.yaml`, tools register as `mcp_ddswarm_*`):
+
+```yaml
+mcp_servers:
+  ddswarm:
+    command: "/home/faust/ddswarm/.venv/bin/ddswarm-mcp"
+    args: []
+```
+
+**Google ADK** (Python `MCPToolset`):
+
+```python
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
+
+tools, exit_stack = await MCPToolset.from_server(
+    connection_params=StdioServerParameters(
+        command="/home/faust/ddswarm/.venv/bin/ddswarm-mcp",
+        args=[],
+    )
+)
+```
+
+**Any other MCP client** (OpenMinion, OpenAI Agents SDK, …) connects the same
+way: point its stdio transport at `ddswarm-mcp` and it discovers the 16 tools
+via `tools/list`.
 
 Every tool returns a JSON dict `{status, findings, warnings, errors,
 artifacts}`; `artifacts` embeds the full contract payload (e.g. `design_batch`,
