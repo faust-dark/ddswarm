@@ -1,6 +1,8 @@
 # ddswarm
 
-> A reproducible, traceable, verifiable multi-agent drug-discovery pipeline.
+> A reproducible, traceable, verifiable multi-agent drug-discovery pipeline —
+> usable as a CLI and as an MCP server for any agentic stack (Google ADK, Hermes,
+> OpenMinion, Claude, …).
 
 **ddswarm** turns a therapeutic target and a starting molecule into a ranked set
 of candidate analogs — each with a full characterization dossier (docking,
@@ -366,11 +368,49 @@ store/<project_id>/runs/<run_id>/
 schemas/*.schema.json                  # exported JSON Schema for every contract
 ```
 
+## Use as an MCP server
+
+The swarm is also an **MCP (Model Context Protocol) server**, so any agentic
+stack that speaks MCP — Google ADK/AG2, Hermes, OpenMinion, Claude Desktop,
+Cursor — can drive the deterministic drug-discovery tools directly, with the
+calling LLM as the orchestrator.
+
+```bash
+.venv/bin/ddswarm-mcp          # starts the server on stdio
+```
+
+Tools (Phase 1):
+
+| Tool | Description |
+|---|---|
+| `design_analogs` | Generate analog molecules from starting SMILES (deterministic RDKit transformations). |
+| `screen_molecules` | Screen molecules (rule-of-five, PAINS, Brenk) with pass/reject verdicts. |
+| `run_pipeline` | Run the full 18-agent pipeline from a ProjectSpec dict and return the report. |
+
+Example MCP client config (stdio):
+
+```json
+{
+  "mcpServers": {
+    "ddswarm": {
+      "command": "ddswarm-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Every tool returns a JSON dict `{status, findings, warnings, errors,
+artifacts}`; `artifacts` embeds the full contract payload (e.g. `design_batch`,
+`screened_batch`), so the client never has to read the on-disk store. Docking
+and target-selectivity resolve their receptor from the project targets and
+degrade non-blocking (`insufficient_evidence`) when a PDB is unavailable.
+
 ---
 
 ## Verification
 
-Run `pytest -q` — **323 tests** pass, covering every agent offline with a fake
+Run `pytest -q` — **328 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /

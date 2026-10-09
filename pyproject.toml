@@ -7,7 +7,7 @@ name = "ddswarm"
 version = "0.1.0"
 description = "Drug discovery multi-agent swarm — deterministic in-silico pipeline with PDF reporting"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.7", "rdkit>=2025.9", "reportlab>=4.0", "matplotlib>=3.8"]
+dependencies = ["pydantic>=2.7", "rdkit>=2025.9", "reportlab>=4.0", "matplotlib>=3.8", "mcp>=2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -15,6 +15,7 @@ docking = ["meeko>=0.8", "scipy", "gemmi", "pdbfixer", "openbabel-wheel"]
 
 [project.scripts]
 ddswarm = "ddswarm.cli:main"
+ddswarm-mcp = "ddswarm.mcp_server.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
