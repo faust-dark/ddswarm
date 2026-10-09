@@ -181,7 +181,47 @@ def run_pipeline(project: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    server.run(transport="stdio")
+    """Entry point: serve the swarm over stdio (default) or HTTP.
+
+    stdio is the universal MCP transport; streamable-http exposes the same 16
+    tools over a remote HTTP endpoint (e.g. for a hosted/shared instance).
+    """
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="ddswarm-mcp",
+        description="ddswarm MCP server (deterministic drug-discovery tools).",
+    )
+    p.add_argument(
+        "--transport", choices=["stdio", "sse", "streamable-http"], default="stdio",
+        help="transport to serve (default: stdio)",
+    )
+    p.add_argument("--host", default="127.0.0.1", help="bind host (sse/streamable-http)")
+    p.add_argument("--port", type=int, default=8000, help="bind port (sse/streamable-http)")
+    p.add_argument(
+        "--path", default=None,
+        help="endpoint path (default: /mcp for streamable-http, /sse for sse)",
+    )
+    p.add_argument(
+        "--stateless-http", action="store_true",
+        help="streamable-http: no session tracking (each request is self-contained)",
+    )
+    args = p.parse_args()
+
+    if args.transport == "stdio":
+        server.run(transport="stdio")
+    elif args.transport == "sse":
+        kw: dict[str, object] = {"host": args.host, "port": args.port}
+        if args.path:
+            kw["sse_path"] = args.path
+        server.run(transport="sse", **kw)
+    else:
+        kw = {"host": args.host, "port": args.port}
+        if args.path:
+            kw["streamable_http_path"] = args.path
+        if args.stateless_http:
+            kw["stateless_http"] = True
+        server.run(transport="streamable-http", **kw)
 
 
 if __name__ == "__main__":

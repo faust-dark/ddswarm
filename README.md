@@ -447,6 +447,32 @@ tools, exit_stack = await MCPToolset.from_server(
 way: point its stdio transport at `ddswarm-mcp` and it discovers the 16 tools
 via `tools/list`.
 
+### HTTP transport (streamable HTTP)
+
+The same 16 tools are also served over a remote HTTP endpoint — useful for a
+hosted or shared instance:
+
+```bash
+.venv/bin/ddswarm-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+# serves at http://0.0.0.0:8000/mcp (default path)
+```
+
+Options: `--host`, `--port` (default 8000), `--path` (default `/mcp`), and
+`--stateless-http` (no session tracking — each request is self-contained, which
+suits ddswarm's stateless tools). The legacy SSE transport is available with
+`--transport sse`. A URL-based client (e.g. Claude Desktop over HTTP, or the
+`mcpServers` `url` form) just points at the endpoint:
+
+```json
+{
+  "mcpServers": {
+    "ddswarm": {
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+
 Every tool returns a JSON dict `{status, findings, warnings, errors,
 artifacts}`; `artifacts` embeds the full contract payload (e.g. `design_batch`,
 `screened_batch`), so the client never has to read the on-disk store. Docking
@@ -457,7 +483,7 @@ degrade non-blocking (`insufficient_evidence`) when a PDB is unavailable.
 
 ## Verification
 
-Run `pytest -q` — **347 tests** pass, covering every agent offline with a fake
+Run `pytest -q` — **351 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /

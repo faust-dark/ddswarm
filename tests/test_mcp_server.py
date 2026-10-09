@@ -1,11 +1,12 @@
 """MCP server tests: tools register and respond over an in-process MCP client."""
 
 import json
+import sys
 
 import anyio
 
 from ddswarm.mcp_server import tools
-from ddswarm.mcp_server.server import server
+from ddswarm.mcp_server.server import main, server
 
 _ALL_TOOLS = {
     "design_analogs", "screen_molecules", "predict_admet", "retrosynthesis",
@@ -232,3 +233,34 @@ def test_mcp_roundtrip_call_tool():
             data2 = _call_result_dict(res2)
             assert data2["artifacts"]["receptor"]["gene"] == "GABRA1"
     anyio.run(run)
+
+
+# ---- transport dispatch (argparse -> server.run) ----
+
+def _run_main(monkeypatch, argv):
+    calls: list[dict] = []
+    monkeypatch.setattr(server, "run", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(sys, "argv", ["ddswarm-mcp", *argv])
+    main()
+    return calls
+
+
+def test_main_defaults_to_stdio(monkeypatch):
+    assert _run_main(monkeypatch, []) == [{"transport": "stdio"}]
+
+
+def test_main_streamable_http(monkeypatch):
+    calls = _run_main(monkeypatch, ["--transport", "streamable-http", "--port", "9000"])
+    assert calls == [{"transport": "streamable-http", "host": "127.0.0.1", "port": 9000}]
+
+
+def test_main_streamable_http_stateless_and_path(monkeypatch):
+    calls = _run_main(monkeypatch, ["--transport", "streamable-http",
+                                    "--stateless-http", "--path", "/custom"])
+    assert calls == [{"transport": "streamable-http", "host": "127.0.0.1", "port": 8000,
+                      "streamable_http_path": "/custom", "stateless_http": True}]
+
+
+def test_main_sse(monkeypatch):
+    calls = _run_main(monkeypatch, ["--transport", "sse", "--host", "0.0.0.0"])
+    assert calls == [{"transport": "sse", "host": "0.0.0.0", "port": 8000}]
