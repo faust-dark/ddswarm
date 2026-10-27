@@ -120,6 +120,7 @@ ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
 ddswarm runs [project_id]                 # list runs
 ddswarm report project_id [run_id]        # per-task report
 ddswarm memory project_id                 # cross-run conclusions
+ddswarm doctor [--network]                # environment check (what degrades + how to fix)
 ddswarm receptors list [--family GPCR]    # the ~61-target registry
 ddswarm receptors lookup SERT             # resolve a name/alias
 ddswarm receptors adr                     # the ADR-profile library
@@ -578,7 +579,7 @@ Explore the receptor registry and the ADR profiles before committing to a run:
 
 ## Verification
 
-Run `pytest -q`: **405 tests** pass, covering every agent offline with a fake
+Run `pytest -q`: **409 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /

@@ -4,6 +4,7 @@
     ddswarm runs [project_id] [--store DIR]
     ddswarm report project_id [run_id] [--store DIR]
     ddswarm init [project.json]   (interactive; or pass --project-id/--objective flags)
+    ddswarm doctor [--network]    (environment check: what will degrade and how to fix it)
     ddswarm receptors {list|lookup|adr|match} [...]
 
 project.json is a RunRequest: {project: ProjectSpec, tasks: [...], reasoning: {...}}.
@@ -56,6 +57,7 @@ from .contracts import (
     RunRequest,
     RunTask,
 )
+from .doctor import run_doctor
 from .logging import configure_logging
 from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
@@ -540,6 +542,11 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    print(run_doctor(network=args.network))
+    return 0
+
+
 def cmd_receptors(args) -> int:
     """Query the receptor registry + ADR profile library (deterministic, offline)."""
     if args.action == "list":
@@ -664,6 +671,11 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--smiles", nargs="*", default=[])
     pi.add_argument("--input-type", default="mixed")
     pi.set_defaults(func=cmd_init)
+
+    pd = sub.add_parser("doctor", help="check the environment and report what will degrade")
+    pd.add_argument("--network", action="store_true",
+                    help="also check RCSB reachability (network-dependent)")
+    pd.set_defaults(func=cmd_doctor)
 
     prc = sub.add_parser("receptors", help="query the receptor registry and ADR profile library")
     rsub = prc.add_subparsers(dest="action", required=True)
