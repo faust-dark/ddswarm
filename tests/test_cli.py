@@ -49,6 +49,61 @@ def test_init_writes_project(tmp_path):
     assert req.reasoning is None
 
 
+def test_init_interactive_wizard(tmp_path, monkeypatch, capsys):
+    out = tmp_path / "proj.json"
+    answers = [
+        "x1",                                  # project_id
+        "inhibit Y",                           # objective
+        "SERT",                                # known target
+        "PTGS2",                               # alias -> COX2
+        "not-a-target",                        # free-text target
+        "",                                    # targets done
+        "C1=CC=CC=C1",                         # benzene (non-canonical -> canonicalized)
+        "not-a-smiles",                        # invalid -> reprompt
+        "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21",  # diazepam
+        "",                                    # SMILES done
+        "",                                    # reasoning (default none)
+        "no",                                  # iupac off
+        "3",                                   # iterations
+    ]
+    monkeypatch.setattr("builtins.input", lambda *_: answers.pop(0))
+    rc = cli.main(["init", str(out)])
+    assert rc == 0
+    req = RunRequest.model_validate_json(out.read_text())
+    assert req.project.project_id == "x1"
+    assert req.project.objective == "inhibit Y"
+    assert req.project.targets == ["SERT", "COX2", "not-a-target"]
+    # benzene is canonicalized; the invalid SMILES is dropped
+    assert req.project.starting_materials == ["c1ccccc1", "CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21"]
+    assert req.reasoning is None
+    assert len(req.tasks) == 18
+    captured = capsys.readouterr().out
+    assert "next: ddswarm run" in captured
+    assert "--no-iupac" in captured
+    assert "--iterations 3" in captured
+
+
+def test_init_interactive_invalid_project_id_reprompts(tmp_path, monkeypatch):
+    out = tmp_path / "p.json"
+    answers = ["../evil", "good-id", "obj", "", "", "", "", ""]
+    monkeypatch.setattr("builtins.input", lambda *_: answers.pop(0))
+    rc = cli.main(["init", str(out)])
+    assert rc == 0
+    req = RunRequest.model_validate_json(out.read_text())
+    assert req.project.project_id == "good-id"
+
+
+def test_init_interactive_hermes_reasoning(tmp_path, monkeypatch):
+    out = tmp_path / "p.json"
+    answers = ["p1", "obj", "", "", "hermes", "yes", "1"]
+    monkeypatch.setattr("builtins.input", lambda *_: answers.pop(0))
+    rc = cli.main(["init", str(out)])
+    assert rc == 0
+    req = RunRequest.model_validate_json(out.read_text())
+    assert req.reasoning is not None
+    assert req.reasoning.backend == "hermes"
+
+
 def test_runs_and_report(tmp_path):
     f = _write_project(tmp_path, project_id="p2")
     store = tmp_path / "store"

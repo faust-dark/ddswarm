@@ -3,7 +3,7 @@
     ddswarm run project.json [--reasoning none|hermes] [--store DIR]
     ddswarm runs [project_id] [--store DIR]
     ddswarm report project_id [run_id] [--store DIR]
-    ddswarm init project.json --project-id ID --objective "..." [--targets ...] [--smiles ...]
+    ddswarm init [project.json]   (interactive; or pass --project-id/--objective flags)
     ddswarm receptors {list|lookup|adr|match} [...]
 
 project.json is a RunRequest: {project: ProjectSpec, tasks: [...], reasoning: {...}}.
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -388,7 +389,136 @@ def cmd_memory(args) -> int:
     return 0
 
 
+def _prompt(prompt: str, default: str = "") -> str:
+    """Prompt for a value, returning the default when the answer is blank."""
+    suffix = f" [{default}]" if default else ""
+    value = input(f"{prompt}{suffix}: ").strip()
+    return value if value else default
+
+
+def _interactive_init(args) -> int:
+    """Step-by-step wizard for building a project.json (no flags required)."""
+    print("ddswarm project wizard (interactive). Ctrl+C to abort.\n")
+
+    # 1. project_id (validated against the ProjectSpec pattern)
+    project_id = args.project_id or ""
+    while not project_id:
+        candidate = _prompt("Project ID").strip()
+        if not candidate:
+            print("  project_id is required")
+            continue
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", candidate) is None:
+            print("  invalid: letters/digits and . _ - only, starting with a letter or digit")
+            continue
+        project_id = candidate
+
+    # 2. objective (non-empty)
+    objective = args.objective or ""
+    while not objective:
+        objective = _prompt("Objective (one sentence)").strip()
+        if not objective:
+            print("  objective is required")
+
+    # 3. targets (resolved against the receptor registry, or kept as free text)
+    targets = list(args.targets or [])
+    if not targets:
+        print("\nTargets (one per line, blank when done):")
+        while True:
+            raw = input("  > ").strip()
+            if not raw:
+                break
+            key = canonical_receptor_name(raw)
+            entry = RECEPTOR_REGISTRY.get(key)
+            if entry is not None:
+                print(f"    matched {entry['name']} (gene {entry.get('gene')}, "
+                      f"{entry.get('family')}, PDB {entry.get('pdb_id') or '-'})")
+                targets.append(entry["name"])
+            else:
+                print("    not in the receptor registry; kept as a free-text target "
+                      "(docking/selectivity may report a gap)")
+                targets.append(raw)
+
+    # 4. starting molecules (SMILES, validated + canonicalized with RDKit)
+    smiles = list(args.smiles or [])
+    if not smiles:
+        print("\nStarting molecule SMILES (one per line, blank when done):")
+        from rdkit import Chem
+        while True:
+            raw = input("  > ").strip()
+            if not raw:
+                break
+            mol = Chem.MolFromSmiles(raw)
+            if mol is None:
+                print("    invalid SMILES, try again")
+                continue
+            canon = Chem.MolToSmiles(mol)
+            smiles.append(canon)
+            if canon != raw:
+                print(f"    canonicalized: {canon}")
+
+    # 5. reasoning backend (stored in the project JSON)
+    backend = _prompt("Reasoning backend [none|hermes]", "none").strip().lower()
+    while backend not in ("none", "hermes"):
+        print("  choose 'none' or 'hermes'")
+        backend = _prompt("Reasoning backend [none|hermes]", "none").strip().lower()
+
+    # 6-7. IUPAC + iterations (run-time flags; fold into the suggested command)
+    iupac = _prompt("Fetch IUPAC names [yes|no]", "yes").strip().lower()
+    while iupac not in ("yes", "no", "y", "n"):
+        print("  answer yes or no")
+        iupac = _prompt("Fetch IUPAC names [yes|no]", "yes").strip().lower()
+    iupac_on = iupac in ("yes", "y")
+
+    iterations = 1
+    raw_iter = _prompt("Generations to iterate", "1").strip()
+    if raw_iter.isdigit() and int(raw_iter) >= 1:
+        iterations = int(raw_iter)
+
+    spec = ProjectSpec(
+        project_id=project_id,
+        input_type=args.input_type or "mixed",
+        objective=objective,
+        targets=targets,
+        starting_materials=smiles,
+        constraints=[],
+        exclusions=[],
+        success_criteria=[">= 1 candidate passing screening"],
+        allowed_tools=["ddswarm contracts + orchestrator"],
+        safety_constraints=["standard research use"],
+        status="approved",
+    )
+    reasoning = ReasoningConfig(backend="hermes") if backend == "hermes" else None
+    req = RunRequest(project=spec, tasks=[t.model_copy(deep=True) for t in DEFAULT_PIPELINE],
+                     reasoning=reasoning)
+
+    project_file = args.project_file or f"{project_id}.json"
+    Path(project_file).write_text(req.model_dump_json(indent=2))
+
+    run_flags = []
+    if not iupac_on:
+        run_flags.append("--no-iupac")
+    if iterations > 1:
+        run_flags.append(f"--iterations {iterations}")
+    next_cmd = f"ddswarm run {project_file}"
+    if run_flags:
+        next_cmd += " " + " ".join(run_flags)
+
+    print("\nSummary:")
+    print(f"  project_id: {project_id}")
+    print(f"  objective : {objective}")
+    print(f"  targets   : {', '.join(targets) or '(none)'}")
+    print(f"  molecules : {', '.join(smiles) or '(none)'}")
+    print(f"  reasoning : {backend}")
+    print(f"  iupac     : {'yes' if iupac_on else 'no'}")
+    print(f"  iterations: {iterations}")
+    print(f"\nwrote {project_file}")
+    print(f"next: {next_cmd}")
+    return 0
+
+
 def cmd_init(args) -> int:
+    if args.project_id is None or args.objective is None:
+        return _interactive_init(args)
     spec = ProjectSpec(
         project_id=args.project_id,
         input_type=args.input_type,
@@ -526,10 +656,10 @@ def build_parser() -> argparse.ArgumentParser:
     pm.add_argument("--store", type=Path, default=_default_store())
     pm.set_defaults(func=cmd_memory)
 
-    pi = sub.add_parser("init", help="scaffold a project.json file")
-    pi.add_argument("project_file")
-    pi.add_argument("--project-id", required=True)
-    pi.add_argument("--objective", required=True)
+    pi = sub.add_parser("init", help="scaffold a project.json file (interactive when run without flags)")
+    pi.add_argument("project_file", nargs="?")
+    pi.add_argument("--project-id")
+    pi.add_argument("--objective")
     pi.add_argument("--targets", nargs="*", default=[])
     pi.add_argument("--smiles", nargs="*", default=[])
     pi.add_argument("--input-type", default="mixed")
