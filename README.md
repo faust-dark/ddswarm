@@ -112,6 +112,7 @@ Optional extras:
 ## Usage (CLI)
 
 ```bash
+ddswarm init [project.json]              # interactive wizard (validates SMILES, resolves targets)
 ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
 ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
                          [--iterations N] [--resume] [--no-dock-cache] [--workers N]
@@ -577,7 +578,7 @@ Explore the receptor registry and the ADR profiles before committing to a run:
 
 ## Verification
 
-Run `pytest -q`: **402 tests** pass, covering every agent offline with a fake
+Run `pytest -q`: **405 tests** pass, covering every agent offline with a fake
 `hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /
