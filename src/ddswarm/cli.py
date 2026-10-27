@@ -284,13 +284,16 @@ def cmd_run(args) -> int:
                 t.params["iupac"] = True
     if args.resume:
         tasks = _inject_resume(tasks)
+    if args.no_dock_cache:
+        for t in tasks:
+            t.params["dock_cache"] = False
 
     iterations = max(1, int(args.iterations))
     if iterations > 1:
         tasks = _with_orchestration(tasks, iterations)
 
     store = Store(args.store)
-    runner = Runner(store, build_agents(store))
+    runner = Runner(store, build_agents(store), max_workers=args.workers)
 
     final = None
     last_manifest = None
@@ -475,7 +478,11 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--iterations", type=int, default=1,
                     help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
     pr.add_argument("--resume", action="store_true",
-                    help="reuse cached docking results, and extend receptor MD from its last checkpoint (content-addressed, deterministic) instead of recomputing")
+                    help="extend receptor MD from its last checkpoint (content-addressed, deterministic) instead of recomputing; docking results are reused by default")
+    pr.add_argument("--no-dock-cache", action="store_true",
+                    help="recompute docking instead of reusing content-addressed cached results / receptor preparations")
+    pr.add_argument("--workers", type=int, default=None,
+                    help="max pipeline tasks run concurrently (default: min(8, CPUs); 1 = sequential)")
     pr.add_argument("--store", type=Path, default=_default_store())
     pr.add_argument("--reports-dir", type=Path, default=_default_reports_dir(),
                     help="directory to copy the exported PDF into (default: <repo>/reports)")
