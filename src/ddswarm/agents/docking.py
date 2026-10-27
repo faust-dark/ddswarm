@@ -49,9 +49,12 @@ class DockingMinion(Agent):
 
         ok, msg = engine.available()
         if not ok:
+            # An optional engine that is not installed (e.g. no Vina binary on a
+            # core install) is a reported gap, not a crash: degrade to
+            # insufficient_evidence so the run still completes (README contract).
             return self._result(
-                ctx, AgentResultStatus.failed,
-                errors=[f"docking engine '{engine_name}' unavailable: {msg}"],
+                ctx, AgentResultStatus.insufficient_evidence,
+                warnings=[f"docking engine '{engine_name}' unavailable: {msg}; docking not performed"],
                 reproducibility={"reason": "engine_unavailable"},
             )
 
