@@ -471,8 +471,8 @@ def test_selectivity_prepares_each_ligand_once_and_reuses_cache(tmp_path, monkey
                         spec=_spec("p", starting_materials=["c1ccccc1", "CCO"]), params=dict(params))
     res2 = SelectivityMinion(store).run(ctx2)
     assert engine.calls == calls_first
-    a1 = json.loads(Path(res1.artifacts[0].uri).read_text())
-    a2 = json.loads(Path(res2.artifacts[0].uri).read_text())
+    a1 = json.loads(store.artifact_path(res1.artifacts[0].uri).read_text())
+    a2 = json.loads(store.artifact_path(res2.artifacts[0].uri).read_text())
     assert _strip(a1) == _strip(a2)
 
 
@@ -486,7 +486,7 @@ def test_docking_agent_output_independent_of_workers(tmp_path, monkeypatch, work
               "max_workers": workers, "dock_cache": False}
     res = DockingMinion(store).run(AgentContext(project_id="p1", run_id="r1", task_id="dock",
                                                 spec=spec, params=params))
-    art = json.loads(Path(res.artifacts[0].uri).read_text())
+    art = json.loads(store.artifact_path(res.artifacts[0].uri).read_text())
     poses = [(p["molecule_id"], p["affinity_kcal_per_mol"]) for p in art["poses"]]
     assert poses == [(f"starting_material_{i}", pytest.approx(a)) for i, a in enumerate(
         [-5.0 - len(s) / 10 - 4 / 100 for s in ["C", "CC", "CCC", "CCCC", GEFITINIB]])]

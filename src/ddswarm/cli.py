@@ -171,7 +171,7 @@ def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
     if latest is None:
         return None
     doc = ReportDocument.model_validate_json(latest.read_text())
-    src = Path(doc.pdf_uri)
+    src = store.artifact_path(doc.pdf_uri)
     if not src.exists():
         return None
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -230,7 +230,7 @@ def _read_generation_memory(store: Store, project_id: str, run_id: str) -> Gener
         return None
     for a in res.artifacts:
         if a.kind == "generation_memory" and a.uri:
-            return GenerationMemory.model_validate_json(Path(a.uri).read_text())
+            return GenerationMemory.model_validate_json(store.artifact_path(a.uri).read_text())
     return None
 
 

@@ -105,7 +105,7 @@ def test_validation_detects_tamper_of_its_own_prior_report(tmp_path):
     by validation's previous attempt (it used to skip its own task entirely)."""
     store, final = _run_pipeline(tmp_path)
     prior = store.load_latest_agent_result("p", final.run_id, "validation").artifacts[0]
-    hashes, _result = _hash_check_after_tamper(store, final, Path(prior.uri))
+    hashes, _result = _hash_check_after_tamper(store, final, store.artifact_path(prior.uri))
     assert hashes[0].status == "fail"
     assert "validation_report" in (hashes[0].detail or "")
 

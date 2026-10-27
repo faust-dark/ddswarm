@@ -47,7 +47,7 @@ class ReportPdfMinion(Agent):
                 if not a.uri or a.kind not in ARTIFACT_MODELS:
                     continue
                 try:
-                    payload = ARTIFACT_MODELS[a.kind].model_validate_json(Path(a.uri).read_text())
+                    payload = ARTIFACT_MODELS[a.kind].model_validate_json(self.store.artifact_path(a.uri).read_text())
                 except Exception:  # noqa: BLE001 — skip unreadable artifact, don't fail the run
                     continue
                 by_kind.setdefault(a.kind, []).append(payload)
@@ -87,7 +87,7 @@ class ReportPdfMinion(Agent):
 
         doc = ReportDocument(
             project_id=ctx.project_id, run_id=ctx.run_id, status=AgentResultStatus.success,
-            pdf_uri=str(pdf_path), pdf_hash=pdf_hash,
+            pdf_uri=self.store.artifact_uri(pdf_path), pdf_hash=pdf_hash,
             page_count=meta["page_count"], figure_count=meta["figure_count"],
             sections=meta["sections"],
             provenance=[ProvenanceEntry(

@@ -46,4 +46,4 @@ class Agent(ABC):
         self, ctx: AgentContext, kind: str, artifact_id: str, payload: BaseModel
     ) -> ArtifactRef:
         path, version, h = self.store.save_artifact(ctx.project_id, ctx.run_id, payload, kind, artifact_id)
-        return ArtifactRef(artifact_id=artifact_id, kind=kind, uri=str(path), version=version, hash=h)
+        return ArtifactRef(artifact_id=artifact_id, kind=kind, uri=self.store.artifact_uri(path), version=version, hash=h)
