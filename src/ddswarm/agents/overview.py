@@ -133,8 +133,7 @@ class OverviewMinion(Agent):
         note = "LLM-recalled overview (inferred); verify against primary sources"
         return mechanism, chemical, uses, citations, note
 
-    @staticmethod
-    def _resolve_backend(ctx: AgentContext):
+    def _resolve_backend(self, ctx: AgentContext):
         name = ctx.params.get("reasoning_backend", "none")
         try:
             backend = make_reasoning_backend(
@@ -142,6 +141,7 @@ class OverviewMinion(Agent):
                 command=ctx.params.get("reasoning_command"),
                 max_turns=ctx.params.get("reasoning_max_turns", 30),
                 run_budget=ctx.params.get("reasoning_run_budget", 600),
+                audit_dir=self.store.run_dir(ctx.project_id, ctx.run_id) / "reasoning",
             )
         except KeyError as exc:
             return None, str(exc)
