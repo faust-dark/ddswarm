@@ -5,6 +5,7 @@
     ddswarm report project_id [run_id] [--store DIR]
     ddswarm init [project.json]   (interactive; or pass --project-id/--objective flags)
     ddswarm doctor [--network]    (environment check: what will degrade and how to fix it)
+    ddswarm setup [--yes] [--dry-run]   (install [docking] extras + AutoDock Vina)
     ddswarm receptors {list|lookup|adr|match} [...]
 
 project.json is a RunRequest: {project: ProjectSpec, tasks: [...], reasoning: {...}}.
@@ -63,6 +64,7 @@ from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
 from .orchestrator.store import latest_versioned
+from .setup import run_setup
 
 DEFAULT_PIPELINE = [
     RunTask(task_id="safety", agent="safety_minion"),
@@ -542,6 +544,10 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_setup(args) -> int:
+    return run_setup(yes=args.yes, dry_run=args.dry_run)
+
+
 def cmd_doctor(args) -> int:
     print(run_doctor(network=args.network))
     return 0
@@ -676,6 +682,11 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--network", action="store_true",
                     help="also check RCSB reachability (network-dependent)")
     pd.set_defaults(func=cmd_doctor)
+
+    pset = sub.add_parser("setup", help="install [docking] extras + download the AutoDock Vina binary")
+    pset.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
+    pset.add_argument("--dry-run", action="store_true", help="print the plan without making changes")
+    pset.set_defaults(func=cmd_setup)
 
     prc = sub.add_parser("receptors", help="query the receptor registry and ADR profile library")
     rsub = prc.add_subparsers(dest="action", required=True)
