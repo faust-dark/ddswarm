@@ -92,7 +92,7 @@ class ReportMinion(Agent):
                     if a.uri and a.kind in _KIND_MODELS:
                         kinds.append(a.kind)
                         by_kind.setdefault(a.kind, []).append(
-                            _KIND_MODELS[a.kind].model_validate_json(Path(a.uri).read_text())
+                            _KIND_MODELS[a.kind].model_validate_json(self.store.artifact_path(a.uri).read_text())
                         )
             stage_findings.append(StageFinding(
                 task_id=task_id, agent=ts.agent, status=ts.status.value,

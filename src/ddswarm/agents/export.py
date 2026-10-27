@@ -83,7 +83,7 @@ class ExportMinion(Agent):
                 if not a.uri or a.kind not in ARTIFACT_MODELS:
                     continue
                 try:
-                    payload = ARTIFACT_MODELS[a.kind].model_validate_json(Path(a.uri).read_text())
+                    payload = ARTIFACT_MODELS[a.kind].model_validate_json(self.store.artifact_path(a.uri).read_text())
                 except Exception:  # noqa: BLE001
                     continue
                 by_kind.setdefault(a.kind, []).append(payload)

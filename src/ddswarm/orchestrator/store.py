@@ -152,8 +152,20 @@ class Store:
         h = hash_content(content)
         return p, version, h
 
+    def artifact_path(self, uri: str) -> Path:
+        """Resolve a store-relative (or absolute) artifact URI to a path."""
+        p = Path(uri)
+        return p if p.is_absolute() else (self.root / p)
+
+    def artifact_uri(self, path: Path) -> str:
+        """A store-relative URI for a written artifact path (portable store)."""
+        try:
+            return str(path.relative_to(self.root))
+        except ValueError:
+            return str(path)
+
     def load_artifact(self, uri: str, model: type[BaseModel]) -> BaseModel:
-        return model.model_validate_json(Path(uri).read_text())
+        return model.model_validate_json(self.artifact_path(uri).read_text())
 
     def save_binary_artifact(
         self, project_id: str, run_id: str, artifact_id: str, kind: str, suffix: str, data: bytes

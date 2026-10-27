@@ -141,7 +141,7 @@ def _ctx(spec: ProjectSpec, params: dict[str, Any]) -> AgentContext:
     )
 
 
-def _result_payload(result: Any) -> dict[str, Any]:
+def _result_payload(result: Any, store: Store) -> dict[str, Any]:
     """Normalize an AgentResult into a JSON dict with full artifact payloads."""
     payload: dict[str, Any] = {
         "status": result.status.value,
@@ -152,7 +152,7 @@ def _result_payload(result: Any) -> dict[str, Any]:
     }
     for art in result.artifacts:
         if art.uri and art.kind in ARTIFACT_MODELS:
-            data = ARTIFACT_MODELS[art.kind].model_validate_json(Path(art.uri).read_text())
+            data = ARTIFACT_MODELS[art.kind].model_validate_json(store.artifact_path(art.uri).read_text())
             payload["artifacts"][art.kind] = data.model_dump()
     return payload
 
@@ -176,7 +176,7 @@ def _run(agent_cls: Any, smiles: list[str], params: dict[str, Any] | None = None
         with _fresh_store() as store:
             spec = _spec(starting_materials=list(smiles), targets=list(targets or []))
             result = agent_cls(store).run(_ctx(spec, params or {}))
-            return _result_payload(result)
+            return _result_payload(result, store)
     except Exception as exc:  # noqa: BLE001
         return {"status": "failed", "findings": [], "warnings": [],
                 "errors": [f"{agent_cls.__name__} raised: {exc}"], "artifacts": {}}
@@ -440,5 +440,5 @@ def _load_artifact(
     res = store.load_agent_result(project_id, run_id, task_id, n)
     for art in res.artifacts:
         if art.kind == kind and art.uri:
-            return model.model_validate_json(Path(art.uri).read_text()).model_dump()
+            return model.model_validate_json(store.artifact_path(art.uri).read_text()).model_dump()
     return None

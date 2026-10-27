@@ -359,7 +359,7 @@ class Runner:
                 continue
             for art in r.artifacts:
                 if art.uri and art.kind in ARTIFACT_MODELS:
-                    payload = ARTIFACT_MODELS[art.kind].model_validate_json(Path(art.uri).read_text())
+                    payload = ARTIFACT_MODELS[art.kind].model_validate_json(self.store.artifact_path(art.uri).read_text())
                     inputs.setdefault(art.kind, []).append(payload)
                 refs.append(InputRef(ref_type="artifact", ref_id=art.artifact_id, uri=art.uri, hash=art.hash))
         return AgentContext(

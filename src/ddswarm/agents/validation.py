@@ -74,7 +74,7 @@ class ValidationMinion(Agent):
             if not a.uri or a.kind not in ARTIFACT_MODELS:
                 continue
             n_checked += 1
-            raw = Path(a.uri).read_text()
+            raw = self.store.artifact_path(a.uri).read_text()
             if a.hash and hash_content(raw) != a.hash:
                 hash_mismatch.append(f"{a.kind}:{a.artifact_id}")
             try:
@@ -91,7 +91,7 @@ class ValidationMinion(Agent):
                 continue
             n_checked += 1
             try:
-                raw = Path(a.uri).read_text()
+                raw = self.store.artifact_path(a.uri).read_text()
             except OSError:
                 hash_mismatch.append(f"{a.kind}:{a.artifact_id} (missing)")
                 continue
