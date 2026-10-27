@@ -11,6 +11,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..contracts.project_spec import ProjectSpec
@@ -286,10 +287,12 @@ def extract_json_list(text: str) -> list | None:
 class HermesSubprocessBackend(ReasoningBackend):
     name = "hermes"
 
-    def __init__(self, command: str = "hermes", max_turns: int = 30, run_budget: int = 600):
+    def __init__(self, command: str = "hermes", max_turns: int = 30, run_budget: int = 600,
+                 audit_dir: str | Path | None = None):
         self.command = command
         self.max_turns = max_turns
         self.run_budget = run_budget
+        self.audit_dir = Path(audit_dir) if audit_dir else None
 
     def available(self) -> tuple[bool, str]:
         if "/" in self.command or Path(self.command).is_absolute():
@@ -395,6 +398,7 @@ class HermesSubprocessBackend(ReasoningBackend):
         # parseable JSON before surfacing the failure to the agent.
         for attempt in range(2):
             r, stderr = self._invoke(prompt)
+            self._audit(prompt, r, stderr)
             if r is None:
                 return ReasoningResult(ok=False, note=stderr)
             if r.returncode != 0:
@@ -417,3 +421,30 @@ class HermesSubprocessBackend(ReasoningBackend):
             return None, f"reasoning subprocess failed: {exc}"
         finally:
             Path(prompt_file).unlink(missing_ok=True)
+
+    def _audit(self, prompt: str, r: subprocess.CompletedProcess | None, stderr: str) -> None:
+        """Append an LLM audit record (prompt + raw response) to the run's audit file.
+
+        Best-effort: a write failure must never break the run. JSONL, one record
+        per invocation, so the exact prompt that produced each LLM-derived entry
+        is traceable (LLM output is inferred, never observed).
+        """
+        if self.audit_dir is None:
+            return
+        try:
+            self.audit_dir.mkdir(parents=True, exist_ok=True)
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "backend": self.name,
+                "command": self.command,
+                "max_turns": self.max_turns,
+                "run_budget": self.run_budget,
+                "prompt": prompt,
+                "stdout": r.stdout if r is not None else None,
+                "stderr": stderr,
+                "returncode": r.returncode if r is not None else None,
+            }
+            with (self.audit_dir / "reasoning_audit.jsonl").open("a") as fh:
+                fh.write(json.dumps(record) + "\n")
+        except OSError:
+            pass
