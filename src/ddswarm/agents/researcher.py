@@ -10,6 +10,8 @@ primary source'. No backend, or no input at all => insufficient_evidence
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.knowledge_pack import KnowledgePack, KnowledgePackEntry
@@ -18,7 +20,6 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.memory import MemoryStore
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 
@@ -93,8 +94,13 @@ class ResearcherMinion(Agent):
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=["no targets, starting_materials, valid seed_entries, or reasoning output; refusing to fabricate a KnowledgePack"],
-                provenance=[ProvenanceEntry(source="ProjectSpec", input_hash=input_hash, params={"seed_entries_count": len(seed)})],
+                warnings=["no targets, starting_materials, valid seed_entries, or reasoning output; refusing "
+                          "to fabricate a KnowledgePack"],
+                provenance=[
+                    ProvenanceEntry(
+                        source="ProjectSpec", input_hash=input_hash, params={"seed_entries_count": len(seed)}
+                    )
+                ],
                 tool_versions=[TOOL], reproducibility={"reason": "no_input_data"},
             )
 
@@ -103,7 +109,8 @@ class ResearcherMinion(Agent):
             status=AgentResultStatus.success,
             entries=entries,
             provenance=[ProvenanceEntry(
-                source="ProjectSpec + seed" + (" + reasoning backend" if backend_name not in (None, "", "none") else ""),
+                source="ProjectSpec + seed"
+                + (" + reasoning backend" if backend_name not in (None, "", "none") else ""),
                 input_hash=input_hash,
                 output_hash=hash_jsonable([e.model_dump() for e in entries]),
                 params={"seed_entries_count": len(seed), "reasoning_backend": backend_name},
@@ -116,7 +123,11 @@ class ResearcherMinion(Agent):
             status=AgentResultStatus.success, artifacts=[art],
             findings=[f"KnowledgePack assembled with {len(entries)} entries"],
             warnings=warnings,
-            provenance=[ProvenanceEntry(source="ProjectSpec + seed", input_hash=input_hash, output_hash=art.hash, tool_versions=[TOOL])],
+            provenance=[
+                ProvenanceEntry(
+                    source="ProjectSpec + seed", input_hash=input_hash, output_hash=art.hash, tool_versions=[TOOL]
+                )
+            ],
             tool_versions=[TOOL], reproducibility={"input_hash": input_hash},
         )
 

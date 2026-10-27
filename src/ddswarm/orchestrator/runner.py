@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import uuid
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -13,8 +13,10 @@ from pydantic import BaseModel, Field
 from ..agents.base import Agent, AgentContext
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
+from ..contracts.candidate_table import CandidateTable
 from ..contracts.clinical_assessment import ClinicalAssessment
 from ..contracts.clinical_simulation import ClinicalSimulation
+from ..contracts.cyp_assessment import CypAssessment
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -23,24 +25,22 @@ from ..contracts.event_log import EventLog
 from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.generation_memory import GenerationMemory
+from ..contracts.grounding_report import GroundingReport
+from ..contracts.herg_assessment import HergAssessment
 from ..contracts.knowledge_pack import KnowledgePack
 from ..contracts.overview_report import OverviewReport
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.project_spec import ProjectSpec
+from ..contracts.provenance import InputRef, utcnow
 from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.regulatory_checklist import RegulatoryChecklist
-from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
 from ..contracts.report import Report
 from ..contracts.report_document import ReportDocument
-from ..contracts.cyp_assessment import CypAssessment
-from ..contracts.candidate_table import CandidateTable
-from ..contracts.herg_assessment import HergAssessment
-from ..contracts.grounding_report import GroundingReport
+from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
+from ..contracts.run_manifest import RunManifest
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.selectivity_assessment import SelectivityAssessment
-from ..contracts.provenance import InputRef, utcnow
-from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
 from ..contracts.tox_profile import ToxProfile
 from ..contracts.validation_report import ValidationReport
@@ -118,7 +118,7 @@ class Runner:
 
     @staticmethod
     def new_run_id() -> str:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
         return f"run_{stamp}_{uuid.uuid4().hex[:6]}"
 
     def _topo_order(self, task_graph: dict[str, list[str]]) -> list[str]:
@@ -364,7 +364,9 @@ class Runner:
                 continue
             for art in r.artifacts:
                 if art.uri and art.kind in ARTIFACT_MODELS:
-                    payload = ARTIFACT_MODELS[art.kind].model_validate_json(self.store.artifact_path(art.uri).read_text())
+                    payload = ARTIFACT_MODELS[art.kind].model_validate_json(
+                        self.store.artifact_path(art.uri).read_text()
+                    )
                     inputs.setdefault(art.kind, []).append(payload)
                 refs.append(InputRef(ref_type="artifact", ref_id=art.artifact_id, uri=art.uri, hash=art.hash))
         return AgentContext(

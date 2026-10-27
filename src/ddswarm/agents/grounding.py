@@ -16,9 +16,11 @@ analog that IS in ChEMBL/PubChem is not novel).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from rdkit import rdBase
+
+from ddswarm import __version__
 
 from ..chemistry.chembl_client import compound_affinities
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
@@ -35,7 +37,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..grounding.client import ground_molecule
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -56,7 +57,7 @@ class GroundingMinion(Agent):
             )
 
         names = ctx.params.get("names", {}) or {}
-        retrieved_at = datetime.now(timezone.utc).isoformat()
+        retrieved_at = datetime.now(UTC).isoformat()
         results: list[MoleculeGrounding] = []
         warnings: list[str] = []
         skipped = 0

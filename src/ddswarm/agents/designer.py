@@ -9,6 +9,8 @@ no backend => insufficient_evidence (never invent molecules)."""
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..chemistry.analog_generator import generate_analogs
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
@@ -19,7 +21,6 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.memory import MemoryStore
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 
@@ -59,7 +60,9 @@ class DesignerMinion(Agent):
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=warnings + ["no ligand scaffolds available from KnowledgePack, starting_materials, or prior-cycle memory; refusing to invent molecules"],
+                warnings=warnings
+                + ["no ligand scaffolds available from KnowledgePack, starting_materials, or prior-cycle memory; "
+                   "refusing to invent molecules"],
                 tool_versions=[TOOL], reproducibility={"reason": "no_scaffolds"},
             )
 
@@ -96,7 +99,10 @@ class DesignerMinion(Agent):
                     warnings.extend(notes)
 
         if used_reasoning:
-            warnings.append("molecules proposed by reasoning backend are LLM-generated (evidence_level=hypothetical); not RDKit-validated here")
+            warnings.append(
+                "molecules proposed by reasoning backend are LLM-generated (evidence_level=hypothetical); "
+                "not RDKit-validated here"
+            )
 
         input_hash = hash_jsonable({"scaffolds": scaffolds, "reasoning_backend": backend_name})
         output_hash = hash_jsonable([m.model_dump() for m in molecules])
@@ -121,7 +127,9 @@ class DesignerMinion(Agent):
             findings=[f"DesignBatch with {len(molecules)} candidate designs"
                       f"{' (reasoning backend)' if used_reasoning else ' (deterministic analog generation)'}"],
             warnings=warnings,
-            provenance=[ProvenanceEntry(source="KnowledgePack + ProjectSpec", output_hash=art.hash, tool_versions=[TOOL])],
+            provenance=[
+                ProvenanceEntry(source="KnowledgePack + ProjectSpec", output_hash=art.hash, tool_versions=[TOOL])
+            ],
             tool_versions=[TOOL], reproducibility={"scaffold_count": len(scaffolds)},
         )
 

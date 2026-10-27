@@ -10,7 +10,7 @@ the code below; the citation lets a reader recover the primary source.
 from __future__ import annotations
 
 from rdkit import Chem
-from rdkit.Chem import Descriptors, QED
+from rdkit.Chem import QED, Descriptors
 
 from ..contracts.admet_prediction import (
     ApplicabilityDomain,
@@ -22,15 +22,23 @@ from .base import AdmetProvider
 MODEL_VERSION = "1.0.0"
 
 _CITATIONS: dict[str, str] = {
-    "LogS_ESOL": "Delaney JS (2004). ESOL: Estimating Aqueous Solubility Directly from Molecular Structure. J Chem Inf Comput Sci 44(3):1000-1005.",
+    "LogS_ESOL": "Delaney JS (2004). ESOL: Estimating Aqueous Solubility Directly from Molecular "
+                 "Structure. J Chem Inf Comput Sci 44(3):1000-1005.",
     "QED": "Bickerton GR et al. (2012). Quantifying the chemical beauty of drugs. Nat Chem 4:90-98.",
-    "Lipinski_Violations": "Lipinski CA et al. (1997). Experimental and computational approaches to estimate solubility and permeability. Adv Drug Deliv Rev 23:3-25.",
-    "Veber_Bioavailability": "Veber DF et al. (2002). Molecular properties that influence oral bioavailability. J Med Chem 45:2615-2623.",
-    "Egan_Absorption": "Egan WJ et al. (2000). Prediction of drug absorption using multivariate statistics. J Med Chem 43:3867-3877.",
-    "BBB_Permeability": "Pajouhesh H, Lenz GR (2005). Medicinal chemical properties of successful central nervous system drugs. NeuroRx 2(4):541-553.",
-    "Clearance_ml_min_kg": "Lombardo F et al. (2002). Prediction of volume of distribution values in humans... J Med Chem 45:2867-2876. (QSPR — no precise structure-only rule)",
-    "Volume_of_Distribution_l_kg": "Lombardo F et al. (2004). Prediction of human volume of distribution... J Med Chem 47:1242-1250. (QSPR — no precise structure-only rule)",
-    "Half_Life_hours": "Obach RS et al. (2008). Trend analysis of a database of intravenous pharmacokinetic parameters... Drug Metab Dispos 36:1385-1405. (derived from CL and Vd)",
+    "Lipinski_Violations": "Lipinski CA et al. (1997). Experimental and computational approaches to estimate "
+                           "solubility and permeability. Adv Drug Deliv Rev 23:3-25.",
+    "Veber_Bioavailability": "Veber DF et al. (2002). Molecular properties that influence oral bioavailability. "
+                             "J Med Chem 45:2615-2623.",
+    "Egan_Absorption": "Egan WJ et al. (2000). Prediction of drug absorption using multivariate statistics. "
+                       "J Med Chem 43:3867-3877.",
+    "BBB_Permeability": "Pajouhesh H, Lenz GR (2005). Medicinal chemical properties of successful central "
+                        "nervous system drugs. NeuroRx 2(4):541-553.",
+    "Clearance_ml_min_kg": "Lombardo F et al. (2002). Prediction of volume of distribution values in humans... "
+                           "J Med Chem 45:2867-2876. (QSPR — no precise structure-only rule)",
+    "Volume_of_Distribution_l_kg": "Lombardo F et al. (2004). Prediction of human volume of distribution... "
+                                   "J Med Chem 47:1242-1250. (QSPR — no precise structure-only rule)",
+    "Half_Life_hours": "Obach RS et al. (2008). Trend analysis of a database of intravenous pharmacokinetic "
+                       "parameters... Drug Metab Dispos 36:1385-1405. (derived from CL and Vd)",
     "Plasma_Protein_Binding": "Requires pKa + logD QSPR (no precise structure-only rule).",
 }
 

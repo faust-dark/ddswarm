@@ -29,6 +29,8 @@ from pathlib import Path
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.chembl_client import receptor_reference_ligands, search_target
 from ..chemistry.ht2_function import classify_ht2_function
 from ..chemistry.receptors import RECEPTOR_REGISTRY, canonical_receptor_name, expand_receptor
@@ -68,7 +70,6 @@ from ..docking.parallel import DockJob, dock_jobs
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import ComputeCache, dock_cache_enabled
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)

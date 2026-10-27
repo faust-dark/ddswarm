@@ -10,8 +10,9 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer
 
-from . import tools
 from ddswarm import __version__
+
+from . import tools
 
 server = MCPServer(
     name="ddswarm",

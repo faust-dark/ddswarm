@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..chemistry.safety import match_controlled_substance, match_dual_use_target
 from ..contracts.agent_result import AgentResult
@@ -18,7 +20,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.safety_assessment import SafetyAssessment, SafetyFlag, SafetySummary
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)

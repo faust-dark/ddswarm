@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import math
 
-from .selectivity import GAS_CONSTANT_KCAL_PER_MOL_K, DEFAULT_TEMPERATURE_K
+from .selectivity import DEFAULT_TEMPERATURE_K, GAS_CONSTANT_KCAL_PER_MOL_K
 
 CALIBRATION_SOURCE = ("NIMH PDSP Ki Database (https://pdsp.unc.edu/databases/pdsp.php); "
                       "literature Ki values — verify against the primary source")

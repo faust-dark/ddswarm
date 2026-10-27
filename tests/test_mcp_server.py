@@ -229,8 +229,8 @@ def test_run_pipeline_exposes_iupac_flag():
 
 
 def test_build_task_defs_iupac_opt_in():
-    from ddswarm.mcp_server.tools import _build_task_defs
     from ddswarm.cli import DEFAULT_PIPELINE
+    from ddswarm.mcp_server.tools import _build_task_defs
 
     off = _build_task_defs(False)
     assert all("iupac" not in (t.params or {}) for t in off)

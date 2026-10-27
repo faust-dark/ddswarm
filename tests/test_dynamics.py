@@ -131,9 +131,17 @@ def test_agent_openmm_resume_extends(tmp_path):
 # ---- four-branch gate (predictor + docking + tox + formulation) ----
 def _branch_inputs():
     from ddswarm.contracts import (
-        AdmetPrediction, AdmetSummary, DockingResult, DockedPose,
-        MoleculeAdmetResult, FormulationAssessment, FormulationSummary,
-        MoleculeFormulation, ToxProfile, ToxSummary, MoleculeToxAssessment,
+        AdmetPrediction,
+        AdmetSummary,
+        DockedPose,
+        DockingResult,
+        FormulationAssessment,
+        FormulationSummary,
+        MoleculeAdmetResult,
+        MoleculeFormulation,
+        MoleculeToxAssessment,
+        ToxProfile,
+        ToxSummary,
     )
     admet = AdmetPrediction(project_id="p", status="success",
                             summary=AdmetSummary(total_molecules=1, predicted=0, not_available=10),

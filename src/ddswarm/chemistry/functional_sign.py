@@ -68,7 +68,8 @@ FUNCTIONAL_SIGN_LIBRARY: dict[str, dict[str, list[tuple[str, str, str]]]] = {
         "antagonist": [
             ("quinazoline",
              "c1ccc2c(c1)ncnc2",
-             "4-amino-6,7-dimethoxyquinazoline (prazosin/terazosin/doxazosin) — alpha1 antagonist; Hieble & Ruffolo 1991"),
+             "4-amino-6,7-dimethoxyquinazoline (prazosin/terazosin/doxazosin) — alpha1 antagonist; "
+             "Hieble & Ruffolo 1991"),
         ],
     },
     "mu_opioid": {

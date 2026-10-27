@@ -11,6 +11,8 @@ reasoning lives in the derivation, which is fully reproducible).
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.execution_plan import ConvergenceConfig, ExecutionPlan, PlanStage
@@ -19,7 +21,6 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
 from .roles import AGENT_ROLES
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 

@@ -11,6 +11,8 @@ NOT a legal freedom-to-operate opinion.
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.patent_landscape import PatentEntry, PatentLandscape, PatentSummary
@@ -18,7 +20,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 

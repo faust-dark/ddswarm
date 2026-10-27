@@ -8,8 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rdkit import Chem
-from rdkit import RDLogger
+from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors, FilterCatalog
 
 # The screener routinely detects invalid SMILES; silence RDKit's own stderr

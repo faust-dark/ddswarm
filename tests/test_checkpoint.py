@@ -4,9 +4,9 @@ from pathlib import Path
 
 from ddswarm.contracts.dynamics_result import MdProtocol, MdRun
 from ddswarm.docking.base import (
+    DockingEngine,
     DockPose,
     DockProtocol,
-    DockingEngine,
     PreparedLigand,
     PreparedReceptor,
 )

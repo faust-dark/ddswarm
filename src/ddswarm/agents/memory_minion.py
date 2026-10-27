@@ -9,6 +9,8 @@ Deterministic: it reads the report (ranked candidates) and screened batch
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.generation_memory import GenerationCandidate, GenerationMemory
@@ -19,7 +21,6 @@ from ..contracts.screened_batch import ScreenedBatch
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 

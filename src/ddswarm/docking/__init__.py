@@ -6,9 +6,9 @@ import os
 from pathlib import Path
 
 from .base import (
+    DockingEngine,
     DockPose,
     DockProtocol,
-    DockingEngine,
     PreparedLigand,
     PreparedReceptor,
     QCResult,

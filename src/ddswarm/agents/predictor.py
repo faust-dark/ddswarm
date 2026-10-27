@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.admet_prediction import (
     AdmetPrediction,
@@ -21,7 +23,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from ..predictors.registry import resolve_providers
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -35,7 +36,8 @@ class PredictorMinion(Agent):
         if not provider_names:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
-                warnings=["no ADMET provider configured (params['providers'] empty); refusing to fabricate predictions"],
+                warnings=["no ADMET provider configured (params['providers'] empty); refusing to fabricate "
+                          "predictions"],
                 reproducibility={"reason": "no_provider"},
             )
         try:
@@ -50,7 +52,8 @@ class PredictorMinion(Agent):
         if not molecules:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
-                warnings=["no molecules to predict (params['molecules'], screened_batch survivors, or starting_materials empty)"],
+                warnings=["no molecules to predict (params['molecules'], screened_batch survivors, or "
+                          "starting_materials empty)"],
                 reproducibility={"reason": "no_molecules"},
             )
 
@@ -94,7 +97,9 @@ class PredictorMinion(Agent):
             findings=[f"predicted {summary.total_endpoints} endpoints across {summary.total_molecules} molecules "
                       f"(predicted={summary.predicted}, not_available={summary.not_available})"],
             warnings=warnings,
-            provenance=[ProvenanceEntry(source="ADMET/PK prediction", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL])],
+            provenance=[
+                ProvenanceEntry(source="ADMET/PK prediction", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL])
+            ],
             reproducibility={"input_hash": input_hash, "providers": provider_names},
         )
 

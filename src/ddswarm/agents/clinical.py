@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import math
 
+from ddswarm import __version__
+
 from ..chemistry.pkpd import (
     _sample,
     emax_effect,
@@ -63,7 +65,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 

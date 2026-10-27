@@ -12,9 +12,10 @@ chemistry."""
 
 from __future__ import annotations
 
-from rdkit import Chem
-from rdkit import rdBase
+from rdkit import Chem, rdBase
 from rdkit.Chem import BRICS
+
+from ddswarm import __version__
 
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..chemistry.sa_score import classify_accessibility, compute_sa_score
@@ -31,7 +32,6 @@ from ..contracts.retrosynthesis_plan import (
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -46,7 +46,8 @@ class RetrosynthesisMinion(Agent):
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=["no molecules to assess (params['molecules'], screened_batch survivors, or starting_materials empty)"],
+                warnings=["no molecules to assess (params['molecules'], screened_batch survivors, or "
+                          "starting_materials empty)"],
                 tool_versions=[TOOL, RDKIT_TOOL], reproducibility={"reason": "no_molecules"},
             )
 
@@ -99,7 +100,9 @@ class RetrosynthesisMinion(Agent):
                 else:
                     warnings.append(f"reasoning failed: {res.note}; no routes proposed")
             if used_reasoning:
-                warnings.append("synthesis routes are LLM-proposed (evidence_level=hypothetical); SA score remains calculated")
+                warnings.append(
+                    "synthesis routes are LLM-proposed (evidence_level=hypothetical); SA score remains calculated"
+                )
 
         if skipped:
             warnings.append(f"skipped {skipped} molecule(s) that failed sanitization")
@@ -136,7 +139,9 @@ class RetrosynthesisMinion(Agent):
             project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
             status=AgentResultStatus.success, artifacts=[art], input_refs=ctx.input_refs,
             findings=[finding], warnings=warnings,
-            provenance=[ProvenanceEntry(source="RDKit SA Score", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL])],
+            provenance=[
+                ProvenanceEntry(source="RDKit SA Score", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL])
+            ],
             tool_versions=[TOOL, RDKIT_TOOL],
             reproducibility={"input_hash": input_hash, "reasoning_backend": backend_name},
         )

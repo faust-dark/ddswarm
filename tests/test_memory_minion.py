@@ -5,11 +5,11 @@ from ddswarm.agents.base import AgentContext
 from ddswarm.contracts import (
     AgentResultStatus,
     GenerationMemory,
+    MoleculeScreenResult,
     ProjectSpec,
     Report,
-    ScreenSummary,
     ScreenedBatch,
-    MoleculeScreenResult,
+    ScreenSummary,
 )
 from ddswarm.contracts.report import CandidateSelection
 from ddswarm.orchestrator import Store

@@ -15,6 +15,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -23,7 +25,6 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.runner import ARTIFACT_MODELS
 from ..reporting.pdf_render import render_report_pdf
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 

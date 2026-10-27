@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 # Standard amino-acid residue names (3-letter). Non-standard residues and
 # ligands are 'heterogens'.
 _STD_AA = {

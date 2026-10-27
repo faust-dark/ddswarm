@@ -142,6 +142,7 @@ def test_pk_default_selection_is_one_compartment(tmp_path):
 
 def test_pk_data_driven_selects_two_compartment(tmp_path):
     import math
+
     from ddswarm.chemistry.pkpd import simulate_two_compartment
 
     # observed data generated from a genuinely biphasic (two-compartment) curve
