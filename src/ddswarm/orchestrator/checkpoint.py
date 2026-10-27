@@ -1,12 +1,15 @@
 """Content-addressed compute checkpoint / resume (Increments 27 + 28).
 
-Two complementary, opt-in mechanisms, both deterministic by construction (the
-key is a content hash of the inputs, so a hit reproduces the exact result and
-introduces no new non-determinism):
+Two complementary mechanisms, both deterministic by construction (the key is a
+content hash of the inputs, so a hit reproduces the exact result and introduces
+no new non-determinism):
 
 - Docking result cache (Increment 27): `cached_dock` / `ComputeCache` reuse a
-  completed `engine.dock` result keyed by (receptor, ligand SMILES, box,
-  protocol, engine) — "don't redo completed work".
+  completed `engine.dock` result keyed by (receptor id + prepared-receptor
+  hash, ligand SMILES + prepared-ligand hash, box, protocol, engine version,
+  preparation tool versions) — "don't redo completed work". ON by default for
+  docking/selectivity (see `dock_cache_enabled`); prepared receptors are cached
+  alongside under checkpoints/receptor/.
 - MD trajectory checkpoint (Increment 28): `save_md_state` / `load_md_state` /
   `md_state_key` persist the OpenMM State XML so a later run can CONTINUE the
   simulation (extend to more steps) instead of restarting — "extend a partial
@@ -14,8 +17,8 @@ introduces no new non-determinism):
   so it is stored as a sidecar with a recorded sha256, never folded into a
   reproducibility hash of the JSON artifacts.
 
-Both are disabled by default (recompute clean); enable via params['resume']=true.
-The cache lives at store/checkpoints/, outside any run dir, so it survives
+The MD checkpoint stays opt-in via params['resume']=true; the docking cache can
+be turned off with params['dock_cache']=false (CLI: --no-dock-cache). The cache lives at store/checkpoints/, outside any run dir, so it survives
 across runs.
 """
 
@@ -34,6 +37,10 @@ class ComputeCache:
     def __init__(self, store, enabled: bool):
         self._root = Path(store.root) / "checkpoints"
         self.enabled = bool(enabled)
+
+    @property
+    def root(self) -> Path:
+        return self._root
 
     def _path(self, kind: str, key: str) -> Path:
         return self._root / kind / f"{key}.json"
@@ -91,10 +98,21 @@ def poses_from_cache(data: list) -> list[DockPose]:
 
 
 def _dock_key(receptor_id: str, ligand_smiles: str, protocol: DockProtocol,
-              engine: DockingEngine) -> str:
+              engine: DockingEngine, receptor: PreparedReceptor | None = None,
+              ligand: PreparedLigand | None = None) -> str:
+    """Content-addressed docking key.
+
+    Beyond the receptor id it covers the CONTENT actually docked — the
+    prepared receptor and ligand PDBQT hashes — and the preparation toolchain
+    versions, so a re-prepared receptor (new PDB file, PDBFixer/Open Babel
+    upgrade) or a re-prepared ligand (Meeko/RDKit upgrade) never reuses stale
+    poses. `protocol.cpu` is deliberately excluded (it changes wall time, not
+    the result)."""
     return hash_jsonable({
         "receptor": receptor_id,
+        "receptor_pdbqt": getattr(receptor, "content_hash", "") or "",
         "ligand": ligand_smiles,
+        "ligand_pdbqt": getattr(ligand, "content_hash", "") or "",
         "box_center": list(protocol.box_center) if protocol.box_center else None,
         "box_size": list(protocol.box_size) if protocol.box_size else None,
         "exhaustiveness": protocol.exhaustiveness,
@@ -102,21 +120,64 @@ def _dock_key(receptor_id: str, ligand_smiles: str, protocol: DockProtocol,
         "seed": protocol.seed,
         "engine": engine.name,
         "engine_version": engine.version,
+        "prep_versions": getattr(engine, "prep_versions", None) or {},
     })
+
+
+def dock_cache_enabled(params: dict) -> bool:
+    """The docking result cache is ON by default (it is content-addressed and
+    deterministic). Turn it off with params['dock_cache']=false; an explicit
+    params['resume'] is honoured for backward compatibility."""
+    if "dock_cache" in params:
+        return bool(params["dock_cache"])
+    if "resume" in params:
+        return bool(params["resume"])
+    return True
+
+
+def dock_cache_lookup(cache: ComputeCache, key: str, work_dir: Path) -> list[DockPose] | None:
+    """Return cached poses for ``key`` (None on a miss). When the entry carries
+    the docked PDBQT text it is restored into ``work_dir`` so the poses keep a
+    real pose_file, exactly like a fresh run."""
+    hit = cache.get("dock", key)
+    if hit is None:
+        return None
+    if isinstance(hit, dict):  # current format: {"poses": [...], "pose_text": str|None}
+        poses = poses_from_cache(hit.get("poses") or [])
+        text = hit.get("pose_text")
+        if text is not None and poses:
+            out = Path(work_dir) / "docked.pdbqt"
+            atomic_write_text(out, text)
+            for p in poses:
+                p.pose_file = out
+        return poses
+    return poses_from_cache(hit)  # legacy list-only entries
+
+
+def dock_cache_store(cache: ComputeCache, key: str, poses: list[DockPose]) -> None:
+    pose_text = None
+    files = {p.pose_file for p in poses if p.pose_file}
+    if len(files) == 1:
+        try:
+            pose_text = Path(files.pop()).read_text()
+        except OSError:
+            pose_text = None
+    cache.put("dock", key, {"poses": poses_to_cache(poses), "pose_text": pose_text})
 
 
 def cached_dock(engine: DockingEngine, cache: ComputeCache, receptor_id: str,
                 receptor: PreparedReceptor, ligand: PreparedLigand,
                 protocol: DockProtocol, work_dir: Path) -> list[DockPose]:
-    """engine.dock with opt-in content-addressed resume."""
+    """engine.dock with content-addressed reuse."""
     if not cache.enabled:
         return engine.dock(receptor, ligand, protocol, work_dir)
-    key = _dock_key(receptor_id, ligand.canonical_smiles, protocol, engine)
-    hit = cache.get("dock", key)
+    key = _dock_key(receptor_id, ligand.canonical_smiles, protocol, engine, receptor, ligand)
+    hit = dock_cache_lookup(cache, key, work_dir)
     if hit is not None:
-        return poses_from_cache(hit)
+        return hit
     poses = engine.dock(receptor, ligand, protocol, work_dir)
-    cache.put("dock", key, poses_to_cache(poses))
+    if poses:  # never cache a failure (timeouts / crashes are retried next run)
+        dock_cache_store(cache, key, poses)
     return poses
 
 
