@@ -114,7 +114,7 @@ def test_default_pipeline_exports_pdf(tmp_path):
     assert metas, "expected a ReportDocument metadata artifact"
     doc = ReportDocument.model_validate_json(metas[-1].read_text())
 
-    pdf = Path(doc.pdf_uri)
+    pdf = store.artifact_path(doc.pdf_uri)
     assert pdf.exists(), f"PDF sidecar missing: {doc.pdf_uri}"
     assert pdf.read_bytes().startswith(b"%PDF")
     assert doc.page_count >= 1
