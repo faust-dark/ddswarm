@@ -28,9 +28,10 @@ import urllib.request
 
 from rdkit import Chem
 from rdkit.Chem.inchi import MolToInchiKey
+from ddswarm import __version__
 
 TIMEOUT = 20.0
-UA = {"User-Agent": "ddswarm/0.1 (research chembl)"}
+UA = {"User-Agent": f"ddswarm/{__version__} (research chembl)"}
 CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
 
 

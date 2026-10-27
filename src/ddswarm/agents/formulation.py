@@ -23,8 +23,9 @@ from ..contracts.formulation_assessment import (
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
 
 

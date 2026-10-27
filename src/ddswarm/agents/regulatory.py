@@ -23,8 +23,9 @@ from ..contracts.regulatory_checklist import (
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 
 
 class RegulatoryMinion(Agent):

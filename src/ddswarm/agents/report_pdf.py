@@ -23,8 +23,9 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.runner import ARTIFACT_MODELS
 from ..reporting.pdf_render import render_report_pdf
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 
 
 class ReportPdfMinion(Agent):

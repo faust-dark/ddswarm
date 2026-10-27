@@ -33,8 +33,9 @@ from ..docking.rmsd import heavy_atom_rmsd, pose_mol_from_coords
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import ComputeCache, dock_cache_enabled
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
 
 

@@ -11,6 +11,7 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer
 
 from . import tools
+from ddswarm import __version__
 
 server = MCPServer(
     name="ddswarm",
@@ -21,7 +22,7 @@ server = MCPServer(
         "toxicology, retrosynthesis, safety, formulation, and a full end-to-end "
         "pipeline. Deterministic by default; no LLM or harness dependency."
     ),
-    version="0.1.0",
+    version=__version__,
 )
 
 
