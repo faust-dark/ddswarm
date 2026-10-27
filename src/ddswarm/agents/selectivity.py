@@ -64,8 +64,9 @@ from ..contracts.selectivity_assessment import (
 )
 from ..docking import make_engine
 from ..docking.base import DockProtocol, ReceptorSource, box_from_reference_mol
+from ..docking.parallel import DockJob, dock_jobs
 from ..logging.hashing import hash_jsonable
-from ..orchestrator.checkpoint import ComputeCache, cached_dock
+from ..orchestrator.checkpoint import ComputeCache, dock_cache_enabled
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -150,7 +151,9 @@ class SelectivityMinion(Agent):
         seed = int(ctx.params.get("seed", 42))
         calibrate = bool(ctx.params.get("calibrate", True))
         work_root = Path(self.store.run_dir(ctx.project_id, ctx.run_id)) / "selectivity" / ctx.task_id
-        cache = ComputeCache(self.store, bool(ctx.params.get("resume")))
+        cache = ComputeCache(self.store, dock_cache_enabled(ctx.params))
+        if cache.enabled and hasattr(engine, "receptor_cache_dir"):
+            engine.receptor_cache_dir = cache.root / "receptor"
 
         # best affinity per (receptor_name, molecule_id)
         best: dict[tuple[str, str], float] = {}
@@ -160,6 +163,19 @@ class SelectivityMinion(Agent):
         chembl_ligands: dict[str, list[tuple[str, float, str]]] = {}  # fetched (for hash)
         notes: list[str] = []
 
+        # each distinct SMILES is prepared ONCE and reused for every receptor
+        # (ligand prep does not depend on the receptor)
+        ligand_cache: dict[str, object] = {}
+
+        def ligand_for(smi: str):
+            if smi not in ligand_cache:
+                ligand_cache[smi] = engine.prepare_ligand(
+                    smi, work_root / "_ligands" / f"lig_{len(ligand_cache)}")
+            return ligand_cache[smi]
+
+        # 1) prepare receptors + collect every (receptor x ligand) docking job
+        jobs: list[DockJob] = []
+        cal_meta: dict[str, list[tuple[int, float]]] = {}  # receptor -> [(cal index, Ki)]
         for rc in receptors:
             rname = str(rc.get("name", ""))
             source = ReceptorSource(
@@ -171,6 +187,8 @@ class SelectivityMinion(Agent):
                 notes.append(f"receptor {rname} has no pdb_id/identifier; skipped")
                 continue
             receptor = engine.prepare_receptor(source, work_root / rname)
+            if not receptor.identifier:
+                receptor.identifier = source.identifier
             box_center, box_size = self._resolve_box(rc, receptor, ctx)
             if box_center is None:
                 notes.append(f"receptor {rname}: {receptor.note or 'no search box resolvable'}")
@@ -181,29 +199,42 @@ class SelectivityMinion(Agent):
             )
             pdb_by_receptor[rname] = source.identifier
             for mid, smi in molecules:
-                ligand = engine.prepare_ligand(smi, work_root / rname / f"lig_{mid}")
-                if not ligand.pdbqt_path:
-                    continue
-                poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
-                                    protocol, work_root / rname / f"dock_{mid}")
-                if poses:
-                    best[(rname, mid)] = min(p.affinity_kcal_per_mol for p in poses
-                                             if p.affinity_kcal_per_mol is not None)
+                ligand = ligand_for(smi)
+                if ligand.pdbqt_path:
+                    jobs.append(DockJob(("mol", rname, mid), source.identifier, receptor, ligand,
+                                        protocol, work_root / rname / f"dock_{mid}"))
             if calibrate:
                 cal_ligands, cal_source = self._calibration_ligands(rname, ctx)
                 cal_sources[rname] = cal_source
                 if cal_source == "chembl":
                     chembl_ligands[rname] = cal_ligands
                 for ci, (cal_smi, ki_exp, _cit) in enumerate(cal_ligands):
-                    ligand = engine.prepare_ligand(cal_smi, work_root / rname / f"cal_{ci}")
+                    ligand = ligand_for(cal_smi)
                     if not ligand.pdbqt_path:
                         continue
-                    poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
-                                        protocol, work_root / rname / f"caldock_{ci}")
-                    if poses:
-                        vina = min(p.affinity_kcal_per_mol for p in poses
-                                   if p.affinity_kcal_per_mol is not None)
-                        calib_pairs.setdefault(rname, []).append((vina, delta_g_from_ki(ki_exp)))
+                    cal_meta.setdefault(rname, []).append((ci, ki_exp))
+                    jobs.append(DockJob(("cal", rname, ci), source.identifier, receptor, ligand,
+                                        protocol, work_root / rname / f"caldock_{ci}"))
+
+        # 2) dock everything concurrently (cache hits — e.g. the fixed calibration
+        #    ligands on a later run — skip Vina entirely)
+        results = dock_jobs(engine, cache, jobs, ctx.params.get("max_workers"))
+
+        # 3) read results back in declaration order (completion order never leaks)
+        for job in jobs:
+            kind, rname, mid = job.key
+            if kind != "mol":
+                continue
+            affs = [p.affinity_kcal_per_mol for p in results.get(job.key) or []
+                    if p.affinity_kcal_per_mol is not None]
+            if affs:
+                best[(rname, mid)] = min(affs)
+        for rname, entries in cal_meta.items():
+            for ci, ki_exp in entries:
+                affs = [p.affinity_kcal_per_mol for p in results.get(("cal", rname, ci)) or []
+                        if p.affinity_kcal_per_mol is not None]
+                if affs:
+                    calib_pairs.setdefault(rname, []).append((min(affs), delta_g_from_ki(ki_exp)))
 
         # fit the hybrid Vina->Ki offset calibration (per receptor)
         calib: dict[str, tuple[float | None, int, float | None]] = {}
