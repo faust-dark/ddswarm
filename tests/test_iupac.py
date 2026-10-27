@@ -20,8 +20,8 @@ class _FakeResp:
 def test_fetch_iupac_name_ok(monkeypatch):
     captured = {}
 
-    def fake_open(url, timeout):
-        captured["url"] = url
+    def fake_open(req, timeout):
+        captured["url"] = req.full_url
         return _FakeResp("8-chloro-1-methyl-6-phenyl-[1,2,4]triazolo[4,3-a][1,4]benzodiazepine")
 
     monkeypatch.setattr("urllib.request.urlopen", fake_open)
@@ -44,7 +44,8 @@ def test_fetch_iupac_name_empty_returns_none(monkeypatch):
 
 
 def test_fetch_iupac_name_pubchem_fallback(monkeypatch):
-    def fake_open(url, timeout):
+    def fake_open(req, timeout):
+        url = req.full_url
         if "cactus" in url:
             return _FakeResp("")  # CACTUS cannot name it
         if "pubchem" in url:

@@ -20,18 +20,15 @@ Functions
 
 from __future__ import annotations
 
-import json
 import statistics
-import time
 import urllib.parse
-import urllib.request
 
 from rdkit import Chem
 from rdkit.Chem.inchi import MolToInchiKey
-from ddswarm import __version__
+
+from .http import get_json
 
 TIMEOUT = 20.0
-UA = {"User-Agent": f"ddswarm/{__version__} (research chembl)"}
 CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
 
 
@@ -48,16 +45,8 @@ def _num(value) -> float | None:
 
 
 def _get_json(url: str, retries: int = 2, timeout: float = TIMEOUT) -> dict | None:
-    for attempt in range(retries + 1):
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8", "replace"))
-            return data if isinstance(data, dict) else None
-        except Exception:
-            if attempt < retries:
-                time.sleep(1.5 * (attempt + 1))
-    return None
+    """GET a JSON object via the shared HTTP client (unified retry/backoff/UA)."""
+    return get_json(url, retries=retries, timeout=timeout, purpose="research chembl")
 
 
 def _resolve_molecule(ikey: str) -> dict | None:
