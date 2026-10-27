@@ -10,9 +10,9 @@ provenance.
 
 from __future__ import annotations
 
-import json
 import urllib.parse
-import urllib.request
+
+from .http import get_json, get_text
 
 CACTUS_BASE = "https://cactus.nci.nih.gov/chemical/structure"
 PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
@@ -20,14 +20,10 @@ PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
 
 def _fetch_cactus_iupac(smiles: str, timeout: float) -> str | None:
     """De-novo systematic name from NIH CACTUS (generates, not a DB lookup)."""
-    try:
-        encoded = urllib.parse.quote(smiles, safe="")
-        url = f"{CACTUS_BASE}/{encoded}/iupac_name"
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            name = resp.read().decode("utf-8", "replace").strip()
-        return name or None
-    except Exception:
-        return None
+    encoded = urllib.parse.quote(smiles, safe="")
+    url = f"{CACTUS_BASE}/{encoded}/iupac_name"
+    name = get_text(url, timeout=timeout, purpose="iupac naming")
+    return name.strip() if name else None
 
 
 def _fetch_pubchem_iupac(inchikey: str, timeout: float) -> str | None:
@@ -36,16 +32,14 @@ def _fetch_pubchem_iupac(inchikey: str, timeout: float) -> str | None:
     Returns None for novel molecules absent from PubChem — this is a database
     lookup, not a de-novo name generator.
     """
-    try:
-        key = urllib.parse.quote(inchikey, safe="")
-        url = f"{PUBCHEM_BASE}/inchikey/{key}/property/IUPACName/JSON"
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8", "replace"))
-        props = (data.get("PropertyTable") or {}).get("Properties") or []
-        name = props[0].get("IUPACName") if props else None
-        return (name or "").strip() or None
-    except Exception:
+    key = urllib.parse.quote(inchikey, safe="")
+    url = f"{PUBCHEM_BASE}/inchikey/{key}/property/IUPACName/JSON"
+    data = get_json(url, timeout=timeout, purpose="iupac naming")
+    if data is None:
         return None
+    props = (data.get("PropertyTable") or {}).get("Properties") or []
+    name = props[0].get("IUPACName") if props else None
+    return (name or "").strip() or None
 
 
 def fetch_iupac_name(smiles: str, timeout: float = 15.0) -> str | None:

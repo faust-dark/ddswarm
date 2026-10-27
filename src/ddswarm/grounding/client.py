@@ -16,18 +16,15 @@ outcome honestly. PubChem rate-limits (HTTP 503); _get_json retries with backoff
 
 from __future__ import annotations
 
-import json
-import time
 import urllib.parse
-import urllib.request
 import xml.etree.ElementTree as ET
 
 from rdkit import Chem
 from rdkit.Chem.inchi import MolToInchiKey
-from ddswarm import __version__
+
+from ..chemistry.http import get_json, get_text
 
 TIMEOUT = 20.0
-UA = {"User-Agent": f"ddswarm/{__version__} (research grounding)"}
 CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
 PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -39,16 +36,8 @@ def inchi_key(canonical_smiles: str) -> str | None:
 
 
 def _get_json(url: str, retries: int = 2, timeout: float = TIMEOUT) -> dict | None:
-    for attempt in range(retries + 1):
-        try:
-            req = urllib.request.Request(url, headers=UA)
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8", "replace"))
-            return data if isinstance(data, dict) else None
-        except Exception:
-            if attempt < retries:
-                time.sleep(1.5 * (attempt + 1))
-    return None
+    """GET a JSON object via the shared HTTP client (unified retry/backoff/UA)."""
+    return get_json(url, retries=retries, timeout=timeout, purpose="research grounding")
 
 
 def chembl_molecule(ikey: str) -> dict | None:
@@ -97,11 +86,8 @@ def pubchem_compound(ikey: str) -> dict | None:
 def pubmed_ids(query: str, retmax: int = 3) -> list[str] | None:
     url = (f"{PUBMED_BASE}/esearch.fcgi?db=pubmed&retmax={retmax}"
            f"&term={urllib.parse.quote(query)}")
-    try:
-        req = urllib.request.Request(url, headers=UA)
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            text = resp.read().decode("utf-8", "replace")
-    except Exception:
+    text = get_text(url, timeout=TIMEOUT, purpose="research grounding")
+    if text is None:
         return None
     try:
         root = ET.fromstring(text)

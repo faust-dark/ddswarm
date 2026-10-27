@@ -6,15 +6,13 @@ from __future__ import annotations
 
 import os
 import re
-import urllib.error
 import urllib.parse
-import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..chemistry.http import request
 from ..fsutil import atomic_write_bytes
-from ddswarm import __version__
 
 RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
 PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
@@ -22,7 +20,6 @@ PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 DOWNLOAD_TIMEOUT_S = 60.0
 MAX_PDB_BYTES = 200 * 1024 * 1024
-_UA = {"User-Agent": f"ddswarm/{__version__} (receptor download)"}
 
 
 def is_valid_pdb_id(value: object) -> bool:
@@ -51,16 +48,9 @@ def download_pdb(url: str, dest: str | Path, timeout: float = DOWNLOAD_TIMEOUT_S
     scheme = urllib.parse.urlparse(url).scheme.lower()
     if scheme not in ("http", "https"):
         return f"refusing non-http(s) receptor URL scheme {scheme!r}"
-    try:
-        req = urllib.request.Request(url, headers=_UA)
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = resp.read(MAX_PDB_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        return f"HTTP {exc.code} for {url}"
-    except Exception as exc:  # noqa: BLE001 - network errors, timeouts
-        return f"download failed: {exc}"
-    if len(data) > MAX_PDB_BYTES:
-        return f"receptor file exceeds {MAX_PDB_BYTES} bytes"
+    data, err = request(url, timeout=timeout, purpose="receptor download", max_bytes=MAX_PDB_BYTES)
+    if err is not None:
+        return f"{err} for {url}" if err.startswith("HTTP ") else err
     if not looks_like_pdb(data):
         return "downloaded content is not a PDB structure (no ATOM/HETATM records)"
     atomic_write_bytes(dest, data)
