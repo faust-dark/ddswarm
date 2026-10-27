@@ -23,7 +23,6 @@ from xml.sax.saxutils import escape as _xmlescape
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
@@ -127,7 +126,9 @@ def _table(headers: list[str], rows: list[list], col_widths: list[float],
 
 
 def _new_fig(w: float = 6.5, h: float = 3.0):
-    fig, ax = plt.subplots(figsize=(w, h))
+    # OO Figure API (no pyplot global state) — safe under the concurrent runner.
+    fig = Figure(figsize=(w, h))
+    ax = fig.add_subplot(111)
     return fig, ax
 
 
@@ -444,7 +445,6 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
             H = MAX_H
         png = figdir / f"fig{figure_count}.png"
         f.savefig(png, dpi=150, bbox_inches="tight", facecolor="white")
-        plt.close(f)
         story.append(Image(str(png), width=W * cm, height=H * cm))
         story.append(Paragraph(_esc(caption), styles["caption"]))
 
