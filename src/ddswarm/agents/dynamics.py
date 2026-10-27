@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.dynamics_result import DynamicsResult, DynamicsSummary, MdProtocol, MdRun
 from ..contracts.enums import AgentResultStatus
@@ -20,7 +22,6 @@ from ..dynamics import make_engine
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import load_md_state, md_state_key, md_state_path, write_md_meta
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 _RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"

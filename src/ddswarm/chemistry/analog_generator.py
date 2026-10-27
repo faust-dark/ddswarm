@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rdkit import Chem
-from rdkit import RDLogger
+from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 
 from .rdkit_ops import sanitize_and_canonicalize

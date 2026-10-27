@@ -7,8 +7,9 @@ then screened_batch survivors (passed=True), then starting_materials."""
 
 from __future__ import annotations
 
-from rdkit import Chem
-from rdkit import rdBase
+from rdkit import Chem, rdBase
+
+from ddswarm import __version__
 
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..chemistry.tox_alerts import match_tox_alerts
@@ -18,7 +19,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.tox_profile import MoleculeToxAssessment, ToxAlert, ToxProfile, ToxSummary
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -33,7 +33,8 @@ class ToxMinion(Agent):
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=["no molecules to assess (params['molecules'], screened_batch survivors, or starting_materials empty)"],
+                warnings=["no molecules to assess (params['molecules'], screened_batch survivors, or "
+                          "starting_materials empty)"],
                 tool_versions=[TOOL, RDKIT_TOOL], reproducibility={"reason": "no_molecules"},
             )
 

@@ -257,7 +257,7 @@ def test_interpret_adr_ssri_cox_and_antitarget():
 def _run_selectivity(store, receptors, primary, affinities, monkeypatch):
     """Run the full selectivity agent against a fake deterministic docking engine."""
     from ddswarm import agents
-    from ddswarm.docking.base import DockPose, DockingEngine, PreparedLigand, PreparedReceptor
+    from ddswarm.docking.base import DockingEngine, DockPose, PreparedLigand, PreparedReceptor
 
     class Fake(DockingEngine):
         name = "fake"
@@ -358,7 +358,7 @@ def test_agent_e2e_chembl_calibration_on_demand(tmp_path, monkeypatch):
     """A receptor absent from the static set is calibrated from ChEMBL on-demand."""
     from ddswarm import agents
     from ddswarm.contracts.selectivity_assessment import SelectivityAssessment
-    from ddswarm.docking.base import DockPose, DockingEngine, PreparedLigand, PreparedReceptor
+    from ddswarm.docking.base import DockingEngine, DockPose, PreparedLigand, PreparedReceptor
 
     monkeypatch.setattr(agents.selectivity, "search_target", lambda gene: "CHEMBL217")
     monkeypatch.setattr(agents.selectivity, "receptor_reference_ligands",

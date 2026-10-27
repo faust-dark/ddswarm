@@ -7,8 +7,9 @@ returns insufficient_evidence."""
 
 from __future__ import annotations
 
-from rdkit import Chem
-from rdkit import rdBase
+from rdkit import Chem, rdBase
+
+from ddswarm import __version__
 
 from ..chemistry.rdkit_ops import compute_properties, match_alerts, sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
@@ -16,12 +17,11 @@ from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..contracts.screened_batch import (
     MoleculeScreenResult,
-    ScreenSummary,
     ScreenedBatch,
+    ScreenSummary,
 )
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -93,9 +93,14 @@ class ScreenerMinion(Agent):
             status=AgentResultStatus.success,
             input_refs=ctx.input_refs,
             artifacts=[art],
-            findings=[f"screened {summary.total} molecules: {summary.passed} passed, {summary.rejected} rejected, {summary.invalid} invalid"],
+            findings=[f"screened {summary.total} molecules: {summary.passed} passed, {summary.rejected} "
+                      f"rejected, {summary.invalid} invalid"],
             warnings=warnings,
-            provenance=[ProvenanceEntry(source="RDKit deterministic screening", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL])],
+            provenance=[
+                ProvenanceEntry(
+                    source="RDKit deterministic screening", output_hash=art.hash, tool_versions=[TOOL, RDKIT_TOOL]
+                )
+            ],
             tool_versions=[TOOL, RDKIT_TOOL],
             reproducibility={"input_hash": input_hash, "filters": filters},
         )
@@ -161,9 +166,11 @@ class ScreenerMinion(Agent):
         if props["tpsa"] > filters.get("advisory_tpsa", 140.0):
             advisories.append(f"tpsa {props['tpsa']} > {filters.get('advisory_tpsa', 140.0)}")
         if props["rotatable_bonds"] > filters.get("advisory_rotatable_bonds", 10):
-            advisories.append(f"rotatable_bonds {props['rotatable_bonds']} > {filters.get('advisory_rotatable_bonds', 10)}")
+            advisories.append(f"rotatable_bonds {props['rotatable_bonds']} > "
+                              f"{filters.get('advisory_rotatable_bonds', 10)}")
         if abs(props["formal_charge"]) > filters.get("advisory_max_abs_charge", 1):
-            advisories.append(f"formal_charge {props['formal_charge']} outside +/- {filters.get('advisory_max_abs_charge', 1)}")
+            advisories.append(f"formal_charge {props['formal_charge']} outside +/- "
+                              f"{filters.get('advisory_max_abs_charge', 1)}")
 
         hard_alerts = pains + (brenk if filters.get("brenk_hard", False) else [])
         passed = not ro5 and not hard_alerts

@@ -2,7 +2,7 @@
 
 import pytest
 
-from ddswarm.agents import DesignerMinion, ResearcherMinion, Agent
+from ddswarm.agents import Agent, DesignerMinion, ResearcherMinion
 from ddswarm.contracts import ProjectSpec, RunStatus
 from ddswarm.contracts.agent_result import AgentResult
 from ddswarm.contracts.enums import AgentResultStatus
@@ -37,7 +37,8 @@ def make_tasks(with_seed=True):
             "source": "PubChem",
             "url": "https://pubchem.ncbi.nlm.nih.gov/compound/123631",
             "identifier": "CID 123631",
-            "observed_value": "gefitinib: approved reversible EGFR tyrosine kinase inhibitor (FDA 2003; NSCLC first-line 2015)",
+            "observed_value": "gefitinib: approved reversible EGFR tyrosine kinase inhibitor (FDA 2003; "
+                              "NSCLC first-line 2015)",
             "evidence_level": "observed",
             "notes": "reference ligand for scaffold design",
         }]}

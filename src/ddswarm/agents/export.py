@@ -22,8 +22,9 @@ import io
 import os
 import tempfile
 
-from rdkit import Chem
-from rdkit import rdBase
+from rdkit import Chem, rdBase
+
+from ddswarm import __version__
 
 from ..contracts.agent_result import AgentResult
 from ..contracts.candidate_table import CandidateRow, CandidateTable, ExportSummary, Verdict
@@ -32,7 +33,6 @@ from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.runner import ARTIFACT_MODELS
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -115,7 +115,7 @@ class ExportMinion(Agent):
         cyp: dict[str, list[str]] = {}
         for cp in by_kind.get("cyp_assessment", []):
             for m in cp.molecules:
-                cyp[m.canonical_smiles] = [f"{l.enzyme} {l.effect}" for l in m.liabilities]
+                cyp[m.canonical_smiles] = [f"{liab.enzyme} {liab.effect}" for liab in m.liabilities]
         herg: dict[str, bool] = {}
         for ha in by_kind.get("herg_assessment", []):
             for m in ha.molecules:

@@ -1,16 +1,16 @@
 """Enumerations shared across the JSON contracts."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class InputType(str, Enum):
+class InputType(StrEnum):
     target = "target"
     ligand = "ligand"
     class_ = "class"
     mixed = "mixed"
 
 
-class ProjectStatus(str, Enum):
+class ProjectStatus(StrEnum):
     draft = "draft"
     approved = "approved"
     running = "running"
@@ -18,7 +18,7 @@ class ProjectStatus(str, Enum):
     completed = "completed"
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     queued = "queued"
     running = "running"
     completed = "completed"
@@ -26,7 +26,7 @@ class RunStatus(str, Enum):
     blocked = "blocked"
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     queued = "queued"
     running = "running"
     success = "success"
@@ -36,7 +36,7 @@ class TaskStatus(str, Enum):
     insufficient_evidence = "insufficient_evidence"
 
 
-class AgentResultStatus(str, Enum):
+class AgentResultStatus(StrEnum):
     success = "success"
     partial = "partial"
     failed = "failed"
@@ -44,7 +44,7 @@ class AgentResultStatus(str, Enum):
     insufficient_evidence = "insufficient_evidence"
 
 
-class EvidenceLevel(str, Enum):
+class EvidenceLevel(StrEnum):
     observed = "observed"
     calculated = "calculated"
     predicted = "predicted"

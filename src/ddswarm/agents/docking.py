@@ -13,6 +13,8 @@ from pathlib import Path
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.receptors import canonical_receptor_name, registry_entry
 from ..contracts.agent_result import AgentResult
 from ..contracts.docking_result import (
@@ -33,7 +35,6 @@ from ..docking.rmsd import heavy_atom_rmsd, pose_mol_from_coords
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import ComputeCache, dock_cache_enabled
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -92,7 +93,10 @@ class DockingMinion(Agent):
         if box_center is None:
             return self._result(
                 ctx, AgentResultStatus.insufficient_evidence,
-                warnings=[(receptor.note or "receptor not prepared") or "no search box resolvable (no box in params, no reference ligand)"],
+                warnings=[
+                    (receptor.note or "receptor not prepared")
+                    or "no search box resolvable (no box in params, no reference ligand)"
+                ],
                 reproducibility={"reason": "no_box"},
             )
         protocol = DockProtocol(
@@ -197,8 +201,11 @@ class DockingMinion(Agent):
             )],
         )
         art = self.persist_artifact(ctx, "docking_result", f"dr_{ctx.project_id}", batch)
+        best_affinity = min(
+            (p.affinity_kcal_per_mol for p in poses if p.affinity_kcal_per_mol is not None), default=None
+        )
         findings = [f"docked {docked}/{len(molecules)} molecules; "
-                    f"best affinity {min((p.affinity_kcal_per_mol for p in poses if p.affinity_kcal_per_mol is not None), default=None)} kcal/mol"]
+                    f"best affinity {best_affinity} kcal/mol"]
         if redocking and redocking.rmsd_angstrom is not None:
             findings.append(f"redocking RMSD {redocking.rmsd_angstrom} A ({redocking.status})")
         return self._result(

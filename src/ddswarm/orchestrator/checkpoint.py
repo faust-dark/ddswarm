@@ -18,7 +18,8 @@ no new non-determinism):
   reproducibility hash of the JSON artifacts.
 
 The MD checkpoint stays opt-in via params['resume']=true; the docking cache can
-be turned off with params['dock_cache']=false (CLI: --no-dock-cache). The cache lives at store/checkpoints/, outside any run dir, so it survives
+be turned off with params['dock_cache']=false (CLI: --no-dock-cache). The cache lives at
+store/checkpoints/, outside any run dir, so it survives
 across runs.
 """
 
@@ -28,7 +29,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..docking.base import DockPose, DockProtocol, DockingEngine, PreparedLigand, PreparedReceptor
+from ..docking.base import DockingEngine, DockPose, DockProtocol, PreparedLigand, PreparedReceptor
 from ..fsutil import atomic_write_text
 from ..logging.hashing import hash_content, hash_jsonable
 

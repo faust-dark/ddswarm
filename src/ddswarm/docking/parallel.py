@@ -25,7 +25,6 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-
 from typing import TYPE_CHECKING
 
 from .base import DockingEngine, DockPose, DockProtocol, PreparedLigand, PreparedReceptor

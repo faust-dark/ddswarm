@@ -19,14 +19,14 @@ from ..chemistry.pdb_utils import analyze_pdb
 from ..fsutil import atomic_write_bytes, atomic_write_text
 from ..logging.hashing import hash_content, hash_jsonable
 from .base import (
+    RCSB_URL,
+    DockingEngine,
     DockPose,
     DockProtocol,
-    DockingEngine,
     PreparedLigand,
     PreparedReceptor,
     QCResult,
     ReceptorSource,
-    RCSB_URL,
     download_pdb,
     is_safe_name,
     is_valid_pdb_id,
@@ -204,8 +204,8 @@ class VinaEngine(DockingEngine):
 
         # clean + protonate, then rigid PDBQT
         try:
-            from pdbfixer import PDBFixer  # noqa: PLC0415
             from openmm.app import PDBFile  # noqa: PLC0415
+            from pdbfixer import PDBFixer  # noqa: PLC0415
 
             fixer = PDBFixer(filename=str(raw_path))
             fixer.findMissingResidues()
@@ -398,7 +398,7 @@ class VinaEngine(DockingEngine):
             return lig
 
         smiles_line = next(
-            (l.split("SMILES ", 1)[1] for l in pdbqt.splitlines() if l.startswith("REMARK SMILES ")),
+            (line.split("SMILES ", 1)[1] for line in pdbqt.splitlines() if line.startswith("REMARK SMILES ")),
             None,
         )
         lig.canonical_smiles = smiles_line or ""

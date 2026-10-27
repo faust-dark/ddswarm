@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.cyp_alerts import assess_cyp
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
@@ -24,7 +26,6 @@ from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -59,7 +60,7 @@ class CypMinion(Agent):
             ]
             if liabilities:
                 note = (f"{len(liabilities)} DDI alert(s): "
-                        + ", ".join(f"{l.enzyme} {l.effect} ({l.alert_slug})" for l in liabilities)
+                        + ", ".join(f"{liab.enzyme} {liab.effect} ({liab.alert_slug})" for liab in liabilities)
                         + " — predicted potential DDI from literature rules, NOT a functional assay")
             else:
                 note = "no matches in the curated CYP chemotype set (not a clean-DDI declaration)"
@@ -74,9 +75,9 @@ class CypMinion(Agent):
         summary = CypSummary(
             total_molecules=len(profiles),
             flagged_inhibition=sum(1 for p in profiles
-                                   if any(l.effect == "inhibition" for l in p.liabilities)),
+                                   if any(liab.effect == "inhibition" for liab in p.liabilities)),
             flagged_induction=sum(1 for p in profiles
-                                  if any(l.effect == "induction" for l in p.liabilities)),
+                                  if any(liab.effect == "induction" for liab in p.liabilities)),
             total_alerts=sum(len(p.liabilities) for p in profiles),
         )
 

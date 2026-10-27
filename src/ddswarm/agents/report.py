@@ -9,11 +9,14 @@ there is no feedback to record anyway)."""
 
 from __future__ import annotations
 
+from ddswarm import __version__
 
+from ..chemistry.iupac import fetch_iupac_name
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult
 from ..contracts.clinical_assessment import ClinicalAssessment
 from ..contracts.clinical_simulation import ClinicalSimulation
+from ..contracts.cyp_assessment import CypAssessment
 from ..contracts.design_batch import DesignBatch
 from ..contracts.docking_result import DockingResult
 from ..contracts.dynamics_result import DynamicsResult
@@ -21,27 +24,24 @@ from ..contracts.enums import AgentResultStatus, EvidenceLevel
 from ..contracts.execution_plan import ExecutionPlan
 from ..contracts.formulation_assessment import FormulationAssessment
 from ..contracts.generation_memory import GenerationMemory
+from ..contracts.grounding_report import GroundingReport
+from ..contracts.herg_assessment import HergAssessment
 from ..contracts.knowledge_pack import KnowledgePack
-from ..contracts.overview_report import OverviewReport
 from ..contracts.memory import MemoryEntry
+from ..contracts.overview_report import OverviewReport
 from ..contracts.patent_landscape import PatentLandscape
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
-from ..contracts.report import CandidateSelection, EvidenceBreakdown, Report, StageFinding
 from ..contracts.regulatory_assessment import RegulatoryAssessment
 from ..contracts.regulatory_checklist import RegulatoryChecklist
+from ..contracts.report import CandidateSelection, EvidenceBreakdown, Report, StageFinding
 from ..contracts.retrosynthesis_plan import RetrosynthesisPlan
-from ..contracts.cyp_assessment import CypAssessment
-from ..contracts.herg_assessment import HergAssessment
-from ..contracts.grounding_report import GroundingReport
 from ..contracts.safety_assessment import SafetyAssessment
 from ..contracts.screened_batch import ScreenedBatch
 from ..contracts.selectivity_assessment import SelectivityAssessment
 from ..contracts.tox_profile import ToxProfile
 from ..logging.hashing import hash_jsonable
-from ..chemistry.iupac import fetch_iupac_name
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 
@@ -231,8 +231,8 @@ class ReportMinion(Agent):
                     c[a.evidence_level.value] += 1
         for cyp in by_kind.get("cyp_assessment", []):
             for m in cyp.molecules:
-                for l in m.liabilities:
-                    c[l.evidence_level.value] += 1
+                for liab in m.liabilities:
+                    c[liab.evidence_level.value] += 1
         for ha in by_kind.get("herg_assessment", []):
             for m in ha.molecules:
                 if m.flagged:
@@ -465,17 +465,32 @@ class ReportMinion(Agent):
             "All scores are in-silico (calculated/predicted); none are experimental evidence.",
             "Evidence breakdown is a coarse rollup; individual entries carry finer-grained evidence_level.",
             "Structural tox alerts are predicted liabilities from literature rules, not observed toxicity.",
-            "CYP inhibition/induction flags are structural alerts (predicted), not a functional enzyme assay; induction is a weak 2D-structure signal (PXR/CAR/AhR-driven) and may miss or over-call.",
-            "hERG flags are predicted pharmacophore + lipophilicity matches, not a patch-clamp assay; IC50 potency is not estimated, so a flag does not rank cardiotoxic potency.",
-            "Grounding entries are observed external records (URL + identifier + retrieval timestamp); network failures are reported as failed/not_found, never fabricated.",
-            "Brenk 'unwanted functionality' alerts are advisory, not eliminating (PAINS stays hard); set filters.brenk_hard=true to make Brenk eliminate.",
+            "CYP inhibition/induction flags are structural alerts (predicted), not a functional enzyme assay; "
+            "induction is a weak 2D-structure signal (PXR/CAR/AhR-driven) and may miss or over-call.",
+            "hERG flags are predicted pharmacophore + lipophilicity matches, not a patch-clamp assay; IC50 "
+            "potency is not estimated, so a flag does not rank cardiotoxic potency.",
+            "Grounding entries are observed external records (URL + identifier + retrieval timestamp); network "
+            "failures are reported as failed/not_found, never fabricated.",
+            "Brenk 'unwanted functionality' alerts are advisory, not eliminating (PAINS stays hard); set "
+            "filters.brenk_hard=true to make Brenk eliminate.",
             "LLM-contributed entries are inferred/hypothetical; verify against primary sources.",
-            "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported as failed.",
-            "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a converged stability verdict.",
-            "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not measured properties.",
-            "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate opinion or regulatory determination.",
-            "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred parameters — not measured human pharmacokinetics.",
-            "Selectivity/ADR scoring converts Vina docking scores to Ki via the Gibbs identity, hybrid-calibrated against a fixed literature-Ki set (per-receptor offset, slope fixed at 1); the calibrated Ki remains a calculated estimate, not an absolute affinity. ADR labels come from a pluggable mechanistic profile library (SSRI sexual-ADR, NSAID COX-2/COX-1 GI risk, and off-target antitarget ADRs tiered on occupancy at the reference concentration); docking reports binding, not function, so sign-dependent effects (5-HT2C engagement, 5-HT2B valvulopathy, kappa dysphoria) are refined only by documented-chemotype matching, never by a functional assay.",
+            "Docking affinity and redocking RMSD are calculated; a failed redocking (RMSD > 2 A) is reported "
+            "as failed.",
+            "Receptor MD is a short (ps-scale) relaxation snapshot, not production MD; backbone RMSD is not a "
+            "converged stability verdict.",
+            "Formulation classes (solubility/permeability/BCS) are rule-based estimates from logP/TPSA, not "
+            "measured properties.",
+            "Patent/clinical/regulatory entries are LLM-recalled and inferred — NOT a legal freedom-to-operate "
+            "opinion or regulatory determination.",
+            "PK/PD simulations are compartmental models (one- or two-compartment) on predicted/inferred "
+            "parameters — not measured human pharmacokinetics.",
+            "Selectivity/ADR scoring converts Vina docking scores to Ki via the Gibbs identity, hybrid-calibrated "
+            "against a fixed literature-Ki set (per-receptor offset, slope fixed at 1); the calibrated Ki remains a "
+            "calculated estimate, not an absolute affinity. ADR labels come from a pluggable mechanistic profile "
+            "library (SSRI sexual-ADR, NSAID COX-2/COX-1 GI risk, and off-target antitarget ADRs tiered on occupancy "
+            "at the reference concentration); docking reports binding, not function, so sign-dependent effects "
+            "(5-HT2C engagement, 5-HT2B valvulopathy, kappa dysphoria) are refined only by documented-chemotype "
+            "matching, never by a functional assay.",
         ]
 
     @staticmethod

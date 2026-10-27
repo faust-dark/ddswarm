@@ -28,7 +28,8 @@ from .validation import ValidationMinion
 
 __all__ = [
     "Agent", "AgentContext", "ClinicalMinion", "CypMinion", "DesignerMinion",
-    "DockingMinion", "DynamicsMinion", "ExportMinion", "FormulationMinion", "GroundingMinion", "HergMinion", "PatentMinion",
+    "DockingMinion", "DynamicsMinion", "ExportMinion", "FormulationMinion",
+    "GroundingMinion", "HergMinion", "PatentMinion",
     "PredictorMinion", "MemoryMinion", "OrchestratorMinion", "OverviewMinion",
     "RegulatoryMinion", "ReportMinion", "ReportPdfMinion", "ResearcherMinion",
     "RetrosynthesisMinion",

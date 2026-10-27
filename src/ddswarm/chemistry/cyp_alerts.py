@@ -26,7 +26,8 @@ INHIBITION_ALERTS: list[tuple[str, str, str, str]] = [
     ("CYP3A4", "azole_imidazole", "n1ccnc1",
      "imidazole azole (clotrimazole/ketoconazole/miconazole) — CYP3A4 heme-iron coordination; Greenblatt & von Moltke"),
     ("CYP3A4", "azole_triazole", "c1ncnn1",
-     "1,2,4-triazole azole (fluconazole/itraconazole/voriconazole) — CYP3A4 heme-iron coordination; Greenblatt & von Moltke"),
+     "1,2,4-triazole azole (fluconazole/itraconazole/voriconazole) — CYP3A4 heme-iron "
+     "coordination; Greenblatt & von Moltke"),
     ("CYP2C9", "aryl_sulfonamide", "S(=O)(=O)N",
      "aryl sulfonamide/sulfonylurea (sulfamethoxazole/celecoxib/sulfaphenazole) — CYP2C9; Rettie & Jones 2005"),
     ("CYP2D6", "aryloxy_alkylamine", "[cR1]O[CH2,CH1][CH2][CH2][N]",
@@ -36,7 +37,8 @@ INHIBITION_ALERTS: list[tuple[str, str, str, str]] = [
     ("CYP1A2", "purine_xanthine", "c1ncnc2ncnc12",
      "purine/methylxanthine (caffeine/theophylline) — CYP1A2 substrate/inhibitor; Kot & Daniel 2008"),
     ("CYP2A6", "coumarin", "O=c1ccc2ccccc2o1",
-     "coumarin (probe substrate) / furanocoumarin methoxsalen mechanism-based inactivator — CYP2A6; Pelkonen et al. 2000"),
+     "coumarin (probe substrate) / furanocoumarin methoxsalen mechanism-based inactivator — "
+     "CYP2A6; Pelkonen et al. 2000"),
     ("CYP2B6", "thienopyridine", "c1cc2c(s1)CCNC2",
      "thienopyridine (clopidogrel/ticlopidine/prasugrel) mechanism-based inhibitor — CYP2B6; Richter et al. 2004"),
     ("CYP2C8", "diaminopyrimidine", "Nc1nc(N)ncc1",

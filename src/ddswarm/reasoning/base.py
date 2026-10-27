@@ -50,11 +50,15 @@ class ReasoningBackend(ABC):
         """Return raw dicts for ClinicalFinding (validated by the agent)."""
 
     @abstractmethod
-    def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+    def regulatory_assessment(
+        self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict
+    ) -> ReasoningResult:
         """Return raw dicts for RegulatoryFinding (validated by the agent)."""
 
     @abstractmethod
-    def regulatory_checklist(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+    def regulatory_checklist(
+        self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict
+    ) -> ReasoningResult:
         """Return raw dicts ({dimension, status, summary, notes}) for a 7D
         RegulatoryChecklistEntry (validated by the agent)."""
 

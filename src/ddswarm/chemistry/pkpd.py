@@ -453,8 +453,8 @@ def _terminal_half_life(ts: list[float], ys: list[float]) -> float:
     pts = pts[-3:]
     n = len(pts)
     mean_t = sum(t for t, _ in pts) / n
-    mean_l = sum(l for _, l in pts) / n
-    num = sum((t - mean_t) * (l - mean_l) for t, l in pts)
+    mean_logc = sum(logc for _, logc in pts) / n
+    num = sum((t - mean_t) * (logc - mean_logc) for t, logc in pts)
     den = sum((t - mean_t) ** 2 for t, _ in pts)
     if den == 0 or num >= 0:
         raise ValueError("concentration is not decaying; cannot estimate terminal half-life")

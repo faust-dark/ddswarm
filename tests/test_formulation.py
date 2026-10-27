@@ -9,8 +9,8 @@ from ddswarm.contracts import (
     FormulationAssessment,
     MoleculeScreenResult,
     ProjectSpec,
-    ScreenSummary,
     ScreenedBatch,
+    ScreenSummary,
 )
 from ddswarm.orchestrator import Store
 

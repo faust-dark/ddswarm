@@ -72,7 +72,7 @@ def test_narrative_schema_reflects_stages():
                     run_status="completed", executive_summary="s")
     lines = []
     _narrative_schema(report, [plan], lines.append)
-    assert any("designer_minion" in l and "research" in l for l in lines)
+    assert any("designer_minion" in line and "research" in line for line in lines)
 
 
 def test_structural_modification_lines():
@@ -91,9 +91,9 @@ def test_structural_modification_lines():
     ])
     lines = _structural_modification_lines([db])
     assert len(lines) == 2  # duplicate collapsed, label-only skipped
-    assert any("chlorine -> fluorine halogen swap" in l for l in lines)
-    assert any("8-NO2 → 8-F" in l and "sedation" in l for l in lines)
-    assert not any("label only" in l for l in lines)
+    assert any("chlorine -> fluorine halogen swap" in line for line in lines)
+    assert any("8-NO2 → 8-F" in line and "sedation" in line for line in lines)
+    assert not any("label only" in line for line in lines)
 
 
 def test_default_pipeline_exports_pdf(tmp_path):

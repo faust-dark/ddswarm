@@ -17,12 +17,18 @@ import os
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .agents import (
     ClinicalMinion,
+    CypMinion,
     DesignerMinion,
     DockingMinion,
     DynamicsMinion,
+    ExportMinion,
     FormulationMinion,
+    GroundingMinion,
+    HergMinion,
     MemoryMinion,
     OrchestratorMinion,
     OverviewMinion,
@@ -38,23 +44,22 @@ from .agents import (
     SelectivityMinion,
     ToxMinion,
     ValidationMinion,
-    CypMinion,
-    HergMinion,
-    GroundingMinion,
-    ExportMinion,
 )
-from .contracts import (
-    GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask,
-)
-from pydantic import ValidationError
-
 from .chemistry.receptors import RECEPTOR_REGISTRY, canonical_receptor_name
 from .chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES, select_adr_profiles
+from .contracts import (
+    GenerationMemory,
+    ProjectSpec,
+    ReasoningConfig,
+    ReportDocument,
+    RunRequest,
+    RunTask,
+)
+from .logging import configure_logging
 from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
 from .orchestrator.store import latest_versioned
-from .logging import configure_logging
 
 DEFAULT_PIPELINE = [
     RunTask(task_id="safety", agent="safety_minion"),
@@ -72,7 +77,13 @@ DEFAULT_PIPELINE = [
     RunTask(task_id="herg", agent="herg_minion", depends_on=["screen"]),
     RunTask(task_id="formulation", agent="formulation_minion", depends_on=["screen"]),
     RunTask(task_id="patent", agent="patent_minion", depends_on=["screen"]),
-    RunTask(task_id="report", agent="report_minion", depends_on=["overview", "predict", "retrosynth", "tox", "cyp", "herg", "formulation", "patent", "docking", "selectivity"]),
+    RunTask(
+        task_id="report",
+        agent="report_minion",
+        depends_on=[
+            "overview", "predict", "retrosynth", "tox", "cyp", "herg", "formulation", "patent", "docking", "selectivity"
+        ],
+    ),
     RunTask(task_id="export", agent="export_minion", depends_on=["report"]),
     RunTask(task_id="validation", agent="validation_minion", depends_on=["report"]),
     RunTask(task_id="report_pdf", agent="report_pdf_minion", depends_on=["validation", "export"]),
@@ -471,17 +482,25 @@ def build_parser() -> argparse.ArgumentParser:
     pr = sub.add_parser("run", help="run a pipeline from a project.json file")
     pr.add_argument("project_file")
     pr.add_argument("--reasoning", choices=["none", "hermes"], default=None,
-                    help="override reasoning backend for the reasoning agents (default: none — deterministic, platform-agnostic; hermes = opt-in LLM for research/overview/design/retrosynth/patent/clinical/regulatory)")
+                    help="override reasoning backend for the reasoning agents (default: none — deterministic, "
+                         "platform-agnostic; hermes = opt-in LLM for research/overview/design/retrosynth/patent/"
+                         "clinical/regulatory)")
     pr.add_argument("--no-iupac", action="store_true",
-                    help="disable IUPAC name fetching for the ranked candidates (default: fetch from the NIH CACTUS web service as a readability label — non-deterministic, network-dependent, never authoritative)")
+                    help="disable IUPAC name fetching for the ranked candidates (default: fetch from the NIH CACTUS "
+                         "web service as a readability label — non-deterministic, "
+                         "network-dependent, never authoritative)")
     pr.add_argument("--grounding", action="store_true",
-                    help="resolve molecules against ChEMBL/PubChem/PubMed and record observed external records (URL + identifier; network-dependent, non-deterministic)")
+                    help="resolve molecules against ChEMBL/PubChem/PubMed and record observed external records "
+                         "(URL + identifier; network-dependent, non-deterministic)")
     pr.add_argument("--iterations", type=int, default=1,
-                    help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior survivors forward)")
+                    help="number of generations to iterate (>=2 injects orchestrator + memory agents and feeds prior "
+                         "survivors forward)")
     pr.add_argument("--resume", action="store_true",
-                    help="extend receptor MD from its last checkpoint (content-addressed, deterministic) instead of recomputing; docking results are reused by default")
+                    help="extend receptor MD from its last checkpoint (content-addressed, deterministic) instead of "
+                         "recomputing; docking results are reused by default")
     pr.add_argument("--no-dock-cache", action="store_true",
-                    help="recompute docking instead of reusing content-addressed cached results / receptor preparations")
+                    help="recompute docking instead of reusing content-addressed cached results / "
+                         "receptor preparations")
     pr.add_argument("--workers", type=int, default=None,
                     help="max pipeline tasks run concurrently (default: min(8, CPUs); 1 = sequential)")
     pr.add_argument("--store", type=Path, default=_default_store())

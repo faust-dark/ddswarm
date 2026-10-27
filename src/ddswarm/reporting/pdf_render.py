@@ -21,6 +21,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape as _xmlescape
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib as mpl
 from matplotlib.figure import Figure
@@ -41,6 +42,11 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+# Human-facing stage label + one-line role for each agent (single source of
+# truth in agents/roles.py, so the PDF and the ExecutionPlan stay in sync).
+from ..agents.roles import AGENT_ROLES as AGENT_LABELS
+from ..contracts.regulatory_checklist import DIMENSION_LABELS as _DIMENSION_LABELS
+
 EVIDENCE_COLORS = {
     "observed": "#2e7d32",
     "calculated": "#1565c0",
@@ -48,12 +54,6 @@ EVIDENCE_COLORS = {
     "inferred": "#ef6c00",
     "hypothetical": "#9e9e9e",
 }
-
-# Human-facing stage label + one-line role for each agent, used to label report
-# sections clearly and explain what each agent does. Single source of truth in
-# agents/roles.py so the PDF and the ExecutionPlan reflect the exact same schema.
-from ..agents.roles import AGENT_ROLES as AGENT_LABELS
-from ..contracts.regulatory_checklist import DIMENSION_LABELS as _DIMENSION_LABELS
 
 _fonts_registered = False
 
@@ -224,11 +224,11 @@ def _inchikey(smiles: str) -> str | None:
 
 def _chart_evidence(eb) -> Figure | None:
     levels = ["observed", "calculated", "predicted", "inferred", "hypothetical"]
-    vals = [getattr(eb, l, 0) for l in levels]
+    vals = [getattr(eb, level, 0) for level in levels]
     if not any(vals):
         return None
     fig, ax = _new_fig(6.4, 2.4)
-    ax.bar(levels, vals, color=[EVIDENCE_COLORS[l] for l in levels])
+    ax.bar(levels, vals, color=[EVIDENCE_COLORS[level] for level in levels])
     ax.set_ylabel("count", fontsize=8)
     ax.set_title("Evidence-level breakdown", fontsize=10)
     ax.tick_params(axis="x", labelsize=7.5, rotation=20)
@@ -666,7 +666,7 @@ def render_report_pdf(report, by_kind, project_spec, validation_report, out_path
              "'predicted' is a rule-based or model estimate (ADMET, toxicity, formulation); "
              "'inferred' is the swarm's own reasoning; 'hypothetical' is an unverified proposal "
              "(LLM-proposed synthesis routes or analog designs).")
-        if any(getattr(eb, l, 0) for l in ("observed", "calculated", "predicted", "inferred", "hypothetical")):
+        if any(getattr(eb, level, 0) for level in ("observed", "calculated", "predicted", "inferred", "hypothetical")):
             fig(_chart_evidence(eb),
                 "Auxiliary view: how the evidence-carrying units distribute across evidence levels.")
             para(f"Breakdown — observed: {eb.observed}, calculated: {eb.calculated}, "
@@ -905,7 +905,7 @@ def _narrative_cyp(cyps, para) -> None:
         for m in cyp.molecules:
             if not m.liabilities:
                 continue
-            detail = "; ".join(f"{l.enzyme} {l.effect} ({l.alert_slug})" for l in m.liabilities)
+            detail = "; ".join(f"{liab.enzyme} {liab.effect} ({liab.alert_slug})" for liab in m.liabilities)
             para(f"{m.molecule_id}: {detail}.")
     para("Induction flags in particular are a weak 2D-structure signal (PXR/CAR/AhR-driven) and "
          "should be confirmed by an in-vitro PXR/CYP induction assay before acting on them.")

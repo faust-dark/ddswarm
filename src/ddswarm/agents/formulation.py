@@ -8,8 +8,9 @@ Consumes molecules from params['molecules'], then screened_batch survivors
 
 from __future__ import annotations
 
-from rdkit import Chem
-from rdkit import rdBase
+from rdkit import Chem, rdBase
+
+from ddswarm import __version__
 
 from ..chemistry.formulation import assess_formulation
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
@@ -23,7 +24,6 @@ from ..contracts.formulation_assessment import (
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
@@ -38,7 +38,10 @@ class FormulationMinion(Agent):
             return AgentResult(
                 project_id=ctx.project_id, agent=self.name, task_id=ctx.task_id,
                 status=AgentResultStatus.insufficient_evidence,
-                warnings=["no molecules to assess (params['molecules'], screened_batch survivors, or starting_materials empty)"],
+                warnings=[
+                    "no molecules to assess (params['molecules'], screened_batch survivors, or "
+                    "starting_materials empty)"
+                ],
                 tool_versions=[TOOL, RDKIT_TOOL], reproducibility={"reason": "no_molecules"},
             )
 

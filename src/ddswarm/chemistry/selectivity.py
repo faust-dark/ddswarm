@@ -71,11 +71,13 @@ GABAA_ANXIOLYTIC_PROFILE = "gabaa_alpha2_anxiolytic"
 ANTITARGET_PROFILES: dict[str, dict] = {
     "chrm1_anticholinergic": {
         "receptor": "CHRM1",
-        "adr": "anticholinergic effects (dry mouth, blurred vision, constipation, urinary retention, cognitive impairment)",
+        "adr": "anticholinergic effects (dry mouth, blurred vision, constipation, urinary retention, "
+               "cognitive impairment)",
         "sign": "blockade",
         "occupancy_threshold": DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD,
         "mechanism": "muscarinic M1 blockade",
-        "citation": "Bymaster et al. 2003 (Eur J Pharmacol); Chew et al. 2008 (BMC Geriatr) — anticholinergic burden scales with muscarinic blockade",
+        "citation": "Bymaster et al. 2003 (Eur J Pharmacol); Chew et al. 2008 (BMC Geriatr) — anticholinergic "
+                    "burden scales with muscarinic blockade",
     },
     "hrh1_sedation": {
         "receptor": "HRH1",
@@ -99,7 +101,8 @@ ANTITARGET_PROFILES: dict[str, dict] = {
         "sign": "blockade",
         "occupancy_threshold": DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD,
         "mechanism": "alpha-1A adrenergic blockade",
-        "citation": "alpha-1 blockade causes orthostatic hypotension (textbook alpha-1-blocker pharmacology, e.g. prazosin/terazosin)",
+        "citation": "alpha-1 blockade causes orthostatic hypotension (textbook alpha-1-blocker pharmacology, "
+                    "e.g. prazosin/terazosin)",
     },
     "adra1b_orthostatic_hypotension": {
         "receptor": "ADRA1B",
@@ -107,7 +110,8 @@ ANTITARGET_PROFILES: dict[str, dict] = {
         "sign": "blockade",
         "occupancy_threshold": DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD,
         "mechanism": "alpha-1B adrenergic blockade",
-        "citation": "alpha-1 blockade causes orthostatic hypotension (textbook alpha-1-blocker pharmacology, e.g. prazosin/terazosin)",
+        "citation": "alpha-1 blockade causes orthostatic hypotension (textbook alpha-1-blocker pharmacology, "
+                    "e.g. prazosin/terazosin)",
     },
     "htr2b_valvulopathy": {
         "receptor": "HTR2B",
@@ -115,7 +119,8 @@ ANTITARGET_PROFILES: dict[str, dict] = {
         "sign": "agonism",
         "occupancy_threshold": DEFAULT_ANTITARGET_OCCUPANCY_THRESHOLD,
         "mechanism": "5-HT2B agonism",
-        "citation": "Rothman et al. 2000 (Circulation); Roth 2007 (N Engl J Med) — 5-HT2B agonism causes valvular fibrosis",
+        "citation": "Rothman et al. 2000 (Circulation); Roth 2007 (N Engl J Med) — 5-HT2B agonism causes "
+                    "valvular fibrosis",
     },
     "oprk1_dysphoria": {
         "receptor": "OPRK1",

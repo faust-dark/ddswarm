@@ -2,8 +2,7 @@
 
 import math
 
-from rdkit import Chem
-from rdkit import RDLogger
+from rdkit import Chem, RDLogger
 
 from ddswarm.chemistry.selectivity import docking_ki, occupancy_at
 from ddswarm.chemistry.vina_calibration import (

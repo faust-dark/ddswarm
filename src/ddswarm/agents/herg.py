@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..chemistry.herg_alerts import assess_herg
 from ..chemistry.rdkit_ops import sanitize_and_canonicalize
 from ..contracts.agent_result import AgentResult
@@ -19,7 +21,6 @@ from ..contracts.herg_assessment import HergAssessment, HergSummary, MoleculeHer
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..logging.hashing import hash_jsonable
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)

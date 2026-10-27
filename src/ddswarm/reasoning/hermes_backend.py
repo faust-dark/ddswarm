@@ -11,7 +11,7 @@ import json
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..contracts.project_spec import ProjectSpec
@@ -353,7 +353,9 @@ class HermesSubprocessBackend(ReasoningBackend):
         return self._run(prompt)
 
     # ---- regulatory assessment ----
-    def regulatory_assessment(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+    def regulatory_assessment(
+        self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict
+    ) -> ReasoningResult:
         mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
         prompt = _REGULATORY_PROMPT.format(
             objective=spec.objective,
@@ -363,7 +365,9 @@ class HermesSubprocessBackend(ReasoningBackend):
         return self._run(prompt)
 
     # ---- regulatory checklist (7D) ----
-    def regulatory_checklist(self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict) -> ReasoningResult:
+    def regulatory_checklist(
+        self, spec: ProjectSpec, molecules: list[tuple[str, str]], params: dict
+    ) -> ReasoningResult:
         mol_lines = "\n".join(f"- {mid}: {smi}" for mid, smi in molecules) or "(none)"
         prompt = _REGULATORY_CHECKLIST_PROMPT.format(
             objective=spec.objective,
@@ -402,7 +406,9 @@ class HermesSubprocessBackend(ReasoningBackend):
             if r is None:
                 return ReasoningResult(ok=False, note=stderr)
             if r.returncode != 0:
-                return ReasoningResult(ok=False, note=f"reasoning subprocess exited {r.returncode}: {stderr.strip()[:300]}")
+                return ReasoningResult(
+                    ok=False, note=f"reasoning subprocess exited {r.returncode}: {stderr.strip()[:300]}"
+                )
             parsed = extract_json_list(r.stdout)
             if parsed is not None:
                 return ReasoningResult(entries=parsed, ok=True, note=f"hermes subagent ({self.command})")
@@ -434,7 +440,7 @@ class HermesSubprocessBackend(ReasoningBackend):
         try:
             self.audit_dir.mkdir(parents=True, exist_ok=True)
             record = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "backend": self.name,
                 "command": self.command,
                 "max_turns": self.max_turns,

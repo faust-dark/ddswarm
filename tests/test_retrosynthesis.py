@@ -7,7 +7,7 @@ from rdkit import Chem
 from ddswarm.agents import RetrosynthesisMinion
 from ddswarm.agents.base import AgentContext
 from ddswarm.chemistry.sa_score import classify_accessibility, compute_sa_score
-from ddswarm.contracts import ProjectSpec, RetrosynthesisPlan, ScreenedBatch, ScreenSummary, MoleculeScreenResult
+from ddswarm.contracts import MoleculeScreenResult, ProjectSpec, RetrosynthesisPlan, ScreenedBatch, ScreenSummary
 from ddswarm.orchestrator import Store
 
 GEFITINIB = "COC1=C(C=C2C(=C1)N=CN=C2NC3=CC(=C(C=C3)F)Cl)OCCCN4CCOCC4"
@@ -29,7 +29,7 @@ def _plan(store, result):
     return store.load_artifact(result.artifacts[0].uri, RetrosynthesisPlan)
 
 
-# ---- chemistry ---- 
+# ---- chemistry ----
 def test_sa_score_and_classification():
     assert compute_sa_score(Chem.MolFromSmiles("c1ccccc1")) == 1.0
     assert classify_accessibility(1.0) == "easy"

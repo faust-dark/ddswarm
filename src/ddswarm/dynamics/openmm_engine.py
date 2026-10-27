@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from ..contracts.dynamics_result import MdProtocol, MdRun
-from .base import MdEngine, REFERENCE_SUFFIX
+from .base import REFERENCE_SUFFIX, MdEngine
 from .rmsd import kabsch_rmsd
 
 try:

@@ -20,6 +20,8 @@ import math
 
 from rdkit import rdBase
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -28,7 +30,6 @@ from ..logging.hashing import hash_content, hash_jsonable
 from ..orchestrator.runner import ARTIFACT_MODELS
 from .base import Agent, AgentContext
 from .report import ReportMinion
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)

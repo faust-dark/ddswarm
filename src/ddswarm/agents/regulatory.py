@@ -11,6 +11,8 @@ research aid, NOT a regulatory submission or legal determination.
 
 from __future__ import annotations
 
+from ddswarm import __version__
+
 from ..contracts.agent_result import AgentResult
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
@@ -23,7 +25,6 @@ from ..contracts.regulatory_checklist import (
 from ..logging.hashing import hash_jsonable
 from ..reasoning import make_reasoning_backend
 from .base import Agent, AgentContext
-from ddswarm import __version__
 
 TOOL = ToolVersion(name="ddswarm", version=__version__)
 
@@ -170,7 +171,8 @@ class RegulatoryMinion(Agent):
                 data["source"] = data.get("source") or "Hermes subagent (LLM reasoning)"
                 notes = data.get("notes") or ""
                 if "verify against primary source" not in notes:
-                    data["notes"] = (notes + " | LLM-recalled via reasoning backend; verify against primary source").strip(" |")
+                    data["notes"] = (notes + " | LLM-recalled via reasoning backend; verify against primary "
+                                     "source").strip(" |")
                 entries.append(RegulatoryChecklistEntry.model_validate(data))
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"checklist entry {i} invalid, skipped: {exc}")
