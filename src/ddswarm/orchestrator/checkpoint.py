@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..docking.base import DockPose, DockProtocol, DockingEngine, PreparedLigand, PreparedReceptor
+from ..fsutil import atomic_write_text
 from ..logging.hashing import hash_content, hash_jsonable
 
 
@@ -51,9 +52,7 @@ class ComputeCache:
     def put(self, kind: str, key: str, value: Any) -> None:
         if not self.enabled:
             return
-        p = self._path(kind, key)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(value))
+        atomic_write_text(self._path(kind, key), json.dumps(value))
 
 
 # ---- docking pose (de)serialization ----

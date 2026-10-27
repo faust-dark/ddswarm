@@ -8,12 +8,13 @@ Docking:  the AutoDock Vina binary (subprocess). Poses/affinities are parsed
 from __future__ import annotations
 
 import importlib.metadata
-import shutil
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 from ..chemistry.pdb_utils import analyze_pdb
+from ..fsutil import atomic_write_bytes
 from .base import (
     DockPose,
     DockProtocol,
@@ -22,11 +23,39 @@ from .base import (
     PreparedReceptor,
     QCResult,
     ReceptorSource,
+    RCSB_URL,
+    download_pdb,
+    is_safe_name,
+    is_valid_pdb_id,
+    looks_like_pdb,
     pdb_cache_path,
 )
 from .rmsd import parse_affinity_modes, parse_model_atoms, parse_smiles_idx
 
-_RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
+_RCSB_URL = RCSB_URL
+# Subprocess wall-clock limits (seconds): a hung converter or a pathological
+# docking search must fail the molecule, never hang the run.
+OBABEL_TIMEOUT_S = 300
+VINA_TIMEOUT_S = 1800
+
+
+def _run_tool(cmd: list[str], timeout: float) -> tuple[int, str]:
+    """Run an external tool with a timeout -> (returncode, stderr). A timeout or
+    OS error is reported as returncode -1 with a message, never raised."""
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stderr or ""
+    except subprocess.TimeoutExpired:
+        return -1, f"{Path(cmd[0]).name} timed out after {timeout:g}s"
+    except (OSError, subprocess.SubprocessError) as exc:
+        return -1, f"{Path(cmd[0]).name} failed to run: {exc}"
+
+
+def _file_stem(identifier: str) -> str:
+    """Filesystem-safe stem for work-dir filenames derived from a receptor id or
+    a local file path (an absolute path must never be joined onto work_dir)."""
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", Path(identifier).stem).lstrip("._")
+    return stem or "receptor"
 
 # Heterogens that are NOT the co-crystal drug: water, monatomic ions/metals,
 # carbohydrates (glycans), and common crystallisation buffers / lipids /
@@ -93,7 +122,11 @@ class VinaEngine(DockingEngine):
         work_dir.mkdir(parents=True, exist_ok=True)
         rec = PreparedReceptor()
 
+        if source.kind == "pdb_id" and not is_valid_pdb_id(source.identifier):
+            rec.note = f"invalid PDB id {source.identifier!r} (expected 4 alphanumeric characters)"
+            return rec
         url = source.url or (_RCSB_URL.format(pid=source.identifier) if source.kind == "pdb_id" else None)
+        stem = _file_stem(source.identifier)
         if source.kind == "file":
             raw_path = Path(source.identifier)
             raw_text = raw_path.read_text()
@@ -101,20 +134,25 @@ class VinaEngine(DockingEngine):
             if url is None:
                 rec.note = f"no receptor URL for source kind '{source.kind}'"
                 return rec
-            cache_path = pdb_cache_path(source.identifier)
-            if cache_path.exists() and cache_path.stat().st_size > 0:
+            # only plain RCSB downloads are cached, keyed by their validated PDB id
+            # (a custom URL must not populate or read the shared cache)
+            cache_path = (pdb_cache_path(source.identifier)
+                          if source.kind == "pdb_id" and not source.url and is_safe_name(source.identifier)
+                          else None)
+            if (cache_path is not None and cache_path.exists()
+                    and looks_like_pdb(cache_path.read_bytes())):
                 raw_path = cache_path  # already downloaded once
             else:
-                raw_path = work_dir / f"{source.identifier}_raw.pdb"
-                r = subprocess.run(["curl", "-sL", url, "-o", str(raw_path)], capture_output=True, text=True)
-                if r.returncode != 0 or not raw_path.exists() or raw_path.stat().st_size == 0:
-                    rec.note = f"could not download receptor ({r.stderr.strip() or 'empty file'})"
+                raw_path = work_dir / f"{stem}_raw.pdb"
+                err = download_pdb(url, raw_path)
+                if err:
+                    rec.note = f"could not download receptor ({err})"
                     return rec
-                try:
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(raw_path, cache_path)
-                except OSError:
-                    pass  # cache is best-effort, never blocks docking
+                if cache_path is not None:
+                    try:
+                        atomic_write_bytes(cache_path, raw_path.read_bytes())
+                    except OSError:
+                        pass  # cache is best-effort, never blocks docking
             raw_text = raw_path.read_text()
 
         # structural QC on the raw structure
@@ -142,7 +180,7 @@ class VinaEngine(DockingEngine):
             fixer.findMissingAtoms()
             fixer.addMissingAtoms()
             fixer.addMissingHydrogens(7.0)
-            clean_pdb = work_dir / f"{source.identifier}_receptor.pdb"
+            clean_pdb = work_dir / f"{stem}_receptor.pdb"
             with open(clean_pdb, "w") as fh:
                 PDBFile.writeFile(fixer.topology, fixer.positions, fh)
         except Exception as exc:  # noqa: BLE001
@@ -150,14 +188,13 @@ class VinaEngine(DockingEngine):
             rec.note = f"receptor preparation failed: {exc}"
             return rec
 
-        recpdbqt = work_dir / f"{source.identifier}_receptor.pdbqt"
-        r = subprocess.run(
-            [str(self.obabel_path), str(clean_pdb), "-O", str(recpdbqt), "-xr"],
-            capture_output=True, text=True,
+        recpdbqt = work_dir / f"{stem}_receptor.pdbqt"
+        rc, stderr = _run_tool(
+            [str(self.obabel_path), str(clean_pdb), "-O", str(recpdbqt), "-xr"], OBABEL_TIMEOUT_S,
         )
-        if r.returncode != 0 or not recpdbqt.exists():
+        if rc != 0 or not recpdbqt.exists():
             rec.preparation_tool = "pdbfixer + openbabel"
-            rec.note = f"PDB->PDBQT conversion failed: {r.stderr.strip()}"
+            rec.note = f"PDB->PDBQT conversion failed: {stderr.strip()}"
             return rec
 
         rec.pdbqt_path = recpdbqt
@@ -219,10 +256,8 @@ class VinaEngine(DockingEngine):
         het_pdb = work_dir / f"reference_{name}.pdb"
         het_pdb.write_text("\n".join(lines) + "\nEND\n")
         sdf = work_dir / f"reference_{name}.sdf"
-        r = subprocess.run(
-            [str(self.obabel_path), str(het_pdb), "-O", str(sdf)], capture_output=True, text=True
-        )
-        if r.returncode != 0 or not sdf.exists():
+        rc, _stderr = _run_tool([str(self.obabel_path), str(het_pdb), "-O", str(sdf)], OBABEL_TIMEOUT_S)
+        if rc != 0 or not sdf.exists():
             return name, None
         mol = Chem.MolFromMolFile(str(sdf), removeHs=True, sanitize=True)
         if mol is None or mol.GetNumAtoms() == 0:
@@ -301,8 +336,8 @@ class VinaEngine(DockingEngine):
             "--seed", str(protocol.seed),
             "--out", str(out),
         ]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        if r.returncode != 0 or not out.exists():
+        rc, _stderr = _run_tool(cmd, VINA_TIMEOUT_S)
+        if rc != 0 or not out.exists():
             return []
 
         text = out.read_text()

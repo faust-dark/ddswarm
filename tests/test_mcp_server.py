@@ -16,6 +16,9 @@ _ALL_TOOLS = {
 }
 
 
+_MINI_PDB = "ATOM      1  N   ALA A   1      11.104   6.134  -6.504  1.00  0.00           N\nEND\n"
+
+
 def _call_result_dict(res) -> dict:
     """Extract the tool's dict return from an mcp CallToolResult."""
     sc = getattr(res, "structured_content", None)
@@ -149,7 +152,9 @@ def test_offline_ok_cache_aware(monkeypatch, tmp_path):
     assert tools._offline_ok({"kind": "file", "identifier": "/x/y.pdb"})
     # pdb_id not cached -> needs download
     assert not tools._offline_ok({"kind": "pdb_id", "pdb_id": "6X3X"})
-    (tmp_path / "6X3X.pdb").write_text("FAKE")
+    (tmp_path / "6X3X.pdb").write_text("<html>404 Not Found</html>")
+    assert not tools._offline_ok({"kind": "pdb_id", "pdb_id": "6X3X"})  # error page != PDB
+    (tmp_path / "6X3X.pdb").write_text(_MINI_PDB)
     assert tools._offline_ok({"kind": "pdb_id", "pdb_id": "6X3X"})
     # name-only resolves through the registry (GABRA1 -> 6X3X)
     assert tools._receptor_identifier({"name": "GABRA1"}) == "6X3X"
@@ -160,7 +165,7 @@ def test_offline_ok_cache_aware(monkeypatch, tmp_path):
 
 def test_dock_molecule_cached_not_offline_gap(monkeypatch, tmp_path):
     monkeypatch.setenv("DDWARM_PDB_CACHE", str(tmp_path))
-    (tmp_path / "6X3X.pdb").write_text("FAKE")  # already downloaded once
+    (tmp_path / "6X3X.pdb").write_text(_MINI_PDB)  # already downloaded once
     out = tools.dock_molecule(["c1ccccc1"], target="GABRA1", allow_download=False)
     # cached -> no longer the offline hint; proceeds (result is whatever the
     # fake PDB produces downstream, never the "local PDB" prompt)
@@ -268,6 +273,7 @@ def test_mcp_roundtrip_call_tool():
 def _run_main(monkeypatch, argv):
     calls: list[dict] = []
     monkeypatch.setattr(server, "run", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(tools, "NETWORK_MODE", False)  # restored after the test
     monkeypatch.setattr(sys, "argv", ["ddswarm-mcp", *argv])
     main()
     return calls
@@ -292,3 +298,66 @@ def test_main_streamable_http_stateless_and_path(monkeypatch):
 def test_main_sse(monkeypatch):
     calls = _run_main(monkeypatch, ["--transport", "sse", "--host", "0.0.0.0"])
     assert calls == [{"transport": "sse", "host": "0.0.0.0", "port": 8000}]
+
+
+def test_main_network_transport_enables_network_mode(monkeypatch):
+    _run_main(monkeypatch, ["--transport", "streamable-http"])
+    assert tools.NETWORK_MODE is True
+
+
+def test_main_stdio_keeps_local_mode(monkeypatch):
+    _run_main(monkeypatch, [])
+    assert tools.NETWORK_MODE is False
+
+
+# ---- input validation / safe network defaults ----
+
+def test_network_mode_refuses_file_and_url_receptors(monkeypatch):
+    monkeypatch.setattr(tools, "NETWORK_MODE", True)
+    out = tools.dock_molecule(["c1ccccc1"], receptor={"kind": "file", "identifier": "/etc/hosts"})
+    assert out["status"] == "failed" and "network transport" in out["errors"][0]
+    out = tools.dock_molecule(["c1ccccc1"], receptor={"pdb_id": "6X3X", "url": "http://example.com/x.pdb"})
+    assert out["status"] == "failed" and "network transport" in out["errors"][0]
+    out = tools.selectivity_profile(["c1ccccc1"], primary="GABRA1",
+                                    receptors=[{"name": "GABRA1", "kind": "file", "identifier": "/x.pdb"}])
+    assert out["status"] == "failed"
+
+
+def test_stdio_mode_still_allows_local_file_receptor(monkeypatch, tmp_path):
+    monkeypatch.setattr(tools, "NETWORK_MODE", False)
+    assert tools._check_receptor({"kind": "file", "identifier": str(tmp_path / "r.pdb")}) is None
+
+
+def test_invalid_pdb_id_rejected():
+    for bad in ("../../etc/passwd", "6X3", "6X3X5", "6X3X.pdb", ""):
+        out = tools.dock_molecule(["c1ccccc1"], receptor={"pdb_id": bad})
+        assert out["status"] == "failed", bad
+        assert "invalid PDB id" in out["errors"][0]
+    assert tools._check_receptor({"kind": "ftp"}) is not None
+    assert not tools._offline_ok({"pdb_id": "../x"})
+
+
+def test_molecule_and_parameter_caps():
+    too_many = ["C"] * (tools.MAX_DOCK_MOLECULES + 1)
+    assert tools.dock_molecule(too_many, target="GABRA1")["status"] == "failed"
+    assert tools.selectivity_profile(too_many, primary="GABRA1")["status"] == "failed"
+    assert tools.screen_molecules(["C"] * (tools.MAX_MOLECULES + 1))["status"] == "failed"
+    assert tools.screen_molecules(["C" * (tools.MAX_SMILES_LEN + 1)])["status"] == "failed"
+    out = tools.dock_molecule(["C"], target="GABRA1", exhaustiveness=tools.MAX_EXHAUSTIVENESS + 1)
+    assert out["status"] == "failed" and "exhaustiveness" in out["errors"][0]
+    out = tools.dock_molecule(["C"], target="GABRA1", num_modes=0)
+    assert out["status"] == "failed" and "num_modes" in out["errors"][0]
+    panel = [{"name": "GABRA1"}] * (tools.MAX_RECEPTORS + 1)
+    assert tools.selectivity_profile(["C"], primary="GABRA1", receptors=panel)["status"] == "failed"
+    out = tools.run_pipeline({"project_id": "cap", "input_type": "mixed", "objective": "x",
+                              "starting_materials": too_many, "status": "approved"})
+    assert out["status"] == "failed"
+
+
+def test_tool_temp_store_is_cleaned_up(monkeypatch, tmp_path):
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    out = tools.screen_molecules(["c1ccccc1"])
+    assert out["status"] == "success"
+    assert "screened_batch" in out["artifacts"]  # payload read before cleanup
+    assert not list(tmp_path.glob("ddswarm_mcp_*"))

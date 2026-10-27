@@ -75,6 +75,9 @@ exports (CSV/JSON/SDF) alongside it, and the full artifact ledger under
 `store/`. Docking and target-selectivity (always-on) download receptor PDBs
 from RCSB at runtime, so fully offline they degrade to a non-blocking
 "receptor unavailable" gap — the run still completes and says so honestly.
+Likewise, on a core install without the optional AutoDock Vina binary they
+report an "engine unavailable" gap (`insufficient_evidence`) instead of failing
+the run.
 Skip the network IUPAC name lookup with `--no-iupac`.
 
 ---
@@ -459,9 +462,17 @@ The same 16 tools are also served over a remote HTTP endpoint — useful for a
 hosted or shared instance:
 
 ```bash
-.venv/bin/ddswarm-mcp --transport streamable-http --host 0.0.0.0 --port 8000
-# serves at http://0.0.0.0:8000/mcp (default path)
+.venv/bin/ddswarm-mcp --transport streamable-http --port 8000
+# serves at http://127.0.0.1:8000/mcp (default host and path)
 ```
+
+The server binds to `127.0.0.1` by default and has no built-in authentication;
+to share it, keep it on localhost behind an authenticating reverse proxy rather
+than binding `--host 0.0.0.0`. Over a network transport (`sse` /
+`streamable-http`) receptors are restricted to registry names and validated
+4-character PDB ids — local-file and URL receptor sources are refused — and
+calls are capped (molecules per call, panel size, docking exhaustiveness /
+modes).
 
 Options: `--host`, `--port` (default 8000), `--path` (default `/mcp`), and
 `--stateless-http` (no session tracking — each request is self-contained, which

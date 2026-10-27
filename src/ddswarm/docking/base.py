@@ -5,9 +5,65 @@ agent reasons over those results and builds the DockingResult artifact."""
 from __future__ import annotations
 
 import os
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from ..fsutil import atomic_write_bytes
+
+RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
+PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
+# identifiers that are safe to use as a single filename component
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+DOWNLOAD_TIMEOUT_S = 60.0
+MAX_PDB_BYTES = 200 * 1024 * 1024
+_UA = {"User-Agent": "ddswarm/0.1 (receptor download)"}
+
+
+def is_valid_pdb_id(value: object) -> bool:
+    """True for a 4-character RCSB PDB id (e.g. '2ITY')."""
+    return isinstance(value, str) and bool(PDB_ID_RE.match(value))
+
+
+def is_safe_name(value: object) -> bool:
+    """True when ``value`` can be used as one filename component (no '/', '..')."""
+    return isinstance(value, str) and bool(_SAFE_NAME_RE.match(value)) and ".." not in value
+
+
+def looks_like_pdb(data: bytes) -> bool:
+    """Cheap sanity check that ``data`` is a PDB-format structure, not an HTML
+    error page / JSON error body: it must carry ATOM or HETATM records."""
+    if not data or data.lstrip()[:1] in (b"<", b"{"):
+        return False
+    return (data.startswith((b"ATOM  ", b"HETATM"))
+            or b"\nATOM  " in data or b"\nHETATM" in data)
+
+
+def download_pdb(url: str, dest: str | Path, timeout: float = DOWNLOAD_TIMEOUT_S) -> str | None:
+    """Download a PDB file to ``dest`` (atomically). Returns None on success or a
+    short error message. HTTP errors (404, 5xx), non-http(s) URLs, oversized
+    bodies, and non-PDB content are rejected and nothing is written."""
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        return f"refusing non-http(s) receptor URL scheme {scheme!r}"
+    try:
+        req = urllib.request.Request(url, headers=_UA)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read(MAX_PDB_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        return f"HTTP {exc.code} for {url}"
+    except Exception as exc:  # noqa: BLE001 - network errors, timeouts
+        return f"download failed: {exc}"
+    if len(data) > MAX_PDB_BYTES:
+        return f"receptor file exceeds {MAX_PDB_BYTES} bytes"
+    if not looks_like_pdb(data):
+        return "downloaded content is not a PDB structure (no ATOM/HETATM records)"
+    atomic_write_bytes(dest, data)
+    return None
 
 
 def pdb_cache_dir() -> Path:
@@ -22,7 +78,11 @@ def pdb_cache_dir() -> Path:
 
 
 def pdb_cache_path(identifier: str) -> Path:
-    """Cache path for a receptor PDB, keyed by its identifier/pdb_id."""
+    """Cache path for a receptor PDB, keyed by its identifier/pdb_id.
+
+    Raises ValueError for an identifier that could escape the cache directory."""
+    if not is_safe_name(identifier):
+        raise ValueError(f"invalid receptor identifier for cache path: {identifier!r}")
     return pdb_cache_dir() / f"{identifier}.pdb"
 
 

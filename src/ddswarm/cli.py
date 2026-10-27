@@ -53,6 +53,7 @@ from .chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES, se
 from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
+from .orchestrator.store import latest_versioned
 
 DEFAULT_PIPELINE = [
     RunTask(task_id="safety", agent="safety_minion"),
@@ -151,9 +152,9 @@ def _print_report(store: Store, project_id: str, run_id: str) -> None:
             print(f"    warning  : {w}")
     adir = store.artifacts_dir(project_id, run_id)
     if adir.exists():
-        docs = sorted(adir.glob("report_document_*.report_document.v*.json"))
-        if docs:
-            doc = ReportDocument.model_validate_json(docs[-1].read_text())
+        latest = latest_versioned(adir.glob("report_document_*.report_document.v*.json"))
+        if latest:
+            doc = ReportDocument.model_validate_json(latest.read_text())
             print(f"PDF report : {doc.pdf_uri}")
     print("=" * 70)
 
@@ -166,10 +167,10 @@ def _copy_pdf_to_reports(store: Store, project_id: str, run_id: str,
     adir = store.artifacts_dir(project_id, run_id)
     if not adir.exists():
         return None
-    docs = sorted(adir.glob("report_document_*.report_document.v*.json"))
-    if not docs:
+    latest = latest_versioned(adir.glob("report_document_*.report_document.v*.json"))
+    if latest is None:
         return None
-    doc = ReportDocument.model_validate_json(docs[-1].read_text())
+    doc = ReportDocument.model_validate_json(latest.read_text())
     src = Path(doc.pdf_uri)
     if not src.exists():
         return None
@@ -193,11 +194,11 @@ def _copy_exports_to_reports(store: Store, project_id: str, run_id: str, reports
         ("candidates_*.candidate_csv.v*.csv", "candidates.csv"),
         ("candidates_*.candidate_sdf.v*.sdf", "candidates.sdf"),
     ]:
-        files = sorted(adir.glob(pattern))
-        if not files:
+        latest = latest_versioned(adir.glob(pattern))
+        if latest is None:
             continue
         dest = reports_dir / f"{project_id}_{suffix}"
-        dest.write_bytes(files[-1].read_bytes())
+        dest.write_bytes(latest.read_bytes())
         out.append(dest)
     return out
 
@@ -271,8 +272,10 @@ def cmd_run(args) -> int:
     if args.reasoning is not None:
         req.reasoning.backend = args.reasoning
 
-    tasks = req.tasks or list(DEFAULT_PIPELINE)
-    tasks = _inject_reasoning(list(tasks), req.reasoning)
+    # deep copies: the reasoning/iupac injection below mutates task params, and
+    # must never leak into the module-level DEFAULT_PIPELINE (or the request)
+    tasks = [t.model_copy(deep=True) for t in (req.tasks or DEFAULT_PIPELINE)]
+    tasks = _inject_reasoning(tasks, req.reasoning)
     if args.grounding:
         tasks = _inject_grounding(tasks)
     if not args.no_iupac:
@@ -384,7 +387,8 @@ def cmd_init(args) -> int:
         safety_constraints=["standard research use"],
         status="approved",
     )
-    req = RunRequest(project=spec, tasks=list(DEFAULT_PIPELINE), reasoning=None)
+    req = RunRequest(project=spec, tasks=[t.model_copy(deep=True) for t in DEFAULT_PIPELINE],
+                     reasoning=None)
     Path(args.project_file).write_text(req.model_dump_json(indent=2))
     print(f"wrote {args.project_file}")
     print("note: set 'reasoning': {'backend': 'hermes'} to delegate research/design to Hermes subagents")

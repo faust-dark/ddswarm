@@ -188,6 +188,7 @@ def main() -> None:
     tools over a remote HTTP endpoint (e.g. for a hosted/shared instance).
     """
     import argparse
+    import sys
 
     p = argparse.ArgumentParser(
         prog="ddswarm-mcp",
@@ -208,6 +209,13 @@ def main() -> None:
         help="streamable-http: no session tracking (each request is self-contained)",
     )
     args = p.parse_args()
+
+    if args.transport != "stdio":
+        # remote callers: registry names / PDB ids only (no local files or URLs)
+        tools.set_network_mode(True)
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            print(f"ddswarm-mcp: WARNING: serving on {args.host} without authentication; "
+                  "put it behind an authenticating reverse proxy", file=sys.stderr)
 
     if args.transport == "stdio":
         server.run(transport="stdio")

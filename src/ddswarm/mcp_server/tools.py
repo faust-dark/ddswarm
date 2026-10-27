@@ -11,6 +11,8 @@ is forced to "none" (no embedded LLM — the MCP client *is* the reasoning layer
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +36,7 @@ from ..chemistry.selectivity import ANTITARGET_PROFILES, SPECIAL_ADR_PROFILES
 from ..contracts.enums import InputType, ProjectStatus
 from ..contracts.project_spec import ProjectSpec
 from ..contracts.report import Report
-from ..docking.base import pdb_cache_path
+from ..docking.base import is_valid_pdb_id, looks_like_pdb, pdb_cache_path
 from ..orchestrator.runner import ARTIFACT_MODELS
 from ..orchestrator.store import Store
 
@@ -46,9 +48,77 @@ _OFFLINE_HINT = (
 )
 
 
-def _fresh_store() -> Store:
-    """A throwaway store per tool call (stateless tools)."""
-    return Store(Path(tempfile.mkdtemp(prefix="ddswarm_mcp_")))
+# ---- safety limits (the server may be reachable over HTTP) ----
+MAX_MOLECULES = 200          # SMILES per granular (non-docking) tool call
+MAX_DOCK_MOLECULES = 20      # SMILES per docking / selectivity call
+MAX_SMILES_LEN = 1000        # characters per SMILES string
+MAX_RECEPTORS = 12           # receptors per selectivity panel
+MAX_EXHAUSTIVENESS = 32
+MAX_NUM_MODES = 20
+_RECEPTOR_KINDS = ("pdb_id", "file")
+
+# Set by the server entry point when serving over a network transport
+# (sse / streamable-http). Remote callers must not be able to make the server
+# read local files or fetch arbitrary URLs, so only registry names and
+# validated RCSB PDB ids are accepted as receptor sources in that mode.
+NETWORK_MODE = False
+
+
+def set_network_mode(enabled: bool) -> None:
+    global NETWORK_MODE
+    NETWORK_MODE = bool(enabled)
+
+
+@contextmanager
+def _fresh_store() -> Iterator[Store]:
+    """A throwaway store per tool call (stateless tools), deleted on exit.
+
+    Every payload is read back into memory before the context closes, so the
+    client never needs the on-disk store."""
+    with tempfile.TemporaryDirectory(prefix="ddswarm_mcp_") as d:
+        yield Store(Path(d))
+
+
+def _error(message: str) -> dict[str, Any]:
+    return {"status": "failed", "findings": [], "warnings": [], "errors": [message],
+            "artifacts": {}}
+
+
+def _check_smiles(smiles: Any, limit: int) -> str | None:
+    """Return an error message when the SMILES list is malformed or too large."""
+    if not isinstance(smiles, list) or not all(isinstance(x, str) for x in smiles):
+        return "smiles must be a list of strings"
+    if len(smiles) > limit:
+        return f"too many molecules: {len(smiles)} > {limit} per call"
+    if any(len(x) > MAX_SMILES_LEN for x in smiles):
+        return f"SMILES longer than {MAX_SMILES_LEN} characters"
+    return None
+
+
+def _check_receptor(rc: Any) -> str | None:
+    """Validate one receptor config; return an error message or None.
+
+    Over a network transport only registry names / PDB ids are allowed (no
+    local file paths, no caller-supplied URLs). PDB ids must be 4 alphanumerics."""
+    if not isinstance(rc, dict):
+        return "receptor must be an object"
+    kind = rc.get("kind", "pdb_id")
+    if kind not in _RECEPTOR_KINDS:
+        return f"unsupported receptor kind {kind!r} (expected one of {list(_RECEPTOR_KINDS)})"
+    if NETWORK_MODE:
+        if kind == "file" or rc.get("path"):
+            return "local file receptors are disabled over a network transport; use a registry name or PDB id"
+        if rc.get("url"):
+            return "receptor URLs are disabled over a network transport; use a registry name or PDB id"
+    if kind == "pdb_id":
+        for key in ("pdb_id", "identifier"):
+            if rc.get(key) is not None and not is_valid_pdb_id(rc.get(key)):
+                return f"invalid PDB id {rc.get(key)!r} (expected 4 alphanumeric characters)"
+    elif not rc.get("identifier") and not rc.get("path"):
+        return "file receptor needs an 'identifier' (local PDB path)"
+    if rc.get("name") is not None and not isinstance(rc.get("name"), str):
+        return "receptor name must be a string"
+    return None
 
 
 def _spec(**overrides: Any) -> ProjectSpec:
@@ -99,11 +169,14 @@ def _run(agent_cls: Any, smiles: list[str], params: dict[str, Any] | None = None
          targets: list[str] | None = None) -> dict[str, Any]:
     """Run one agent against ``smiles`` (passed as starting_materials, the
     universal molecule fallback for every agent) and return its payload."""
+    err = _check_smiles(smiles, MAX_MOLECULES)
+    if err:
+        return _error(err)
     try:
-        store = _fresh_store()
-        spec = _spec(starting_materials=list(smiles), targets=list(targets or []))
-        result = agent_cls(store).run(_ctx(spec, params or {}))
-        return _result_payload(result)
+        with _fresh_store() as store:
+            spec = _spec(starting_materials=list(smiles), targets=list(targets or []))
+            result = agent_cls(store).run(_ctx(spec, params or {}))
+            return _result_payload(result)
     except Exception as exc:  # noqa: BLE001
         return {"status": "failed", "findings": [], "warnings": [],
                 "errors": [f"{agent_cls.__name__} raised: {exc}"], "artifacts": {}}
@@ -188,7 +261,13 @@ def _offline_ok(rc: dict[str, Any]) -> bool:
     if rc.get("kind", "pdb_id") == "file":
         return True
     ident = _receptor_identifier(rc)
-    return not ident or pdb_cache_path(ident).exists()
+    if not ident:
+        return True
+    if not is_valid_pdb_id(ident):
+        return False
+    p = pdb_cache_path(ident)
+    # only a real cached structure counts (a stale error page must not)
+    return p.exists() and looks_like_pdb(p.read_bytes())
 
 
 def dock_molecule(smiles: list[str], receptor: dict[str, Any] | None = None,
@@ -200,6 +279,17 @@ def dock_molecule(smiles: list[str], receptor: dict[str, Any] | None = None,
     if receptor is None and target is None:
         return _gap("no receptor configured — pass 'receptor' ({kind, identifier/pdb_id}) "
                     "or 'target' (registry name)")
+    err = _check_smiles(smiles, MAX_DOCK_MOLECULES)
+    if err:
+        return _error(err)
+    if receptor is not None:
+        err = _check_receptor(receptor)
+        if err:
+            return _error(err)
+    if not 1 <= int(exhaustiveness) <= MAX_EXHAUSTIVENESS:
+        return _error(f"exhaustiveness must be between 1 and {MAX_EXHAUSTIVENESS}")
+    if not 1 <= int(num_modes) <= MAX_NUM_MODES:
+        return _error(f"num_modes must be between 1 and {MAX_NUM_MODES}")
     receptor_cfg = receptor or {}
     check_rc = receptor_cfg if receptor is not None else {"name": target}
     if not allow_download and not _offline_ok(check_rc):
@@ -224,8 +314,17 @@ def selectivity_profile(smiles: list[str], primary: str,
                         allow_download: bool = True,
                         reference_concentration_molar: float = 1e-8) -> dict[str, Any]:
     """Compute selectivity/ADR profile (docking -> Ki -> occupancy -> SI)."""
+    err = _check_smiles(smiles, MAX_DOCK_MOLECULES)
+    if err:
+        return _error(err)
     if receptors is None:
         receptors = [{"name": primary}] + [{"name": o} for o in (off_targets or [])]
+    if not isinstance(receptors, list) or len(receptors) > MAX_RECEPTORS:
+        return _error(f"receptors must be a list of at most {MAX_RECEPTORS} entries")
+    for rc in receptors:
+        err = _check_receptor(rc)
+        if err:
+            return _error(err)
     if not allow_download and not all(_offline_ok(rc) for rc in receptors):
         return _gap(_OFFLINE_HINT)
     params: dict[str, Any] = {
@@ -303,30 +402,33 @@ def run_pipeline(project: dict[str, Any], iupac: bool = False) -> dict[str, Any]
     from ..orchestrator import Runner
     from ..orchestrator.gates import BlockedByGate
 
-    store = _fresh_store()
     try:
         spec = ProjectSpec.model_validate(project)
     except Exception as exc:  # noqa: BLE001
         return {"status": "failed", "errors": [f"invalid ProjectSpec: {exc}"], "report": None}
+    err = _check_smiles(list(spec.starting_materials), MAX_DOCK_MOLECULES)
+    if err:
+        return {"status": "failed", "errors": [f"starting_materials: {err}"], "report": None}
 
     if spec.status == ProjectStatus.draft:
         # an MCP tool call is itself the approval gate
         spec.status = ProjectStatus.approved
 
-    try:
-        runner = Runner(store, build_agents(store))
-        manifest = runner.create_run(spec, _build_task_defs(iupac))
-    except BlockedByGate as exc:
-        return {"status": "blocked", "errors": [str(exc)], "report": None}
+    with _fresh_store() as store:
+        try:
+            runner = Runner(store, build_agents(store))
+            manifest = runner.create_run(spec, _build_task_defs(iupac))
+        except BlockedByGate as exc:
+            return {"status": "blocked", "errors": [str(exc)], "report": None}
 
-    final = runner.run(manifest.run_id, project_id=spec.project_id)
-    report = _load_artifact(store, spec.project_id, manifest.run_id, "report", "report", Report)
-    return {
-        "status": final.status.value,
-        "run_id": manifest.run_id,
-        "project_id": spec.project_id,
-        "report": report,
-    }
+        final = runner.run(manifest.run_id, project_id=spec.project_id)
+        report = _load_artifact(store, spec.project_id, manifest.run_id, "report", "report", Report)
+        return {
+            "status": final.status.value,
+            "run_id": manifest.run_id,
+            "project_id": spec.project_id,
+            "report": report,
+        }
 
 
 def _load_artifact(

@@ -9,13 +9,13 @@ RCSB; kind='file' uses a local PDB path)."""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from ..contracts.agent_result import AgentResult
 from ..contracts.dynamics_result import DynamicsResult, DynamicsSummary, MdProtocol, MdRun
 from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
+from ..docking.base import download_pdb, is_safe_name, is_valid_pdb_id
 from ..dynamics import make_engine
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import load_md_state, md_state_key, md_state_path, write_md_meta
@@ -202,10 +202,14 @@ class DynamicsMinion(Agent):
         url = receptor_cfg.get("url") or (_RCSB_URL.format(pid=identifier) if kind == "pdb_id" else None)
         if url is None:
             return None, f"no receptor URL for source kind '{kind}'"
+        if kind == "pdb_id" and not is_valid_pdb_id(identifier):
+            return None, f"invalid PDB id {identifier!r} (expected 4 alphanumeric characters)"
+        if not is_safe_name(identifier):
+            return None, f"invalid receptor identifier {identifier!r}"
         raw_path = work_dir / f"{identifier}_raw.pdb"
-        r = subprocess.run(["curl", "-sL", url, "-o", str(raw_path)], capture_output=True, text=True)
-        if r.returncode != 0 or not raw_path.exists() or raw_path.stat().st_size == 0:
-            return None, f"could not download receptor ({r.stderr.strip() or 'empty file'})"
+        err = download_pdb(url, raw_path)
+        if err:
+            return None, f"could not download receptor ({err})"
         return raw_path, None
 
     def _result(self, ctx: AgentContext, status: AgentResultStatus, **kw) -> AgentResult:
