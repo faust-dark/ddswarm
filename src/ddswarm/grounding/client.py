@@ -24,9 +24,10 @@ import xml.etree.ElementTree as ET
 
 from rdkit import Chem
 from rdkit.Chem.inchi import MolToInchiKey
+from ddswarm import __version__
 
 TIMEOUT = 20.0
-UA = {"User-Agent": "ddswarm/0.1 (research grounding)"}
+UA = {"User-Agent": f"ddswarm/{__version__} (research grounding)"}
 CHEMBL_BASE = "https://www.ebi.ac.uk/chembl/api/data"
 PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"

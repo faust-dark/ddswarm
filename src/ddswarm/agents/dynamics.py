@@ -20,8 +20,9 @@ from ..dynamics import make_engine
 from ..logging.hashing import hash_jsonable
 from ..orchestrator.checkpoint import load_md_state, md_state_key, md_state_path, write_md_meta
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 _RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
 
 # The four upstream branches that must all clear a candidate before receptor MD

@@ -42,8 +42,9 @@ from ..logging.hashing import hash_jsonable
 from ..chemistry.iupac import fetch_iupac_name
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 
 _KIND_MODELS: dict[str, type] = {
     "knowledge_pack": KnowledgePack,

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..fsutil import atomic_write_bytes
+from ddswarm import __version__
 
 RCSB_URL = "https://files.rcsb.org/download/{pid}.pdb"
 PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
@@ -21,7 +22,7 @@ PDB_ID_RE = re.compile(r"^[0-9A-Za-z]{4}$")
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 DOWNLOAD_TIMEOUT_S = 60.0
 MAX_PDB_BYTES = 200 * 1024 * 1024
-_UA = {"User-Agent": "ddswarm/0.1 (receptor download)"}
+_UA = {"User-Agent": f"ddswarm/{__version__} (receptor download)"}
 
 
 def is_valid_pdb_id(value: object) -> bool:

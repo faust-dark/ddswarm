@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ddswarm"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Drug discovery multi-agent swarm — deterministic in-silico pipeline with PDF reporting"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7", "rdkit>=2025.9", "reportlab>=4.0", "matplotlib>=3.8", "mcp>=2.0"]
@@ -19,6 +19,9 @@ ddswarm-mcp = "ddswarm.mcp_server.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ddswarm.__version__"}
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

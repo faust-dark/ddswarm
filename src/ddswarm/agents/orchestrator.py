@@ -19,8 +19,9 @@ from ..logging.hashing import hash_jsonable
 from ..orchestrator.memory import MemoryStore
 from .base import Agent, AgentContext
 from .roles import AGENT_ROLES
+from ddswarm import __version__
 
-TOOL = ToolVersion(name="ddswarm", version="0.1.0")
+TOOL = ToolVersion(name="ddswarm", version=__version__)
 
 
 class OrchestratorMinion(Agent):
