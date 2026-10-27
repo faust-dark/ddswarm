@@ -66,6 +66,7 @@ def _verdict(screening_status: str, safety_flags: int, tox_alerts: int, cyp_flag
 
 class ExportMinion(Agent):
     name = "export_minion"
+    reads_whole_run = True  # scans every task's result in the run manifest
 
     def run(self, ctx: AgentContext) -> AgentResult:
         manifest = self.store.load_run_manifest(ctx.project_id, ctx.run_id)

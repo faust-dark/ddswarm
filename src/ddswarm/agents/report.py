@@ -73,6 +73,7 @@ _KIND_MODELS: dict[str, type] = {
 
 class ReportMinion(Agent):
     name = "report_minion"
+    reads_whole_run = True  # scans every task's result in the run manifest
 
     def run(self, ctx: AgentContext) -> AgentResult:
         manifest = self.store.load_run_manifest(ctx.project_id, ctx.run_id)
