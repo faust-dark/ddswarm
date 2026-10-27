@@ -42,12 +42,17 @@ class ValidationMinion(Agent):
         manifest = self.store.load_run_manifest(ctx.project_id, ctx.run_id)
 
         all_refs: list = []
+        # artifacts of THIS task's earlier attempt (a re-run / retry of
+        # validation): not re-audited for content, but they are hashed files on
+        # disk like any other, so tampering with them must still be detected
+        own_prior_refs: list = []
         for task_id in manifest.tasks:
-            if task_id == ctx.task_id:
-                continue  # own result doesn't exist yet
             try:
                 res = self.store.load_latest_agent_result(ctx.project_id, ctx.run_id, task_id)
             except FileNotFoundError:
+                continue  # not run yet (incl. our own first attempt)
+            if task_id == ctx.task_id:
+                own_prior_refs.extend(res.artifacts)
                 continue
             all_refs.extend(res.artifacts)
 
@@ -78,6 +83,18 @@ class ValidationMinion(Agent):
             if not getattr(payload, "provenance", None):
                 missing_prov.append(f"{a.kind}:{a.artifact_id}")
             by_kind.setdefault(a.kind, []).append(payload)
+
+        for a in own_prior_refs:
+            if not a.uri or not a.hash:
+                continue
+            n_checked += 1
+            try:
+                raw = Path(a.uri).read_text()
+            except OSError:
+                hash_mismatch.append(f"{a.kind}:{a.artifact_id} (missing)")
+                continue
+            if hash_content(raw) != a.hash:
+                hash_mismatch.append(f"{a.kind}:{a.artifact_id}")
 
         checks.append(self._check("artifact_schema", "artifact schema validity",
                                   "fail" if schema_fail else "pass", _join(schema_fail)))

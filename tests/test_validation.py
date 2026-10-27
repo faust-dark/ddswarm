@@ -1,5 +1,7 @@
 """Tests for validation_minion: reproducibility + consistency checks over a run."""
 
+from pathlib import Path
+
 from ddswarm.agents import (
     DesignerMinion,
     ReportMinion,
@@ -72,20 +74,40 @@ def test_validation_all_checks_pass(tmp_path):
     assert vr.reproducibility["n_artifacts_checked"] >= 4
 
 
+def _hash_check_after_tamper(store, final, path):
+    original = path.read_text()
+    path.write_text(original + "\n// tampered")
+    try:
+        ctx = AgentContext(project_id="p", run_id=final.run_id, task_id="validation",
+                           spec=store.load_project_spec("p"), params={}, inputs={})
+        result = ValidationMinion(store).run(ctx)
+        vr = _load_report(store, result)
+        hashes = [c for c in vr.checks if c.check_id == "hash_integrity"]
+        return hashes, result
+    finally:
+        path.write_text(original)
+
+
 def test_validation_detects_tamper(tmp_path):
     store, final = _run_pipeline(tmp_path)
-    # tamper one artifact file on disk
-    files = list(store.artifacts_dir("p", final.run_id).glob("*.json"))
-    assert files
-    files[0].write_text(files[0].read_text() + "\n// tampered")
+    # tamper EVERY hashed artifact file in turn (sorted: glob order is
+    # filesystem-dependent, so "the first file" differed between machines)
+    files = sorted(store.artifacts_dir("p", final.run_id).glob("*.json"))
+    assert len(files) >= 5
+    for path in files:
+        hashes, result = _hash_check_after_tamper(store, final, path)
+        assert hashes and hashes[0].status == "fail", path.name
+        assert result.status.value == "partial", path.name
 
-    ctx = AgentContext(project_id="p", run_id=final.run_id, task_id="validation",
-                       spec=store.load_project_spec("p"), params={}, inputs={})
-    result = ValidationMinion(store).run(ctx)
-    vr = _load_report(store, result)
-    hashes = [c for c in vr.checks if c.check_id == "hash_integrity"]
-    assert hashes and hashes[0].status == "fail"
-    assert result.status.value == "partial"
+
+def test_validation_detects_tamper_of_its_own_prior_report(tmp_path):
+    """Re-running validation must still catch tampering of the report written
+    by validation's previous attempt (it used to skip its own task entirely)."""
+    store, final = _run_pipeline(tmp_path)
+    prior = store.load_latest_agent_result("p", final.run_id, "validation").artifacts[0]
+    hashes, _result = _hash_check_after_tamper(store, final, Path(prior.uri))
+    assert hashes[0].status == "fail"
+    assert "validation_report" in (hashes[0].detail or "")
 
 
 def test_validation_empty_store_warns(tmp_path):
