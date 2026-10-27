@@ -61,8 +61,17 @@ def _run_tool(cmd: list[str], timeout: float) -> tuple[int, str]:
 
 def _file_stem(identifier: str) -> str:
     """Filesystem-safe stem for work-dir filenames derived from a receptor id or
-    a local file path (an absolute path must never be joined onto work_dir)."""
-    stem = re.sub(r"[^A-Za-z0-9._-]", "_", Path(identifier).stem).lstrip("._")
+    a local file path (an absolute path must never be joined onto work_dir).
+
+    A name with no meaningful stem — empty or only dots/underscores after
+    stripping a trailing extension — falls back to ``"receptor"``. Dotfile
+    handling is explicit here (``Path.stem`` changed dotfile behaviour in 3.14).
+    """
+    name = Path(identifier).name
+    base, dot, _ext = name.rpartition(".")
+    if not dot:
+        base = name  # no extension at all
+    stem = re.sub(r"[^A-Za-z0-9._-]", "_", base).lstrip("._")
     return stem or "receptor"
 
 # Heterogens that are NOT the co-crystal drug: water, monatomic ions/metals,
