@@ -45,9 +45,12 @@ from ..contracts.run_manifest import RunManifest
 from ..contracts.task_spec import AttemptRecord, TaskSpec
 from ..contracts.tox_profile import ToxProfile
 from ..contracts.validation_report import ValidationReport
+from ..logging import get_logger
 from ..logging.event_writer import EventWriter
 from .gates import BlockedByGate, gate_a_input_validity, result_ok
 from .store import Store
+
+logger = get_logger("runner")
 
 ARTIFACT_MODELS: dict[str, type] = {
     "admet_prediction": AdmetPrediction,
@@ -189,6 +192,7 @@ class Runner:
         manifest.status = RunStatus.running
         self.store.save_run_manifest(manifest)
         order = self._topo_order(manifest.task_graph)
+        logger.info("run %s: %d tasks, %d workers", run_id, len(order), self.max_workers)
 
         specs: dict[str, TaskSpec] = {
             t: self.store.load_task_spec(project_id, run_id, t) for t in order
@@ -283,6 +287,7 @@ class Runner:
         ts.status = TaskStatus.running
         ts.attempts.append(AttemptRecord(attempt=len(ts.attempts) + 1, started_at=utcnow()))
         self.store.save_task_spec(ts)
+        logger.info("task %s (%s) started", task_id, ts.agent)
         deps = manifest.task_graph.get(task_id, [])
         try:
             ctx = self._build_context(project_id, run_id, task_id, spec, ts, deps)
@@ -306,6 +311,7 @@ class Runner:
         if result.errors:
             ts.attempts[-1].error = "; ".join(result.errors)
         self.store.save_task_spec(ts)
+        logger.info("task %s completed: %s", ts.task_id, result.status.value)
         level = "info" if result_ok(result.status) else "warning"
         self._log(project_id, run_id, EventLog(
             run_id=run_id, task_id=ts.task_id, level=level,
