@@ -54,6 +54,7 @@ from .orchestrator import Runner, Store, TaskDefinition
 from .orchestrator.gates import BlockedByGate
 from .orchestrator.memory import MemoryStore
 from .orchestrator.store import latest_versioned
+from .logging import configure_logging
 
 DEFAULT_PIPELINE = [
     RunTask(task_id="safety", agent="safety_minion"),
@@ -540,6 +541,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
+    configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
