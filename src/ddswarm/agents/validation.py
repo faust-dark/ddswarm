@@ -37,6 +37,7 @@ RDKIT_TOOL = ToolVersion(name="rdkit", version=rdBase.rdkitVersion)
 
 class ValidationMinion(Agent):
     name = "validation_minion"
+    reads_whole_run = True  # scans every task's result in the run manifest
 
     def run(self, ctx: AgentContext) -> AgentResult:
         manifest = self.store.load_run_manifest(ctx.project_id, ctx.run_id)

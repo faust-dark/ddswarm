@@ -114,7 +114,8 @@ Optional extras:
 ```bash
 ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
 ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
-                         [--iterations N] [--resume] [--store DIR] [--reports-dir DIR]
+                         [--iterations N] [--resume] [--no-dock-cache] [--workers N]
+                         [--store DIR] [--reports-dir DIR]
 ddswarm runs [project_id]                 # list runs
 ddswarm report project_id [run_id]        # per-task report
 ddswarm memory project_id                 # cross-run conclusions
@@ -145,7 +146,10 @@ reasoning: {...}}`.
 
 The default pipeline is 18 agents, wired as a task graph and executed by a
 deterministic state machine (the **Runner**) that handles gating, retries,
-versioning, and resume:
+versioning, and resume. Tasks whose dependencies are done run concurrently
+(`--workers N`, default min(8, CPUs); `--workers 1` is fully sequential), but
+results and events are committed in topological order, so the store and event
+log are identical to a sequential run:
 
 ```
 safety → research → overview → design → screen → docking → selectivity →
@@ -259,8 +263,11 @@ criterion (`filters.brenk_hard=true` restores hard Brenk per project).
   OpenMM (amber14 + OBC2 GBSA implicit solvent, Langevin NVT), reporting
   backbone RMSD stability and potential-energy fluctuation. This is a short
   ps-scale relaxation snapshot, not production MD, and never a binding free
-  energy. Both docking and MD support content-addressed caching / checkpoint
-  resume (`--resume`).
+  energy. Docking results and prepared receptors are cached content-addressed
+  (keyed on the prepared receptor/ligand hashes and tool versions) and reused
+  by default — `--no-dock-cache` recomputes; MD checkpoint resume is opt-in
+  (`--resume`). Molecule × receptor docking jobs run in parallel, splitting
+  Vina `--cpu` across workers so the machine is never oversubscribed.
 
 ### ADMET & PK/PD
 

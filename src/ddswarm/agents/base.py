@@ -30,6 +30,10 @@ class Agent(ABC):
     a tool should produce, and returns a fully-provenanced AgentResult."""
 
     name: str
+    # True for agents that read EVERY task's results from the store (not just
+    # their declared inputs); the runner runs them as ordering barriers so they
+    # see exactly what a sequential run would show them.
+    reads_whole_run: bool = False
 
     def __init__(self, store: Store):
         self.store = store

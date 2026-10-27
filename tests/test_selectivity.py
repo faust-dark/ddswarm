@@ -263,12 +263,10 @@ def _run_selectivity(store, receptors, primary, affinities, monkeypatch):
         name = "fake"
         version = "1.0"
 
-        def __init__(self):
-            self.last_receptor = None
-
         def prepare_receptor(self, source, work_dir):
-            self.last_receptor = source.identifier
-            return PreparedReceptor()
+            # docking runs after ALL receptors are prepared (and concurrently),
+            # so the fake keys on the receptor object, not on call order
+            return PreparedReceptor(identifier=source.identifier)
 
         def prepare_ligand(self, smiles, work_dir):
             return PreparedLigand(canonical_smiles=smiles, pdbqt_path=Path("l.pdbqt"))
@@ -277,7 +275,7 @@ def _run_selectivity(store, receptors, primary, affinities, monkeypatch):
             return True, "fake"
 
         def dock(self, receptor, ligand, protocol, work_dir):
-            a = affinities.get((self.last_receptor, ligand.canonical_smiles))
+            a = affinities.get((receptor.identifier, ligand.canonical_smiles))
             return [DockPose(rank=1, affinity_kcal_per_mol=a)] if a is not None else []
 
     monkeypatch.setattr(agents.selectivity, "make_engine", lambda name, vina_binary=None: Fake())
@@ -370,12 +368,10 @@ def test_agent_e2e_chembl_calibration_on_demand(tmp_path, monkeypatch):
         name = "fake"
         version = "1.0"
 
-        def __init__(self):
-            self.last_receptor = None
-
         def prepare_receptor(self, source, work_dir):
-            self.last_receptor = source.identifier
-            return PreparedReceptor()
+            # docking runs after ALL receptors are prepared (and concurrently),
+            # so the fake keys on the receptor object, not on call order
+            return PreparedReceptor(identifier=source.identifier)
 
         def prepare_ligand(self, smiles, work_dir):
             return PreparedLigand(canonical_smiles=smiles, pdbqt_path=Path("l.pdbqt"))
@@ -384,7 +380,7 @@ def test_agent_e2e_chembl_calibration_on_demand(tmp_path, monkeypatch):
             return True, "fake"
 
         def dock(self, receptor, ligand, protocol, work_dir):
-            if self.last_receptor == "6CM4":
+            if receptor.identifier == "6CM4":
                 if ligand.canonical_smiles == "CCN":  # the on-demand calibration ligand
                     return [DockPose(rank=1, affinity_kcal_per_mol=-9.0)]
                 return [DockPose(rank=1, affinity_kcal_per_mol=-8.0)]

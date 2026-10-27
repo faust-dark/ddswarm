@@ -28,9 +28,10 @@ from ..contracts.enums import AgentResultStatus
 from ..contracts.provenance import ProvenanceEntry, ToolVersion
 from ..docking import make_engine
 from ..docking.base import DockProtocol, box_from_reference_mol
+from ..docking.parallel import DockJob, dock_jobs
 from ..docking.rmsd import heavy_atom_rmsd, pose_mol_from_coords
 from ..logging.hashing import hash_jsonable
-from ..orchestrator.checkpoint import ComputeCache, cached_dock
+from ..orchestrator.checkpoint import ComputeCache, dock_cache_enabled
 from .base import Agent, AgentContext
 
 TOOL = ToolVersion(name="ddswarm", version="0.1.0")
@@ -78,7 +79,12 @@ class DockingMinion(Agent):
             )
 
         work_dir = Path(self.store.run_dir(ctx.project_id, ctx.run_id)) / "docking" / ctx.task_id
+        cache = ComputeCache(self.store, dock_cache_enabled(ctx.params))
+        if cache.enabled and hasattr(engine, "receptor_cache_dir"):
+            engine.receptor_cache_dir = cache.root / "receptor"
         receptor = engine.prepare_receptor(source, work_dir)
+        if not receptor.identifier:
+            receptor.identifier = source.identifier
 
         # protocol / search box
         box_center, box_size = self._resolve_box(ctx, receptor)
@@ -102,15 +108,25 @@ class DockingMinion(Agent):
         failed = 0
         redocking: RedockingValidation | None = None
         redocking_threshold = float(ctx.params.get("redocking_threshold", 2.0))
-        cache = ComputeCache(self.store, bool(ctx.params.get("resume")))
 
+        # prepare ligands (sequential, cheap), then dock all of them concurrently;
+        # results are consumed in molecule order so the artifact is order-stable
+        ligands: dict[str, object] = {}
+        jobs: list[DockJob] = []
         for mid, smi in molecules:
             ligand = engine.prepare_ligand(smi, work_dir / f"lig_{mid}")
+            ligands[mid] = ligand
+            if ligand.pdbqt_path:
+                jobs.append(DockJob(mid, source.identifier, receptor, ligand, protocol,
+                                    work_dir / f"dock_{mid}"))
+        docked_by_mid = dock_jobs(engine, cache, jobs, ctx.params.get("max_workers"))
+
+        for mid, _smi in molecules:
+            ligand = ligands[mid]
             if not ligand.pdbqt_path:
                 failed += 1
                 continue
-            engine_poses = cached_dock(engine, cache, source.identifier, receptor, ligand,
-                                       protocol, work_dir / f"dock_{mid}")
+            engine_poses = docked_by_mid.get(mid) or []
             if not engine_poses:
                 failed += 1
                 continue

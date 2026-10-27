@@ -8,13 +8,16 @@ Docking:  the AutoDock Vina binary (subprocess). Poses/affinities are parsed
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import re
 import subprocess
 import sys
+from functools import cached_property
 from pathlib import Path
 
 from ..chemistry.pdb_utils import analyze_pdb
-from ..fsutil import atomic_write_bytes
+from ..fsutil import atomic_write_bytes, atomic_write_text
+from ..logging.hashing import hash_content, hash_jsonable
 from .base import (
     DockPose,
     DockProtocol,
@@ -37,6 +40,11 @@ _RCSB_URL = RCSB_URL
 # docking search must fail the molecule, never hang the run.
 OBABEL_TIMEOUT_S = 300
 VINA_TIMEOUT_S = 1800
+# Bump when the receptor-preparation recipe below changes (PDBFixer steps, pH,
+# Open Babel flags, reference-ligand selection) so cached preparations made by
+# an older recipe are never reused.
+_RECEPTOR_RECIPE_VERSION = 1
+_PREP_PACKAGES = ("pdbfixer", "openmm", "openbabel-wheel", "meeko", "rdkit")
 
 
 def _run_tool(cmd: list[str], timeout: float) -> tuple[int, str]:
@@ -91,11 +99,21 @@ class VinaEngine(DockingEngine):
     def __init__(self, binary_path: str | Path, obabel_path: str | Path | None = None):
         self.binary_path = Path(binary_path)
         self.obabel_path = Path(obabel_path) if obabel_path else Path(sys.executable).parent / "obabel"
+        # content-addressed cache of prepared receptors (PDBFixer + Open Babel
+        # output); set by the agent when the compute cache is enabled
+        self.receptor_cache_dir: Path | None = None
 
-    @property
+    @cached_property
     def version(self) -> str:
+        # probed once per engine instance: the docking cache key reads this for
+        # every molecule, and shelling out to `vina --version` each time is waste
         ok, msg = self._probe_version()
         return msg if ok else "unknown"
+
+    @cached_property
+    def prep_versions(self) -> dict[str, str]:
+        """Versions of the preparation toolchain (part of every cache key)."""
+        return {name: _pkg_version(name) for name in _PREP_PACKAGES}
 
     def _probe_version(self) -> tuple[bool, str]:
         try:
@@ -155,12 +173,20 @@ class VinaEngine(DockingEngine):
                         pass  # cache is best-effort, never blocks docking
             raw_text = raw_path.read_text()
 
-        # structural QC on the raw structure
+        rec.identifier = source.identifier
+
+        # structural QC on the raw structure (cheap; always recomputed)
         stats = analyze_pdb(raw_text)
         rec.qc_checks = self._qc_checks(stats)
         rec.atom_count = stats.atom_count
         rec.residue_count = stats.residue_count
         rec.chain_count = len(stats.chain_ids)
+
+        # the expensive part (reference-ligand extraction, PDBFixer, Open Babel)
+        # is content-addressed on the raw structure + recipe + tool versions
+        prep_key = self._receptor_prep_key(raw_text)
+        if self._load_prepared_receptor(rec, prep_key, work_dir, stem):
+            return rec
 
         # co-crystal ligand (largest non-water heterogen) for redocking
         ref_name, ref_mol = self._extract_reference_ligand(raw_text, work_dir)
@@ -198,12 +224,79 @@ class VinaEngine(DockingEngine):
             return rec
 
         rec.pdbqt_path = recpdbqt
+        rec.content_hash = hash_content(recpdbqt.read_bytes())
         rec.preparation_tool = (
             f"pdbfixer {_pkg_version('pdbfixer')} + openbabel-wheel {_pkg_version('openbabel-wheel')} "
             f"(rigid PDBQT)"
         )
         rec.note = "receptor prepared and protonated"
+        self._save_prepared_receptor(rec, prep_key)
         return rec
+
+    # ---- prepared-receptor cache ----
+    def _receptor_prep_key(self, raw_text: str) -> str:
+        return hash_jsonable({
+            "raw_pdb_sha256": hash_content(raw_text),
+            "recipe": _RECEPTOR_RECIPE_VERSION,
+            "ph": 7.0,
+            "obabel_flags": ["-xr"],
+            "prep_versions": self.prep_versions,
+        })
+
+    def _load_prepared_receptor(self, rec: PreparedReceptor, key: str, work_dir: Path,
+                                stem: str) -> bool:
+        """Fill ``rec`` from a cached preparation. A hit is transparent: the
+        PDBQT is copied into this run's work_dir and every field matches a fresh
+        preparation, so outputs are identical with or without the cache."""
+        if self.receptor_cache_dir is None:
+            return False
+        d = self.receptor_cache_dir / key
+        try:
+            meta = json.loads((d / "meta.json").read_text())
+            pdbqt = (d / "receptor.pdbqt").read_bytes()
+        except (OSError, json.JSONDecodeError):
+            return False  # miss, or a partial / corrupt entry
+        if hash_content(pdbqt) != meta.get("pdbqt_sha256"):
+            return False
+        ref_mol = None
+        if meta.get("reference_molblock"):
+            try:
+                from rdkit import Chem  # noqa: PLC0415
+                ref_mol = Chem.MolFromMolBlock(meta["reference_molblock"], removeHs=True, sanitize=True)
+            except ImportError:
+                return False
+            if ref_mol is None:
+                return False
+        out = work_dir / f"{stem}_receptor.pdbqt"
+        atomic_write_bytes(out, pdbqt)
+        rec.pdbqt_path = out
+        rec.content_hash = meta["pdbqt_sha256"]
+        rec.reference_ligand_name = meta.get("reference_ligand_name")
+        rec.reference_ligand_mol = ref_mol
+        rec.preparation_tool = meta.get("preparation_tool", "")
+        rec.note = meta.get("note", "receptor prepared and protonated")
+        return True
+
+    def _save_prepared_receptor(self, rec: PreparedReceptor, key: str) -> None:
+        if self.receptor_cache_dir is None or rec.pdbqt_path is None:
+            return
+        molblock = None
+        if rec.reference_ligand_mol is not None:
+            from rdkit import Chem  # noqa: PLC0415
+            molblock = Chem.MolToMolBlock(rec.reference_ligand_mol)
+        d = self.receptor_cache_dir / key
+        try:
+            atomic_write_bytes(d / "receptor.pdbqt", rec.pdbqt_path.read_bytes())
+            # meta.json last: its presence marks a complete entry
+            atomic_write_text(d / "meta.json", json.dumps({
+                "pdbqt_sha256": rec.content_hash,
+                "reference_ligand_name": rec.reference_ligand_name,
+                "reference_molblock": molblock,
+                "preparation_tool": rec.preparation_tool,
+                "note": rec.note,
+            }))
+        except OSError:
+            pass  # the cache is best-effort, never blocks docking
 
     @staticmethod
     def _qc_checks(stats) -> list[QCResult]:
@@ -304,6 +397,7 @@ class VinaEngine(DockingEngine):
         lig.heavy_atom_count = len(lig.smiles_idx_map)
         lig.pdbqt_path = work_dir / "ligand.pdbqt"
         lig.pdbqt_path.write_text(pdbqt)
+        lig.content_hash = hash_content(pdbqt)
         return lig
 
     # ---- docking ----
@@ -336,6 +430,8 @@ class VinaEngine(DockingEngine):
             "--seed", str(protocol.seed),
             "--out", str(out),
         ]
+        if protocol.cpu:
+            cmd += ["--cpu", str(protocol.cpu)]
         rc, _stderr = _run_tool(cmd, VINA_TIMEOUT_S)
         if rc != 0 or not out.exists():
             return []
