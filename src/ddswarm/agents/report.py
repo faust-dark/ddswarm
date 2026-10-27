@@ -9,7 +9,6 @@ there is no feedback to record anyway)."""
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from ..contracts.admet_prediction import AdmetPrediction
 from ..contracts.agent_result import AgentResult

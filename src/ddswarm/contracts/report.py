@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .enums import AgentResultStatus, EvidenceLevel
+from .enums import AgentResultStatus
 from .provenance import ProvenanceEntry
 
 

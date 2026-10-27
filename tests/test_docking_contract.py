@@ -5,7 +5,6 @@ The real Vina binary is exercised separately (test_vina_engine.py) and in the de
 
 from pathlib import Path
 
-import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
@@ -18,7 +17,6 @@ from ddswarm.docking.base import (
     PreparedLigand,
     PreparedReceptor,
     QCResult,
-    ReceptorSource,
 )
 from ddswarm.docking.rmsd import (
     heavy_atom_rmsd,
@@ -83,7 +81,7 @@ def test_analyze_pdb_missing_backbone():
 
 def test_analyze_pdb_seqres_missing():
     pdb = "\n".join([
-        f"SEQRES   1 A  4  GLY GLY GLY GLY",
+        "SEQRES   1 A  4  GLY GLY GLY GLY",
         _gly(1, "A", 1),
         _gly(5, "A", 2),
     ])

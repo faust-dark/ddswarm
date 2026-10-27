@@ -1,6 +1,5 @@
 """Tests for validation_minion: reproducibility + consistency checks over a run."""
 
-from pathlib import Path
 
 from ddswarm.agents import (
     DesignerMinion,
