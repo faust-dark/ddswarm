@@ -21,7 +21,6 @@ import csv
 import io
 import os
 import tempfile
-from pathlib import Path
 
 from rdkit import Chem
 from rdkit import rdBase

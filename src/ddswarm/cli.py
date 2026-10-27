@@ -44,7 +44,7 @@ from .agents import (
     ExportMinion,
 )
 from .contracts import (
-    GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask, export_schemas,
+    GenerationMemory, ProjectSpec, ReportDocument, RunRequest, ReasoningConfig, RunTask,
 )
 from pydantic import ValidationError
 

@@ -8,7 +8,6 @@ pattern as test_reasoning.py / test_knowledge.py).
 """
 
 import json
-from pathlib import Path
 
 from ddswarm.agents import OverviewMinion
 from ddswarm.agents.base import AgentContext

@@ -5,7 +5,6 @@ monkeypatched with canned responses to test the assembly logic; the InChIKey
 computation and the agent's no-molecule path run against real RDKit.
 """
 
-import pytest
 
 from ddswarm import cli
 from ddswarm.agents import GroundingMinion

@@ -6,7 +6,6 @@ need no network. The full receptor-preparation path (PDBFixer + a real PDB) is
 exercised by scripts/demo_docking.py."""
 
 import subprocess
-from pathlib import Path
 
 import pytest
 

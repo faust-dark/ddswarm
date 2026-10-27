@@ -105,7 +105,6 @@ def analyze_pdb(text: str) -> PDBStats:
             if not obs_keys:
                 stats.missing_residues.append(f"chain {chain}: no observed residues (all {len(seqres[chain])} missing)")
                 continue
-            observed_nums = sorted({r[0] for r in obs_keys})
             n_seq = len(seqres[chain])
             # map observed residue numbers (sorted) onto the SEQRES positions by
             # order, then flag stretches where numbering is discontinuous.

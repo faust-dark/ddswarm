@@ -2,7 +2,6 @@
 report_pdf agent persists a ReportDocument artifact + PDF sidecar at the end of
 a default-pipeline run."""
 
-from pathlib import Path
 
 from ddswarm.cli import DEFAULT_PIPELINE, build_agents
 from ddswarm.contracts import (

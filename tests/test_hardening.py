@@ -4,7 +4,6 @@ end-to-end reproducibility of a deterministic pipeline."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError

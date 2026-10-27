@@ -16,9 +16,7 @@ judgment. The report status is 'success' when no check fails, else 'partial'."""
 
 from __future__ import annotations
 
-import json
 import math
-from pathlib import Path
 
 from rdkit import rdBase
 
