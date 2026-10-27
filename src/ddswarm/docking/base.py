@@ -112,6 +112,8 @@ class PreparedReceptor:
     reference_ligand_name: str | None = None
     reference_ligand_mol: object | None = None   # RDKit mol, heavy atoms
     note: str = ""
+    identifier: str = ""        # receptor id / source it was prepared from
+    content_hash: str = ""      # sha256 of the prepared PDBQT (docking cache key)
 
 
 @dataclass
@@ -121,6 +123,7 @@ class PreparedLigand:
     smiles_idx_map: dict = field(default_factory=dict)   # smi_idx_1based -> serial
     heavy_atom_count: int = 0
     note: str = ""
+    content_hash: str = ""      # sha256 of the prepared PDBQT (docking cache key)
 
 
 @dataclass
@@ -140,6 +143,10 @@ class DockProtocol:
     exhaustiveness: int = 8
     num_modes: int = 9
     seed: int = 42
+    # CPU threads for one docking call (Vina --cpu). Set by the parallel docking
+    # scheduler; None = engine default. Not part of the cache key: Vina seeds
+    # each Monte-Carlo task from --seed independently of the thread count.
+    cpu: int | None = None
 
 
 def box_from_reference_mol(mol, margin: float = 11.25) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
