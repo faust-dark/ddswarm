@@ -1,15 +1,15 @@
 # ddswarm
 
-> A reproducible, traceable, verifiable multi-agent drug-discovery pipeline,
-> usable as a CLI and as an MCP server for any agentic stack (Google ADK, Hermes,
-> OpenMinion, Claude, …).
+> A deterministic drug-discovery compute layer exposed as MCP tools for
+> LLM-driven, agentic workflows, with first-class OpenMinion integration.
 
-**ddswarm** turns a therapeutic target and a starting molecule into a ranked set
-of candidate analogs, each with a full characterization dossier (docking,
-selectivity, ADMET, PK/PD, toxicology, synthesis) and a plain-language PDF
-report, from a single command. Every step is deterministic and auditable by
-default, with an optional LLM reasoning layer for literature recall and
-structure proposal.
+**ddswarm** is the compute layer for LLM-driven drug discovery: a 24-agent swarm
+(docking, target selectivity, ADMET, PK/PD, toxicology, retrosynthesis, PDF
+reporting) exposed as 16 deterministic MCP tools. Drive it from **OpenMinion**,
+whose multi-agent runtime (coordinator, subagents, handoffs) orchestrates the
+workflow, or from any other MCP-speaking stack; run it directly as a CLI for a
+one-shot pipeline. Deterministic and auditable by default, with an optional LLM
+reasoning layer for literature recall and structure proposal.
 
 ---
 
@@ -17,6 +17,7 @@ structure proposal.
 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
+- [OpenMinion integration](#openminion-integration)
 - [Installation](#installation)
 - [Usage (CLI)](#usage-cli)
 - [Configuration](#configuration)
@@ -79,6 +80,79 @@ Likewise, on a core install without the optional AutoDock Vina binary they
 report an "engine unavailable" gap (`insufficient_evidence`) instead of failing
 the run.
 Skip the network IUPAC name lookup with `--no-iupac`.
+
+---
+
+## OpenMinion integration
+
+ddswarm is built to be driven by [OpenMinion](https://openminion.com), the
+local-first, Python-first agent runtime from Cortensor. ddswarm supplies the
+deterministic compute tools; OpenMinion supplies the LLM orchestration:
+multi-agent coordination, subagents, handoffs, and structured output.
+
+### Install + configure OpenMinion
+
+```bash
+pip install openminion
+openminion setup --provider <preset> --model <model> --no-chat
+# presets: cortensor, ollama, openai, anthropic, deepseek, groq, ...
+```
+
+### Point OpenMinion at the ddswarm MCP server
+
+Write an `mcp.json` in the standard `mcpServers` shape:
+
+```json
+{
+  "mcpServers": {
+    "ddswarm": { "command": "ddswarm-mcp", "args": [] }
+  }
+}
+```
+
+Import it, then verify the connection and browse the 16 tools:
+
+```bash
+openminion mcp import --from ./mcp.json --write
+openminion mcp list
+openminion mcp test ddswarm       # connects + capability discovery
+openminion mcp browse ddswarm     # lists the 16 ddswarm tools
+```
+
+Inside the interactive CLI, `/mcp` shows the configured server and tool posture.
+
+### Multi-agent orchestration
+
+OpenMinion's `subagent` and `Handoff` layer a multi-agent workflow on top of
+ddswarm's tools. Each agent calls ddswarm tools by name (as listed by
+`openminion mcp browse ddswarm`); the coordinator delegates and collects
+structured output.
+
+```python
+from openminion import Agent, subagent
+
+# After `openminion mcp import`, ddswarm's tools are available to the runtime.
+with Agent(name="coordinator",
+           instructions="Delegate the drug-design steps and summarize the results.") as parent:
+
+    designer = subagent(
+        parent, name="designer",
+        instructions="Design analog molecules for the given SMILES.",
+        tools=["design_analogs"],
+    )
+    reporter = subagent(
+        parent, name="reporter",
+        instructions="Run the full pipeline and report the identified candidate.",
+        tools=["run_pipeline"],
+    )
+
+    analogs = designer.run("Design analogs of CN1C(=O)CN=C(c2ccccc2)c2cc(Cl)ccc21 (diazepam)")
+    dossier = reporter.run("Run the anxiolytic project.")
+    print(parent.run("Summarize the design and screening results.").text)
+```
+
+`Handoff` exposes a peer agent as a transfer tool instead, for model-selected
+delegation. Both patterns share one runtime and memory context.
 
 ---
 
@@ -387,9 +461,10 @@ reproducibility.
 ## Use as an MCP server
 
 The swarm is also an **MCP (Model Context Protocol) server**, so any agentic
-stack that speaks MCP (Google ADK/AG2, Hermes, OpenMinion, Claude Desktop,
-Cursor) can drive the deterministic drug-discovery tools directly, with the
-calling LLM as the orchestrator.
+stack that speaks MCP (Google ADK/AG2, Hermes, Claude Desktop, Cursor) can drive
+the deterministic drug-discovery tools directly, with the calling LLM as the
+orchestrator. For OpenMinion specifically, see
+[OpenMinion integration](#openminion-integration).
 
 ```bash
 .venv/bin/ddswarm-mcp          # starts the server on stdio
@@ -464,7 +539,7 @@ tools, exit_stack = await MCPToolset.from_server(
 )
 ```
 
-**Any other MCP client** (OpenMinion, OpenAI Agents SDK, …) connects the same
+**Any other MCP client** (OpenAI Agents SDK, …) connects the same
 way: point its stdio transport at `ddswarm-mcp` and it discovers the 16 tools
 via `tools/list`.
 
