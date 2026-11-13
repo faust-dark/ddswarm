@@ -1,15 +1,15 @@
 # ddswarm
 
-> A deterministic drug-discovery compute layer exposed as MCP tools for
-> LLM-driven, agentic workflows, with first-class OpenMinion integration.
+> A platform-agnostic, deterministic drug-discovery compute layer exposed as MCP
+> tools for LLM-driven, agentic workflows.
 
 **ddswarm** is the compute layer for LLM-driven drug discovery: a 24-agent swarm
 (docking, target selectivity, ADMET, PK/PD, toxicology, retrosynthesis, PDF
-reporting) exposed as 16 deterministic MCP tools. Drive it from **OpenMinion**,
-whose multi-agent runtime (coordinator, subagents, handoffs) orchestrates the
-workflow, or from any other MCP-speaking stack; run it directly as a CLI for a
-one-shot pipeline. Deterministic and auditable by default, with an optional LLM
-reasoning layer for literature recall and structure proposal.
+reporting) exposed as 16 deterministic MCP tools. It runs on any platform
+(Linux, macOS, Windows) and is driven by any MCP-speaking agent stack;
+**OpenMinion** and **Hermes** are two examples. Run it directly as a CLI for a
+one-shot pipeline. Deterministic and auditable by default: ddswarm computes, the
+calling agent orchestrates.
 
 ---
 
@@ -24,7 +24,6 @@ reasoning layer for literature recall and structure proposal.
 - [Workflow & pipeline](#workflow--pipeline)
 - [Agents](#agents)
 - [Capabilities](#capabilities)
-- [Reasoning backends](#reasoning-backends)
 - [Reproducibility & traceability](#reproducibility--traceability)
 - [Use as an MCP server](#use-as-an-mcp-server)
 - [Scenarios](#scenarios)
@@ -39,9 +38,9 @@ reasoning layer for literature recall and structure proposal.
 Give it a target (e.g. EGFR, SERT, a GABA-A subunit) and one or more starting
 molecules (SMILES). The swarm:
 
-1. **Designs** new analog molecules, offline via a deterministic RDKit
-   transformation library (halogen swaps, homologation, N-demethylation), or via
-   an LLM when a reasoning backend is enabled.
+1. **Designs** new analog molecules offline, via a deterministic RDKit
+   transformation library (halogen swaps, homologation, N-demethylation). The
+   calling agent can also supply its own proposed analogs.
 2. **Screens** them against medicinal-chemistry filters (PAINS, rule-of-five,
    Brenk).
 3. **Characterizes** every survivor: molecular docking and target-selectivity
@@ -158,7 +157,7 @@ delegation. Both patterns share one runtime and memory context.
 
 ## Installation
 
-Requires Python ≥ 3.11 (developed on 3.14).
+Requires Python ≥ 3.11. Runs on Linux, macOS, and Windows (developed on 3.14).
 
 ```bash
 git clone https://github.com/faust-dark/ddswarm.git
@@ -190,7 +189,7 @@ Optional extras:
 ```bash
 ddswarm init [project.json]              # interactive wizard (validates SMILES, resolves targets)
 ddswarm init project.json --project-id P --objective "..." [--targets T] [--smiles S]
-ddswarm run project.json [--reasoning none|hermes] [--no-iupac] [--grounding]
+ddswarm run project.json [--no-iupac] [--grounding]
                          [--iterations N] [--resume] [--no-dock-cache] [--workers N]
                          [--store DIR] [--reports-dir DIR]
 ddswarm runs [project_id]                 # list runs
@@ -208,16 +207,13 @@ ddswarm receptors match --primary COX2 --off-targets COX1   # dry-run profile ma
 
 ## Configuration
 
-`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...],
-reasoning: {...}}`.
+`project.json` is a `RunRequest`: `{project: ProjectSpec, tasks: [...]}`.
 
 - `project`: the normalized spec: objective, targets, starting materials,
   `input_type`, success criteria, and optional context fields
   (`mechanism_of_action`, `indication`, `existing_drugs`, `chemical_scaffold`,
   `adme_issue`, `dose_mg`, `route_of_administration`).
 - `tasks`: an optional task DAG; omitted (or `[]`) runs the default pipeline.
-- `reasoning`: `{"backend": "none"|"hermes", "command", "max_turns",
-  "run_budget"}`; optional.
 
 ---
 
@@ -309,7 +305,7 @@ dual-use/biosafety hit halts every downstream task and marks the run `blocked`.
 `designer_minion` generates genuinely **new** analogs offline through a
 deterministic RDKit transformation library (`Cl→F/Br/I` halogen swap,
 methyl→ethyl homologation, N-demethylation), real new SMILES, not copies of the
-input. With a reasoning backend it can also accept LLM-proposed analogs.
+input. The calling agent can also supply its own proposed analogs.
 
 Screening eliminates on hard filters: invalid SMILES, MW > 500, logP > 5,
 HBD > 5, HBA > 10, any PAINS match, and reports (without eliminating) TPSA >
@@ -383,17 +379,18 @@ criterion (`filters.brenk_hard=true` restores hard Brenk per project).
 `retrosynthesis_minion` scores each candidate for synthetic accessibility and
 computes a deterministic **BRICS retrosynthetic disconnection** (building
 blocks, or an honest "no simple disconnection" for fused/aromatic scaffolds).
-With a reasoning backend it also proposes a human-readable synthesis *method*,
-a narrative a bench chemist could start from, with literature references.
+The calling agent can also attach a human-readable synthesis *method*, a
+narrative a bench chemist could start from, with literature references.
 
 ### Knowledge & grounding
 
 - **Knowledge agents** (`patent_minion`, `clinical_minion`, `regulatory_minion`)
-  have no deterministic offline source, so they delegate to the reasoning
-  backend. Patent/FTO sits in the default pipeline with a non-gating baseline:
-  without a backend it returns an empty landscape with an explicit "patent
-  status UNKNOWN" note, never a fabricated clear, never a legal opinion. Every
-  entry is forced to `inferred` and tagged "verify against primary source".
+  have no deterministic offline source: the default pipeline returns a non-gating
+  "patent status UNKNOWN" baseline (patent) or `insufficient_evidence`
+  (clinical/regulatory) rather than fabricate. Any LLM-supplied knowledge comes
+  from the calling stack; every entry is forced to `inferred` and tagged
+  "verify against primary source", never a fabricated clear, never a legal
+  opinion.
 - **Grounding** (`grounding_minion`, opt-in) resolves each molecule by standard
   InChIKey against ChEMBL, PubChem, and PubMed, recording observed external
   records with IDs, URLs, and retrieval timestamps, the first machine-readable
@@ -419,28 +416,6 @@ a narrative a bench chemist could start from, with literature references.
   ranked candidates as readability labels alongside SMILES + InChIKey, the
   machine identifiers of record. Names are non-authoritative and excluded from
   the reproducibility hashes; disable with `--no-iupac`.
-
----
-
-## Reasoning backends
-
-The swarm is **platform-agnostic by default**: `reasoning.backend` defaults to
-`none`, so a bare `ddswarm run` executes the deterministic baseline with no LLM
-or harness dependency. The reasoning layer is a pluggable backend:
-
-- `NullReasoningBackend`: offline, deterministic fallback.
-- `HermesSubprocessBackend`: shells out to `hermes chat -q` for one-shot LLM
-  recall.
-
-Opt into the LLM with `--reasoning hermes` (or `"reasoning": {"backend":
-"hermes"}` in the project file), which makes the researcher, designer,
-retrosynthesis (routes), and knowledge agents (patent/clinical/regulatory)
-delegate to one-shot subagents and merge LLM output with the deterministic
-baseline. LLM output is never trusted as observed data, those agents force
-`evidence_level` to `inferred`/`hypothetical` and tag provenance accordingly.
-When the backend is unavailable, deterministic agents fall back to their
-baseline, the knowledge agents return `insufficient_evidence`, and patent
-returns its non-gating "UNKNOWN" state.
 
 ---
 
@@ -621,14 +596,13 @@ Docking/selectivity report a non-blocking "receptor unavailable" gap instead of
 failing; the run completes. (To dock offline, download the receptor PDBs once,
 or pass a local PDB via the MCP `receptor` source.)
 
-### 3. Iterative optimization with the LLM layer
+### 3. Iterative optimization
 
 Loop the design→screen→characterize cycle three times, distilling each
-generation into memory and using Hermes for literature recall and structure
-proposal:
+generation into memory:
 
 ```bash
-.venv/bin/ddswarm run anxiolytic.json --iterations 3 --reasoning hermes
+.venv/bin/ddswarm run anxiolytic.json --iterations 3
 ```
 
 ### 4. Drive it from any agent (MCP)
@@ -657,8 +631,8 @@ Explore the receptor registry and the ADR profiles before committing to a run:
 
 ## Verification
 
-Run `pytest -q`: **415 tests** pass, covering every agent offline with a fake
-`hermes` script: screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
+Run `pytest -q`: **415 tests** pass, covering every agent offline with stubs:
+screening, the rule-based ADMET provider (exact ESOL/QED/Ro5/
 Veber/Egan values plus out-of-domain and determinism), docking gating and RMSD,
 selectivity/ADR classification, PK/PD ODEs, retrosynthesis, the toxicophore /
 CYP / hERG matchers, the safety gate, the validation audit (including tamper
